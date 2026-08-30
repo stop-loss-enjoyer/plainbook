@@ -1,0 +1,31 @@
+#!/bin/bash
+# Show the trading journal window:
+#   no window            -> open it
+#   window, not focused  -> focus it
+#   window and focused   -> close it
+#
+# The window is found by the CLASS of the web app only: the class is built from
+# the HOST (brave-localhost__-Default), which is why the address here is
+# localhost and not 127.0.0.1 — that keeps this window apart from other local
+# web apps.
+#
+# Do NOT look it up by TITLE, even though that seems easier: "TradingJournal" is
+# also the title of a file manager window opened on the project folder, and of a
+# terminal sitting in that directory. The toggle would quietly raise those.
+URL='http://localhost:8778'
+
+addr=$(hyprctl clients -j | jq -r '
+  .[] | select(.class | test("localhost__")) | .address' | head -n1)
+
+if [[ -z $addr ]]; then
+  exec omarchy-launch-webapp "$URL"
+fi
+
+active=$(hyprctl activewindow -j | jq -r '.address // ""')
+
+if [[ $addr == "$active" ]]; then
+  # closewindow does not work from a Lua config — close through eval (Hyprland 0.56)
+  hyprctl eval "hl.dispatch(hl.dsp.window.close({ window = \"address:$addr\" }))" >/dev/null
+else
+  hyprctl eval "hl.dispatch(hl.dsp.focus({ window = \"address:$addr\" }))" >/dev/null
+fi

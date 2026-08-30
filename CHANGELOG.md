@@ -1,0 +1,106 @@
+# Changelog
+
+What changed and why. Newest first.
+
+## v1.1 — 30.08.2026
+
+Everything is in English now — the interface, the code, the comments and the
+files themselves. The journal used to keep its records under Russian header keys
+and folder names (`сделки/`, `счёт:`, `## Идея`); those now read `trades/`,
+`account:`, `## Idea`. Two languages in one project were one too many.
+
+- **Records and program live apart.** `TJ_ROOT` points the journal at a data
+  folder of its own, so the code can go into a public repository while the
+  records stay private in a repository that is never pushed anywhere.
+- **A one-off migration**, `tools/migrate_ru_to_en.py`, converts a journal
+  written in the old format: folder and file names, header keys, the closed
+  vocabularies (style, adjustment kind) and section headings. Everything written
+  by hand — idea texts, conclusions, notes, card sections — is left untouched.
+  Run it on a copy first: every computed figure has to come out the same.
+- Style values are now the words the interface shows: `swing`, `EMT`,
+  `EMT prop`, `intraday`. The display-name mapping went away with them.
+
+## v1.0 — 30.08.2026
+
+The first whole version. The journal closes the daily round: write the trade
+down at entry → close it with a result and conclusions → review the day on a
+card → look at the statistics → build a report for the month or the quarter.
+
+### Added
+
+- **The daily card.** The **+ Card** button in the header opens today's card,
+  the **Cards** tab lists the earlier ones. The fields and their order follow
+  the paper Daily Report Card: date, process grade, P&L, opportunity quality,
+  then focus, process, what went well, errors, best trade, overview. The P&L is
+  filled in from the trades closed that day, but the field is editable.
+- **The list is grouped by trading weeks.** The total row of a week holds the
+  number of trades, WR, Σ PnL and Σ R; a plus in green, a minus in red. The
+  **Weeks / Months / Quarters** switch changes the grouping without dropping the
+  filters. The first tile above shows the total of the current period.
+- **Filters behind a funnel button** in the head of the list: the list matters on
+  the front page, not the form. The button is lit and carries the number of
+  filters that are on — with the form out of sight it would otherwise be a
+  mystery why there are so few trades. It closes on a click away or on Escape,
+  and the popover is as wide as the list, so it fits at any window width.
+- **Removing screenshots.** A cross on every thumbnail in a form — on one just
+  pasted and on one saved long ago.
+- **Deleting trades and cards.** The `Delete` button; the trade folder (or the
+  card file) moves to `.trash` rather than being shredded — a mis-click should
+  not cost a record.
+- **A strict dark theme.** A near-black ground, one blue accent, muted green and
+  red for money only, figures in a monospace with tabular digits, a sticky page
+  header and table head. The browser's own date picker and drop-downs are dark
+  as well.
+- **Winrate counts without break-evens**: wins against wins and losses. A trade
+  closed at zero was neither won nor lost, and diluting the hit rate with it is
+  dishonest. What break-evens cost is visible in the sum and the average R,
+  where they count like everything else. Under the winrate stand three numbers:
+  wins in green, losses in red, break-evens in yellow.
+
+### Fixed
+
+- **A pasted screenshot went nowhere**: the paste handler read the form token at
+  the top of the script, while the token was set by a script further down the
+  page. The request carried `token=undefined`, the server answered 400 and the
+  browser said "Screenshot was not saved". The token is now read when the
+  request is sent.
+- **Editing a closed trade wiped its exit screenshots.** The form did not show
+  them, and saving rewrote the shots folder from the form — that is, from
+  nothing. Editing a closed trade now shows the exit and the conclusions too.
+- **Saving a card with an empty P&L crashed the server.** An empty key in the
+  header (`pnl $:` with no value) parses into an empty LIST rather than an empty
+  string: reading it died on `float('[]')` and the browser showed
+  `ERR_EMPTY_RESPONSE`. Empty values are no longer written into a header, and
+  reading tolerates them in files already saved — the same guard covers empty
+  trade fields, which would have shown up as "[]".
+- **The bar button opened a folder instead of the journal.** The toggle looked
+  the window up by the title `^TradingJournal` as well, and that is the title of
+  a file manager window opened on the project folder and of a terminal sitting
+  in that directory. The window is now found by the web app's class only.
+- **The journal folders are created when the server starts**, not when the first
+  record is written — otherwise a section only appeared on first use and you
+  could not see where your records would land.
+- **The weekly total broke onto two lines** and stayed grey: the numeric columns
+  had no wrapping guard, and the colour class on a cell lost to the group row rule.
+- **Abandoned drafts piled up forever**: screenshots pasted into a form that was
+  never submitted were never cleaned. Folders older than a day are swept when a
+  new form is handed out.
+- A size limit on a pasted image (32 MB), a check on the trade id in the `/shot`
+  URL, unused imports removed.
+
+### The base (29.08)
+
+- A trade is a folder with `trade.md` and `shots/` beside it; all of it markdown
+  with a header readable by eye, no database.
+- Two steps: opening a position → closing it with a result, PnL and conclusions.
+- Balances are computed: start + Σ PnL of closed trades + Σ adjustments.
+  R = PnL / (risk% × the account balance **at the moment of entry**) — not
+  against a fixed number that made 1% look like the same money forever.
+- Screenshots pasted into the form with Ctrl+V.
+- Statistics: an equity curve per account, the R distribution, slices by style,
+  pair and account.
+- Monthly and quarterly reports: the figures are recomputed on a button, the
+  owner's conclusions are never overwritten.
+- Managing accounts and pairs, archived accounts.
+- Desktop: a user systemd unit, a window toggle on a hotkey, a button in the top
+  bar carrying the number of open positions.

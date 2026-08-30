@@ -1,0 +1,17 @@
+[Unit]
+Description=Trading journal — local server (127.0.0.1:8778)
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/TradingJournal
+# Where the records live. Leave it out and the journal keeps them next to the
+# program, in ./journal — handy for trying it out, worse once the code is under
+# git and shared: then the data belongs in a folder of its own.
+Environment=TJ_ROOT=%h/TradingJournal-data
+ExecStart=/usr/bin/python3 -m tj.server
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

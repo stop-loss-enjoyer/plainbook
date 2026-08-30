@@ -1,0 +1,8 @@
+#!/bin/bash
+# Nothing private leaves this repository. The check is cheap; a leak is not.
+# Turn it on once with:  git config core.hooksPath .githooks
+python3 tools/check_public.py || {
+  echo
+  echo "push refused: see the lines above"
+  exit 1
+}

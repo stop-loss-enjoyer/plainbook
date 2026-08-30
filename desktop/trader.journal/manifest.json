@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "trader.journal",
+  "name": "Trading journal",
+  "version": "1.0.0",
+  "author": "",
+  "description": "Trading journal: launcher and open-positions counter",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Journal.qml"
+  },
+  "barWidget": {
+    "displayName": "Journal",
+    "description": "Open the trading journal; badge shows open positions",
+    "category": "Custom",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

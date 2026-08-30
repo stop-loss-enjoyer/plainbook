@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Journal records: trade, account, adjustment, daily card.
+
+Storage is one markdown file per record (see mdfile.py). Header keys are the
+same words the interface shows, so a file reads like the screen it came from.
+Anything that can be computed (balance, R) is NOT stored — see balances.py.
+"""
+from dataclasses import dataclass, field
+from datetime import date, datetime
+
+# --- domain vocabulary -----------------------------------------------------
+
+DIRECTIONS = ("long", "short")
+RESULTS = ("Win", "Lose", "BE")
+# only the first three are offered for new trades; intraday is legacy data
+STYLES = ("swing", "EMT", "EMT prop", "intraday")
+NEW_STYLES = ("swing", "EMT", "EMT prop")
+ADJUSTMENT_KINDS = ("deposit", "withdrawal", "fee", "reconciliation")
+
+PAIR_NOT_SET = "pair not set"
+
+
+class RecordError(ValueError):
+    """A record fails its check — a broken file or junk from a form."""
+
+
+# --- trade -----------------------------------------------------------------
+
+TRADE_KEYS = [
+    ("id", "id"),
+    ("account", "account"),
+    ("pair", "pair"),
+    ("direction", "direction"),
+    ("style", "style"),
+    ("entry_tf", "entry tf"),
+    ("execution", "execution"),
+    ("risk", "risk %"),
+    ("opened", "entry"),
+    ("result", "result"),
+    ("pnl", "pnl $"),
+    ("closed", "exit"),
+    ("note", "note"),
+    ("notion_id", "notion id"),
+]
+
+
+@dataclass
+class Trade:
+    id: str
+    account: str
+    pair: str = PAIR_NOT_SET
+    direction: str = ""
+    style: str = ""
+    entry_tf: str = ""
+    execution: list = field(default_factory=list)   # a trade usually has two
+    risk: float = 1.0                               # percent: 1.0 == 1%
+    opened: datetime = None
+    opened_time: bool = False                       # is the entry time known
+    result: str = None                              # None = position is open
+    pnl: float = None
+    closed: date = None
+    note: str = ""
+    notion_id: str = ""
+    idea: list = field(default_factory=list)        # list of IdeaBlock
+    exit_images: list = field(default_factory=list)
+    conclusions: str = ""
+    extra: dict = field(default_factory=dict)       # unknown header keys
+
+    @property
+    def is_open(self):
+        return self.result is None
+
+    def check(self):
+        if not self.id:
+            raise RecordError("trade has no id")
+        if not self.account:
+            raise RecordError(f"{self.id}: account is not set")
+        if self.direction not in DIRECTIONS:
+            raise RecordError(f"{self.id}: bad direction {self.direction!r}")
+        if self.style not in STYLES:
+            raise RecordError(f"{self.id}: bad style {self.style!r}")
+        if self.opened is None:
+            raise RecordError(f"{self.id}: entry date is missing")
+        if not self.risk or self.risk <= 0:
+            raise RecordError(f"{self.id}: bad risk {self.risk!r}")
+        if self.result is not None and self.result not in RESULTS:
+            raise RecordError(f"{self.id}: bad result {self.result!r}")
+        if self.result is not None and self.pnl is None:
+            raise RecordError(f"{self.id}: closed trade without PnL")
+        if self.result is None and self.pnl is not None:
+            raise RecordError(f"{self.id}: open trade must not have PnL")
+        return self
+
+
+@dataclass
+class IdeaBlock:
+    """One piece of the idea: a timeframe, the text and its screenshots."""
+    tf: str = ""
+    text: str = ""
+    images: list = field(default_factory=list)
+
+
+# --- daily card ------------------------------------------------------------
+
+CARD_KEYS = [
+    ("day", "date"),
+    ("grade", "process grade"),
+    ("pnl", "pnl $"),
+    ("quality", "opportunity quality"),
+]
+
+# Card sections: object field -> heading in the file -> label in the interface.
+# The order is the one on the paper Daily Report Card.
+CARD_SECTIONS = [
+    ("focus", "Focus", "current focus (goal)"),
+    ("process", "Process", "trading process"),
+    ("learned", "Learned", "what I learned / did well today?"),
+    ("errors", "Errors", "errors & improvement"),
+    ("best", "Best trade", "best trade of the day"),
+    ("overview", "Overview", "overview"),
+]
+
+
+@dataclass
+class Card:
+    """The day reviewed: the paper Daily Report Card, kept in the journal."""
+    day: date = None
+    grade: str = ""                 # process grade: A, B, C…
+    pnl: float = None
+    quality: str = ""               # how good the opportunities were
+    focus: str = ""
+    process: str = ""
+    learned: str = ""
+    errors: str = ""
+    best: str = ""
+    overview: str = ""
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def id(self):
+        return f"{self.day:%Y-%m-%d}" if self.day else ""
+
+    @property
+    def is_empty(self):
+        return not any(getattr(self, name).strip()
+                       for name, _, _ in CARD_SECTIONS)
+
+    def check(self):
+        if self.day is None:
+            raise RecordError("card without a date")
+        return self
+
+
+# --- account ---------------------------------------------------------------
+
+ACCOUNT_KEYS = [
+    ("id", "id"),
+    ("name", "name"),
+    ("start_balance", "start balance"),
+    ("currency", "currency"),
+    ("archived", "archived"),
+    ("notion_id", "notion id"),
+]
+
+
+@dataclass
+class Account:
+    id: str                       # bybit, prop-100k
+    name: str = ""
+    start_balance: float = 0.0
+    currency: str = "USD"
+    archived: bool = False        # archived ones stay in statistics, not in forms
+    notion_id: str = ""
+    note: str = ""
+    extra: dict = field(default_factory=dict)
+
+    def check(self):
+        if not self.id:
+            raise RecordError("account has no id")
+        return self
+
+
+# --- adjustment ------------------------------------------------------------
+
+ADJUSTMENT_KEYS = [
+    ("id", "id"),
+    ("account", "account"),
+    ("kind", "kind"),
+    ("amount", "amount"),
+    ("day", "date"),
+]
+
+
+@dataclass
+class Adjustment:
+    """Money moving outside trades: deposit, withdrawal, fee, reconciliation."""
+    id: str
+    account: str
+    kind: str = "reconciliation"
+    amount: float = 0.0
+    day: date = None
+    comment: str = ""
+    extra: dict = field(default_factory=dict)
+
+    def check(self):
+        if not self.account:
+            raise RecordError(f"{self.id}: account is not set")
+        if self.kind not in ADJUSTMENT_KINDS:
+            raise RecordError(f"{self.id}: bad kind {self.kind!r}")
+        if self.day is None:
+            raise RecordError(f"{self.id}: date is missing")
+        return self
