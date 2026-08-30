@@ -1,31 +1,12 @@
 # TradingJournal
 
-A local trading journal. It runs entirely on your own machine: no cloud, no
-account, no telemetry. Your records are plain text files and images you can
-read with any editor.
+**A trading journal that lives on your machine.** Your trades are markdown files
+and screenshots in a folder you own — no account, no cloud, no network calls.
 
-No dependencies — the Python standard library and nothing else.
-
-- **A trade is written in two steps**: you open the position (account, pair,
-  direction, style, timeframes, risk, screenshots of the idea) and later close
-  it (result, PnL, exit screenshot, conclusions). The idea gets written down
-  before the market says who was right.
-- **A daily card** — the day reviewed on the pattern of a paper Daily Report
-  Card: process grade, opportunity quality, focus, errors, best trade, overview.
-- **Balances are computed, never stored**: start balance + PnL of closed trades
-  + adjustments. A balance cannot drift away from reality because nothing keeps
-  a stale copy of it.
-- **Statistics in R**: R = PnL / (risk% × account balance at the moment of
-  entry) — not against a fixed number, so 1% of risk stops looking like the
-  same amount of money forever.
-- The list of trades is **grouped by trading weeks**, switchable to months and
-  quarters.
-- **Monthly and quarterly reports** at the press of a button: the figures are
-  recomputed, your conclusions are never overwritten.
-- Screenshots are pasted into the form with **Ctrl+V** and removed with a cross.
-- Deleted trades and cards go to `.trash`, they are not shredded.
-
-Everything is served from `127.0.0.1` and nothing leaves the machine.
+[![tests](https://github.com/OWNER/TradingJournal/actions/workflows/tests.yml/badge.svg)](https://github.com/OWNER/TradingJournal/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](#what-it-is-not)
 
 ![The journal](docs/journal.png)
 
@@ -34,119 +15,245 @@ Everything is served from `127.0.0.1` and nothing leaves the machine.
   <img src="docs/statistics.png" width="49%" alt="Statistics">
 </p>
 
-*The screenshots are made on invented data.*
+<p align="center"><i>The screenshots are made on invented data.</i></p>
 
-## Getting started
+## Why
 
-    python3 -m tj.server          # Windows: py -m tj.server
+A trading journal holds the most private thing a trader has: every position, its
+size, and the reasoning behind it. Most journals are web services — you type all
+that into someone else's database and hope for the best.
 
-Then open http://localhost:8778 and create an account on the **Accounts** tab.
-The start balance is a point of reference, not a memory of the past: opening an
-account today, put in today's real balance.
+This one is a small program that serves a web interface on `127.0.0.1` and
+writes plain files into a folder. Nothing is uploaded, because nothing here
+knows how to upload. If the project disappears tomorrow, your records stay
+exactly as they are: text you can read in any editor, images you can open in any
+viewer.
+
+It is opinionated where it matters. Balances are computed from history rather
+than stored, so they cannot drift. Risk and R are measured against the balance
+**at the moment of entry**, not against a number typed in once. Break-even
+trades are kept out of the win rate, because a trade that ended at zero was
+neither won nor lost.
+
+## What it does
+
+**Trades, written in two steps.** You open a position — account, pair,
+direction, style, timeframes, risk, screenshots of the idea — and close it later
+with the result, the PnL, the exit screenshot and your conclusions. The idea
+gets written down before the market says who was right.
+
+**A daily card.** The day reviewed on the pattern of a paper Daily Report Card:
+process grade, opportunity quality, focus, what went well, errors, best trade,
+overview. The day's PnL is filled in from the trades you closed, and stays
+editable.
+
+**Statistics that answer honest questions.** An equity curve per account, the
+distribution of R, slices by style, pair and account, and a monthly or quarterly
+report built on a button — figures recomputed, your conclusions never overwritten.
+
+**A list you can actually read.** Trades are grouped by trading weeks, with the
+count, win rate, Σ PnL and Σ R in the total row; one switch turns it into months
+or quarters. Filters hide behind a funnel button that says how many of them are on.
+
+**Screenshots by Ctrl+V.** Click the drop zone, paste, done — from TradingView,
+from a screen capture, from anywhere. A cross on the thumbnail takes it back out.
+
+**Nothing is shredded.** Deleting a trade or a card moves it to `.trash`. A
+mis-click should not cost a record.
+
+## Quick start
+
+Python 3.10 or newer. Nothing to install.
+
+```bash
+git clone https://github.com/OWNER/TradingJournal.git
+cd TradingJournal
+python3 -m tj.server
+```
+
+Open <http://localhost:8778>, go to **Accounts** and create one: a name and a
+start balance. The start balance is a point of reference, not a memory of the
+past — opening an account today, put in today's real balance and the computed
+balance is right from the first minute.
 
 - `TJ_PORT` changes the port (8778 by default).
 - `TJ_ROOT` changes where the records live (the project folder by default).
 
-Full install, including autostart on Linux, Windows and macOS: **[INSTALL.md](INSTALL.md)**.
-How to use it day to day: **[GUIDE.md](GUIDE.md)**. What changed: **[CHANGELOG.md](CHANGELOG.md)**.
+Autostart on Linux, Windows and macOS, plus desktop integration:
+**[INSTALL.md](INSTALL.md)**. The day-to-day guide: **[GUIDE.md](GUIDE.md)**.
 
-## Keeping the records apart from the program
+## Your data
 
-Set `TJ_ROOT` to a folder of your own and the journal keeps its records there:
+A trade is a folder. Inside it, one markdown file and the pictures:
 
-    TJ_ROOT=~/TradingJournal-data python3 -m tj.server
+```
+journal/trades/2026-08-29-01-eurusd/
+├── trade.md
+└── shots/
+    ├── idea-01-01.png
+    └── exit-01.png
+```
 
-That is the arrangement to prefer once the program is under git — the code can
-then be shared or published while the records stay private, in a repository of
-their own that is never pushed anywhere.
+And `trade.md` reads like this:
 
-## Layout
+```markdown
+---
+id: 2026-08-29-01-eurusd
+account: broker
+pair: EURUSD
+direction: long
+style: swing
+entry tf: H4
+execution:
+  - Market Entry
+risk %: 1
+entry: 2026-08-29 14:30
+result: Win
+pnl $: 174
+exit: 2026-08-31
+---
 
-    journal/                       the source of truth, worth keeping under git
-      accounts/<id>.md             account: start balance, currency, archived
-      trades/<id>/trade.md         one trade = one folder
-      trades/<id>/shots/           the pictures of that trade
-      cards/YYYY-MM-DD.md          the daily card
-      adjustments/<id>.md          deposit, withdrawal, fee, reconciliation
-      reports/2026-08.md           monthly and quarterly reports
-    .trash/                        deleted records, outside git
-    .drafts/                       screenshots of unsubmitted forms, swept daily
-    tj/                            the code
-    tests/                         the tests
-    tools/                         one-off utilities
-    desktop/                       desktop integration samples (Linux)
+## Idea
 
-A trade id is `YYYY-MM-DD-NN-pair`, for example `2026-08-29-01-eurusd`.
+### H4
 
-## The format of a trade
+Range breakout, waiting for a retest.
 
-    ---
-    id: 2026-08-29-01-eurusd
-    account: broker
-    pair: EURUSD
-    direction: long
-    style: swing
-    entry tf: H4
-    execution:
-      - M15
-    risk %: 1
-    entry: 2026-08-29 14:30
-    result: Win          <- these three lines are absent while the position is open
-    pnl $: 174
-    exit: 2026-08-31
-    ---
+![](shots/idea-01-01.png)
 
-    ## Idea
+## Exit
 
-    ### H4
+![](shots/exit-01.png)
 
-    Range breakout, waiting for a retest.
+## Conclusions
 
-    ![](shots/idea-01.png)
+Held to target, did not move the stop.
+```
 
-    ## Exit
+That is the whole storage format. No database, no schema migrations, no export
+button — the export is `cp -r`.
 
-    ![](shots/exit-01.png)
+The rest of the layout:
 
-    ## Conclusions
+```
+journal/
+  accounts/<id>.md        start balance, currency, archived
+  trades/<id>/            one trade = one folder
+  cards/YYYY-MM-DD.md     the daily card
+  adjustments/<id>.md     deposit, withdrawal, fee, reconciliation
+  reports/2026-08.md      monthly and quarterly reports
+.trash/                   deleted records, kept just in case
+.drafts/                  screenshots of unsubmitted forms, swept daily
+```
 
-    Held to target, did not move the stop.
+**Put it under git.** The journal is text, so `git log` gives you the history of
+your own thinking — and a way back if you fix a number you should not have.
 
-## The format of a daily card
+**Keep the records apart from the program** once the code itself is under git:
 
-    ---
-    date: 2026-08-30
-    process grade: B
-    pnl $: 250
-    opportunity quality: A
-    ---
+```bash
+TJ_ROOT=~/TradingJournal-data python3 -m tj.server
+```
 
-    ## Focus
-    ## Process
-    ## Learned
-    ## Errors
-    ## Best trade
-    ## Overview
+Then the program can live in a public repository while the records sit in a
+private one that is never pushed anywhere.
 
-## How the figures are worked out
+## How the numbers work
 
 **Balance** = start balance + Σ PnL of closed trades + Σ adjustments. It is
-never written into a file.
+never written to a file. Nothing can go stale, because there is no stored copy
+to go stale.
 
-**R** = PnL / (risk% × the account balance at the moment of entry). The balance
-is taken as of the entry day: a trade closed today does not change today's entry.
+**R** = PnL / (risk% × the account balance **at the moment of entry**). The
+balance is taken as of the entry day: a trade closed today does not change
+today's entry. Measured this way, 1% of risk stops looking like the same amount
+of money forever.
 
-**Winrate** = wins / (wins + losses). Break-even trades stay out of the
-denominator — such a trade ended neither way; what it cost is fully visible in
-the sum and the average R, where BE counts like everything else.
+**Win rate** = wins / (wins + losses). Break-even trades stay out of the
+denominator: such a trade ended neither way, and diluting the hit rate with it
+would be dishonest. What they do cost — commission, the spread, the opportunity
+spent — is fully visible in the sum and the average R, where they count like
+everything else.
 
-**Total R** is more honest than a total in money once there is more than one
-account: a dollar on a prop account and a dollar on your own are different kinds
-of money, which is why the front page has no grand total in dollars.
+**Total R rather than a total in dollars.** With more than one account, a dollar
+on a prop account and a dollar on your own are different kinds of money. The
+front page refuses to add them up.
 
-## Tests
+**A balance that does not match the broker** is not fixed by editing history: it
+is written down as an adjustment — `reconciliation`, `fee`, `deposit`,
+`withdrawal` — with a comment saying where the difference came from.
 
-    python3 -m unittest discover -s tests
+## Privacy
+
+The server binds `127.0.0.1` and refuses requests whose `Origin` is not itself.
+There is not a single outbound URL in the code: no CDN, no fonts, no analytics,
+no update check. Styles and scripts are inlined into the pages, so the interface
+works with the network cable pulled out.
+
+This is a single-user program with no authentication. It is meant for your own
+machine; do not put it behind a public address.
+
+## Speed and footprint
+
+Measured on a journal of 159 trades with 363 screenshots:
+
+| | |
+|---|---|
+| front page, 159 trades | **8 ms**, 68 KB |
+| a trade page | **2 ms**, 14 KB |
+| statistics with charts | **7 ms**, 37 KB |
+| server memory | **25 MB** |
+| the whole program | **~3 000 lines of Python** |
+
+Pages are plain HTML rendered by one Python process — no framework, no bundler,
+no build step. The charts are SVG generated on the server. There is nothing to
+wait for.
+
+## Desktop integration
+
+`desktop/` holds working samples for Linux: a user systemd unit, a window toggle
+for a hotkey, and a bar widget for [Omarchy](https://omarchy.org/) that carries
+the number of open positions on its icon. Windows and macOS autostart are
+described in [INSTALL.md](INSTALL.md).
+
+## What it is not
+
+Stated plainly, so nobody waits for it:
+
+- **No cloud, no sync, no multi-user.** One person, one machine, one folder.
+- **No broker or exchange API.** Trades are entered by hand, on purpose: typing
+  the idea in is the part that makes a journal worth keeping.
+- **No dependencies, ever.** The Python standard library is the whole of it.
+  That is a design constraint, not an accident: a journal you may still need in
+  five years should not rot because a package did.
+- **No mobile app.** It is a page on localhost.
+- **Not a backtester and not an analytics platform.** It records what you did
+  and tells you honestly how it went.
+
+## FAQ
+
+**Forex only?** No. A pair is free text — stocks, futures and crypto tickers all
+work. The vocabulary of trade styles is the one place with fixed values, and it
+lives in `tj/model.py`.
+
+**Can I edit the files by hand?** Yes, that is the point. Keep the header keys
+intact; everything else is ordinary markdown.
+
+**How do I back it up?** Copy the `journal/` folder, or keep it under git and
+push it to a private repository of your own.
+
+**Why not a database?** Because a database is a wall between you and your
+records. Text files outlive the program that wrote them.
+
+**Can I run it on a server and reach it from anywhere?** Please do not. There is
+no authentication, and adding some would not make it a safe thing to expose.
+
+## Contributing
+
+Bug reports and small, focused pull requests are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md). The short version: keep it dependency-free,
+run `python3 -m unittest discover -s tests`, and remember that somebody's
+trading history is on the other end of this code.
 
 ## Licence
 
