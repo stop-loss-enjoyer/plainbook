@@ -4,12 +4,25 @@ What changed and why. Newest first.
 
 ## v1.1 — 30.08.2026
 
+**The project is named Plainbook.** Plain text, plainly kept — the name says what
+the storage is, and the storage is the reason the journal is private, fast and
+workable by an agent. The package is `plainbook`, the server runs as
+`python3 -m plainbook.server`, and the environment variables are
+`PLAINBOOK_PORT` and `PLAINBOOK_ROOT`.
+
+- **A guide for agents**, `AGENTS.md`: the map of the code, the invariants that
+  must not be broken and why, recipes for the usual tasks, how to verify a
+  change, and the traps that have already bitten this project. `CLAUDE.md`
+  points at it.
+- **`tools/check_public.py`** refuses to let records, private paths or foreign
+  ids into the repository. It runs as a pre-push hook and in CI.
+
 Everything is in English now — the interface, the code, the comments and the
 files themselves. The journal used to keep its records under Russian header keys
 and folder names (`сделки/`, `счёт:`, `## Идея`); those now read `trades/`,
 `account:`, `## Idea`. Two languages in one project were one too many.
 
-- **Records and program live apart.** `TJ_ROOT` points the journal at a data
+- **Records and program live apart.** `PLAINBOOK_ROOT` points the journal at a data
   folder of its own, so the code can go into a public repository while the
   records stay private in a repository that is never pushed anywhere.
 - **A one-off migration**, `tools/migrate_ru_to_en.py`, converts a journal
@@ -74,7 +87,7 @@ card → look at the statistics → build a report for the month or the quarter.
   reading tolerates them in files already saved — the same guard covers empty
   trade fields, which would have shown up as "[]".
 - **The bar button opened a folder instead of the journal.** The toggle looked
-  the window up by the title `^TradingJournal` as well, and that is the title of
+  the window up by the title `^Plainbook` as well, and that is the title of
   a file manager window opened on the project folder and of a terminal sitting
   in that directory. The window is now found by the web app's class only.
 - **The journal folders are created when the server starts**, not when the first

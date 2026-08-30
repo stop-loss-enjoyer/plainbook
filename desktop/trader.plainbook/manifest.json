@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "trader.journal",
+  "id": "trader.plainbook",
   "name": "Trading journal",
   "version": "1.0.0",
   "author": "",

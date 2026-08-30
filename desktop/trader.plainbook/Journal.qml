@@ -3,7 +3,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Trading journal — a local server on :8778 (unit trading-journal.service).
+// Trading journal — a local server on :8778 (unit plainbook.service).
 // A click of any button opens or hides the window with the same script the
 // hotkey uses, so the two never drift apart.
 //
@@ -20,7 +20,7 @@ import qs.Ui
 // NOTE: edits to this file only take effect after omarchy restart shell.
 BarWidget {
   id: root
-  moduleName: "trader.journal"
+  moduleName: "trader.plainbook"
 
   property int openCount: 0
   property bool up: false
@@ -75,10 +75,10 @@ BarWidget {
   implicitHeight: button.implicitHeight
 
   readonly property string tip: {
-    if (!up) return "TradingJournal: server not responding · " + checkedAt
-    if (openCount === 0) return "TradingJournal · no open positions · " + checkedAt
+    if (!up) return "Plainbook: server not responding · " + checkedAt
+    if (openCount === 0) return "Plainbook · no open positions · " + checkedAt
     var word = openCount === 1 ? "position" : "positions"
-    return "TradingJournal · " + openCount + " open " + word + " · " + checkedAt
+    return "Plainbook · " + openCount + " open " + word + " · " + checkedAt
   }
 
   BarIconButton {
@@ -91,7 +91,7 @@ BarWidget {
       : (root.bar ? root.bar.barForeground : Color.foreground)
     tooltipText: root.tip
     onPressed: function (mouseButton) {
-      if (root.bar) root.bar.run("journal-toggle")
+      if (root.bar) root.bar.run("plainbook-toggle")
     }
   }
 

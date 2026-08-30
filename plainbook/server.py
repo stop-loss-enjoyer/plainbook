@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-The local journal server. 127.0.0.1 only, port 8778 (TJ_PORT changes it).
+The local journal server. 127.0.0.1 only, port 8778 (PLAINBOOK_PORT changes it).
 
-Run:   python3 -m tj.server
+Run:   python3 -m plainbook.server
 Open:  http://127.0.0.1:8778
 """
 import http.server
@@ -22,9 +22,9 @@ from .model import (Trade, Account, IdeaBlock, Card, RecordError,
                     DIRECTIONS, RESULTS, NEW_STYLES, CARD_SECTIONS,
                     PAIR_NOT_SET)
 
-PORT = int(os.environ.get("TJ_PORT") or 8778)
+PORT = int(os.environ.get("PLAINBOOK_PORT") or 8778)
 # the journal root can be overridden — the tests and a split data folder use it
-ROOT = os.path.abspath(os.environ.get("TJ_ROOT") or
+ROOT = os.path.abspath(os.environ.get("PLAINBOOK_ROOT") or
                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DRAFTS = os.path.join(ROOT, ".drafts")
 TIMEFRAMES = ["M15", "H1", "H4", "D1"]
@@ -1266,7 +1266,7 @@ def U(s):
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    server_version = "TradingJournal"
+    server_version = "Plainbook"
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
@@ -1454,7 +1454,7 @@ def main():
     os.makedirs(DRAFTS, exist_ok=True)
     store.make_layout(ROOT)
     server = Server(("127.0.0.1", PORT), Handler)
-    print(f"TradingJournal: http://127.0.0.1:{PORT}  (Ctrl+C to stop)")
+    print(f"Plainbook: http://127.0.0.1:{PORT}  (Ctrl+C to stop)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -13,12 +13,12 @@ labels: bug
 2.
 
 **Versions**
-- TradingJournal: (`git describe --tags`)
+- Plainbook: (`git describe --tags`)
 - Python: (`python3 --version`)
 - OS and browser:
 
 **The log, if the server fell over**
-<!-- Linux: journalctl --user -u trading-journal -n 50 -->
+<!-- Linux: journalctl --user -u plainbook -n 50 -->
 
 <!-- Please do not paste real trades. A made-up example that shows the same
      problem is more useful anyway. -->

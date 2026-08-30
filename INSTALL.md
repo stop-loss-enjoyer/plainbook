@@ -18,14 +18,14 @@ the result, not the code. Installing by hand works the same way.
 
 ## Common steps (every OS)
 
-1. Put the `TradingJournal` folder where they keep their projects (agree the
+1. Put the `Plainbook` folder where they keep their projects (agree the
    path with them).
 2. Run the tests: `python3 -m unittest discover -s tests` (Windows:
    `py -m unittest discover -s tests`). They all have to pass — that is the
    check that Python and the encodings are in order.
 3. **Decide where the records will live.** Two arrangements:
    - *next to the program* — nothing to do, the journal writes into `./journal`;
-   - *in a folder of their own* — set `TJ_ROOT` (see the unit below). Prefer
+   - *in a folder of their own* — set `PLAINBOOK_ROOT` (see the unit below). Prefer
      this one if the program itself is going to be under git or shared: then the
      code and the private records never share a repository.
 
@@ -44,24 +44,24 @@ the result, not the code. Installing by hand works the same way.
 8. Hand them [GUIDE.md](GUIDE.md) — the daily round is all in there. Do not
    recite it: show it once on a live example and say where the text is.
 
-The default port is 8778; if it is taken, set another one through `TJ_PORT` (and
+The default port is 8778; if it is taken, set another one through `PLAINBOOK_PORT` (and
 use it everywhere below).
 
 ## Linux
 
-Autostart is a user systemd unit. The sample is `desktop/trading-journal.service`
-(`WorkingDirectory=%h/TradingJournal` and `Environment=TJ_ROOT=%h/TradingJournal-data`
+Autostart is a user systemd unit. The sample is `desktop/plainbook.service`
+(`WorkingDirectory=%h/plainbook` and `Environment=PLAINBOOK_ROOT=%h/plainbook-data`
 — correct both to the real paths).
 
-    cp desktop/trading-journal.service ~/.config/systemd/user/
-    systemctl --user enable --now trading-journal
-    systemctl --user status trading-journal   # check
+    cp desktop/plainbook.service ~/.config/systemd/user/
+    systemctl --user enable --now plainbook
+    systemctl --user status plainbook   # check
 
 ### Omarchy (Hyprland)
 
 On top of the unit, if they want it:
 
-- **A window toggle**: `desktop/journal-toggle` → `~/.local/bin/` (+`chmod +x`).
+- **A window toggle**: `desktop/plainbook-toggle` → `~/.local/bin/` (+`chmod +x`).
   The script opens the journal as a web app; pressing again focuses or closes it.
 
   It finds the window by its CLASS — for a Chromium web app that is
@@ -69,14 +69,14 @@ On top of the unit, if they want it:
   `localhost` and not `127.0.0.1`. With another browser or another way of
   launching, check the real class (`hyprctl clients -j | jq -r '.[].class'`
   with the journal open) and fix the `test("localhost__")` line.
-  Do NOT look the window up by TITLE: "TradingJournal" is also the title of a
+  Do NOT look the window up by TITLE: "Plainbook" is also the title of a
   file manager window opened on the project folder and of a terminal sitting in
   that directory — the toggle would raise those instead of the journal.
 - **A hotkey**: in `~/.config/hypr/bindings.lua` a line like
-  `o.bind("SUPER + E", "Trading journal", "journal-toggle")` — agree the
+  `o.bind("SUPER + E", "Trading journal", "plainbook-toggle")` — agree the
   combination with them, SUPER+E may be taken.
-- **A button in the top bar**: `desktop/trader.journal/` →
-  `~/.config/omarchy/plugins/`, then add `{"id":"trader.journal"}` to
+- **A button in the top bar**: `desktop/trader.plainbook/` →
+  `~/.config/omarchy/plugins/`, then add `{"id":"trader.plainbook"}` to
   `bar.layout` in `~/.config/omarchy/shell.json`. The icon carries the number of
   open positions. After editing the QML, `omarchy restart shell` is required.
 
@@ -89,15 +89,15 @@ through `chromium --app=http://localhost:8778`).
 
 ## Windows
 
-By hand: `py -m tj.server` from the project folder.
+By hand: `py -m plainbook.server` from the project folder.
 
 Autostart without a console window — a shortcut in the startup folder:
 
 1. Win+R → `shell:startup`.
-2. Create a shortcut there with the target `pythonw -m tj.server` and "Start in"
-   set to the `TradingJournal` folder.
+2. Create a shortcut there with the target `pythonw -m plainbook.server` and "Start in"
+   set to the `Plainbook` folder.
 
-To keep the records elsewhere, set `TJ_ROOT` as a user environment variable
+To keep the records elsewhere, set `PLAINBOOK_ROOT` as a user environment variable
 (System properties → Environment Variables).
 
 A shortcut on the desktop or the taskbar: target
@@ -107,26 +107,26 @@ After a reboot, check that the server came up (open the address).
 
 ## macOS
 
-By hand: `python3 -m tj.server` from the project folder.
+By hand: `python3 -m plainbook.server` from the project folder.
 
-Autostart is a LaunchAgent, `~/Library/LaunchAgents/trading.journal.plist`:
+Autostart is a LaunchAgent, `~/Library/LaunchAgents/plainbook.plist`:
 
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
       "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
     <plist version="1.0"><dict>
-      <key>Label</key><string>trading.journal</string>
+      <key>Label</key><string>plainbook</string>
       <key>ProgramArguments</key>
-        <array><string>/usr/bin/python3</string><string>-m</string><string>tj.server</string></array>
-      <key>WorkingDirectory</key><string>/Users/NAME/TradingJournal</string>
+        <array><string>/usr/bin/python3</string><string>-m</string><string>plainbook.server</string></array>
+      <key>WorkingDirectory</key><string>/Users/NAME/plainbook</string>
       <key>EnvironmentVariables</key>
-        <dict><key>TJ_ROOT</key><string>/Users/NAME/TradingJournal-data</string></dict>
+        <dict><key>PLAINBOOK_ROOT</key><string>/Users/NAME/plainbook-data</string></dict>
       <key>RunAtLoad</key><true/>
       <key>KeepAlive</key><true/>
     </dict></plist>
 
 Put the real paths in (`which python3`, the project folder), then
-`launchctl load ~/Library/LaunchAgents/trading.journal.plist`.
+`launchctl load ~/Library/LaunchAgents/plainbook.plist`.
 
 An application shortcut: Chrome → "Save as application" on the journal page, or
 `open -a "Google Chrome" --args --app=http://localhost:8778`.

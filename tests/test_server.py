@@ -16,8 +16,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tj import store
-from tj.model import Account
+from plainbook import store
+from plainbook.model import Account
 
 # a one-pixel PNG — enough to exercise the whole screenshot path
 PNG = bytes.fromhex(
@@ -35,9 +35,9 @@ class ServerCase(unittest.TestCase):
                                              start_balance=10000))
         store.save_account(cls.root, Account(id="legacy", name="Legacy",
                                              start_balance=5000, archived=True))
-        os.environ["TJ_ROOT"] = cls.root
-        import tj.server
-        cls.S = importlib.reload(tj.server)
+        os.environ["PLAINBOOK_ROOT"] = cls.root
+        import plainbook.server
+        cls.S = importlib.reload(plainbook.server)
         cls.server = cls.S.Server(("127.0.0.1", 0), cls.S.Handler)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -46,7 +46,7 @@ class ServerCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.tmp.cleanup()
-        os.environ.pop("TJ_ROOT", None)
+        os.environ.pop("PLAINBOOK_ROOT", None)
 
     # --- helpers ---
     def url(self, path):

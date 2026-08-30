@@ -1,9 +1,10 @@
-# TradingJournal
+# Plainbook
 
-**A trading journal that lives on your machine.** Your trades are markdown files
-and screenshots in a folder you own — no account, no cloud, no network calls.
+**A plain-text trading journal that lives on your machine.** Local, private,
+fast — and built to be kept by an agent. Your trades are markdown files and
+screenshots in a folder you own: no account, no cloud, no network calls.
 
-[![tests](https://github.com/OWNER/TradingJournal/actions/workflows/tests.yml/badge.svg)](https://github.com/OWNER/TradingJournal/actions/workflows/tests.yml)
+[![tests](https://github.com/OWNER/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/OWNER/plainbook/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](#what-it-is-not)
@@ -61,14 +62,37 @@ from a screen capture, from anywhere. A cross on the thumbnail takes it back out
 **Nothing is shredded.** Deleting a trade or a card moves it to `.trash`. A
 mis-click should not cost a record.
 
+## Built to be kept by an agent
+
+Most software tolerates a coding agent. This one is arranged for it — and the
+arrangement is the same one that makes the journal private and durable in the
+first place: plain files, no dependencies, a small surface.
+
+- **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
+  bundler. An agent that can run `python3` can run the whole project.
+- **The tests finish in under a second** — 55 of them, no fixtures, no network.
+  A change can be verified in the same breath it was written.
+- **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
+  the map of the code, the invariants that must not be broken, recipes for the
+  usual tasks, and the traps that have already bitten this project — each with
+  the reason it exists.
+- **A guard stands between an agent and your records.** `tools/check_public.py`
+  refuses a commit that would carry trade records, private paths or anything
+  else it recognises as yours; it runs as a pre-push hook and in CI.
+- **The whole program is ~3 000 lines** of straightforward Python, and the
+  routing table fits on one screen. It fits in a context window, so an agent
+  reasons about the real thing rather than about a summary of it.
+
+`CLAUDE.md` points at the same guide, so Claude Code picks it up unprompted.
+
 ## Quick start
 
 Python 3.10 or newer. Nothing to install.
 
 ```bash
-git clone https://github.com/OWNER/TradingJournal.git
-cd TradingJournal
-python3 -m tj.server
+git clone https://github.com/OWNER/plainbook.git
+cd plainbook
+python3 -m plainbook.server
 ```
 
 Open <http://localhost:8778>, go to **Accounts** and create one: a name and a
@@ -76,8 +100,8 @@ start balance. The start balance is a point of reference, not a memory of the
 past — opening an account today, put in today's real balance and the computed
 balance is right from the first minute.
 
-- `TJ_PORT` changes the port (8778 by default).
-- `TJ_ROOT` changes where the records live (the project folder by default).
+- `PLAINBOOK_PORT` changes the port (8778 by default).
+- `PLAINBOOK_ROOT` changes where the records live (the project folder by default).
 
 Autostart on Linux, Windows and macOS, plus desktop integration:
 **[INSTALL.md](INSTALL.md)**. The day-to-day guide: **[GUIDE.md](GUIDE.md)**.
@@ -152,7 +176,7 @@ your own thinking — and a way back if you fix a number you should not have.
 **Keep the records apart from the program** once the code itself is under git:
 
 ```bash
-TJ_ROOT=~/TradingJournal-data python3 -m tj.server
+PLAINBOOK_ROOT=~/plainbook-data python3 -m plainbook.server
 ```
 
 Then the program can live in a public repository while the records sit in a
@@ -234,7 +258,7 @@ Stated plainly, so nobody waits for it:
 
 **Forex only?** No. A pair is free text — stocks, futures and crypto tickers all
 work. The vocabulary of trade styles is the one place with fixed values, and it
-lives in `tj/model.py`.
+lives in `plainbook/model.py`.
 
 **Can I edit the files by hand?** Yes, that is the point. Keep the header keys
 intact; everything else is ordinary markdown.
@@ -248,10 +272,15 @@ records. Text files outlive the program that wrote them.
 **Can I run it on a server and reach it from anywhere?** Please do not. There is
 no authentication, and adding some would not make it a safe thing to expose.
 
+**Where does the name come from?** Plain text, plainly kept: a book of trades in
+files anyone — you, an editor, a script, an agent — can read without asking
+permission.
+
 ## Contributing
 
 Bug reports and small, focused pull requests are welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md). The short version: keep it dependency-free,
+[CONTRIBUTING.md](CONTRIBUTING.md) for people and [AGENTS.md](AGENTS.md) for
+agents. The short version: keep it dependency-free,
 run `python3 -m unittest discover -s tests`, and remember that somebody's
 trading history is on the other end of this code.
 

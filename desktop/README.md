@@ -5,13 +5,13 @@ match the machine.
 
 | file | where it goes |
 |---|---|
-| `trading-journal.service` | `~/.config/systemd/user/` → `systemctl --user enable --now trading-journal` |
-| `journal-toggle` | `~/.local/bin/` (chmod +x) |
-| `trader.journal/` | `~/.config/omarchy/plugins/` + add `{"id":"trader.journal"}` to `bar.layout.right` in `~/.config/omarchy/shell.json` |
+| `plainbook.service` | `~/.config/systemd/user/` → `systemctl --user enable --now plainbook` |
+| `plainbook-toggle` | `~/.local/bin/` (chmod +x) |
+| `trader.plainbook/` | `~/.config/omarchy/plugins/` + add `{"id":"trader.plainbook"}` to `bar.layout.right` in `~/.config/omarchy/shell.json` |
 
 A hotkey, in `~/.config/hypr/bindings.lua`:
 
-    o.bind("SUPER + E", "Trading journal", "journal-toggle")
+    o.bind("SUPER + E", "Trading journal", "plainbook-toggle")
 
 After editing the QML: `omarchy restart shell` (a hot reload does not recreate a
 widget that is already running).

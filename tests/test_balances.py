@@ -8,8 +8,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tj.balances import Journal
-from tj.model import Trade, Account, Adjustment
+from plainbook.balances import Journal
+from plainbook.model import Trade, Account, Adjustment
 
 
 def trade(id, day, pnl=None, result=None, risk=1.0, account="bybit", closed=None):

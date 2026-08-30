@@ -9,8 +9,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tj import mdfile, store
-from tj.model import (Trade, Account, Adjustment, IdeaBlock, Card, RecordError,
+from plainbook import mdfile, store
+from plainbook.model import (Trade, Account, Adjustment, IdeaBlock, Card, RecordError,
                       PAIR_NOT_SET)
 
 

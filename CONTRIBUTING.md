@@ -16,7 +16,7 @@ Open an issue with:
 
 - what you did, what you expected, what happened;
 - the version (`git describe --tags`) and your Python version;
-- the server log if it crashed — on Linux, `journalctl --user -u trading-journal -n 50`.
+- the server log if it crashed — on Linux, `journalctl --user -u plainbook -n 50`.
 
 Please do not paste real trades into an issue. A synthetic example that shows
 the same problem is more useful anyway.
@@ -47,14 +47,14 @@ If you want those, forking is a perfectly friendly thing to do.
 
 ## The shape of the code
 
-    tj/model.py      the records: trade, account, adjustment, card
-    tj/mdfile.py     the markdown header format
-    tj/store.py      files <-> objects
-    tj/balances.py   balances and R, computed by replaying history
-    tj/stats.py      summaries, the equity curve, the R distribution
-    tj/reports.py    monthly and quarterly reports
-    tj/html.py       the palette, the CSS and the SVG charts
-    tj/server.py     the routes, the pages and the forms
+    plainbook/model.py      the records: trade, account, adjustment, card
+    plainbook/mdfile.py     the markdown header format
+    plainbook/store.py      files <-> objects
+    plainbook/balances.py   balances and R, computed by replaying history
+    plainbook/stats.py      summaries, the equity curve, the R distribution
+    plainbook/reports.py    monthly and quarterly reports
+    plainbook/html.py       the palette, the CSS and the SVG charts
+    plainbook/server.py     the routes, the pages and the forms
 
 Two traps worth knowing before you touch a form: a trade's `shots/` folder is
 rewritten whole from what the form sent, so a form that edits a trade must send

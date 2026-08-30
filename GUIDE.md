@@ -142,7 +142,7 @@ Everything is in the `journal/` folder: ordinary text files and pictures.
     journal/adjustments/*.md
     journal/reports/2026-08.md
 
-If `TJ_ROOT` is set, that folder is somewhere else — see INSTALL.md.
+If `PLAINBOOK_ROOT` is set, that folder is somewhere else — see INSTALL.md.
 
 The files open in any text editor and read by eye. No database, no format of its
 own: if the program breaks tomorrow, the records are still yours in the same
@@ -157,9 +157,9 @@ is already kept; a copy on an external drive is still not a waste.
 ## When something goes wrong
 
 - **The page does not open** — the server is not running. On Linux:
-  `systemctl --user restart trading-journal`. Otherwise run `python3 -m tj.server`
+  `systemctl --user restart plainbook`. Otherwise run `python3 -m plainbook.server`
   in the program folder.
 - **A screenshot did not paste** — the journal says so outright. Check that the
   clipboard holds a picture and not a file or a link.
 - **Deleted the wrong thing** — look in `.trash`.
-- **Port 8778 is taken** — set another one through `TJ_PORT`.
+- **Port 8778 is taken** — set another one through `PLAINBOOK_PORT`.

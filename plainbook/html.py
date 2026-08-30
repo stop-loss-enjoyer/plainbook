@@ -225,11 +225,11 @@ def page(title, body, tab="journal", header_right=""):
         f'<a href="{href}" class="{"current" if code == tab else ""}">{name}</a>'
         for code, href, name in links)
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>{"TradingJournal" if title == "Journal"
-          else "TradingJournal — " + esc(title)}</title><style>{CSS}</style>
+<title>{"Plainbook" if title == "Journal"
+          else "Plainbook — " + esc(title)}</title><style>{CSS}</style>
 <script>{HOVER}{PAGE_SCRIPT}</script></head><body>
 <div class="wrap">
-<header><span class="logo">TradingJournal</span><nav>{nav}</nav>
+<header><span class="logo">Plainbook</span><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
 {body}
 </div>
