@@ -223,8 +223,8 @@ class ServerCase(unittest.TestCase):
 
     def test_14_accounts_are_created_archived_and_deleted(self):
         code, where = self.post("/account/new", {
-            "id": "проба", "name": "Test", "start": "5000", "currency": "USD"})
-        self.assertIn("latin", urllib.parse.unquote(where))   # cyrillic id is refused
+            "id": "ünïcode", "name": "Test", "start": "5000", "currency": "USD"})
+        self.assertIn("latin", urllib.parse.unquote(where))   # a non-latin id is refused
         self.post("/account/new", {"id": "test-acc", "name": "Test",
                                    "start": "5000", "currency": "USD"})
         self.assertIn("test-acc", store.all_accounts(self.root))

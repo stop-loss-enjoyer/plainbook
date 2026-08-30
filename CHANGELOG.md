@@ -18,18 +18,19 @@ workable by an agent. The package is `plainbook`, the server runs as
   ids into the repository. It runs as a pre-push hook and in CI.
 
 Everything is in English now — the interface, the code, the comments and the
-files themselves. The journal used to keep its records under Russian header keys
-and folder names (`сделки/`, `счёт:`, `## Идея`); those now read `trades/`,
-`account:`, `## Idea`. Two languages in one project were one too many.
+files themselves. The journal used to keep its records under header keys and
+folder names in the author's own language; they read `trades/`, `account:` and
+`## Idea` now. Two languages in one project were one too many.
 
 - **Records and program live apart.** `PLAINBOOK_ROOT` points the journal at a data
   folder of its own, so the code can go into a public repository while the
   records stay private in a repository that is never pushed anywhere.
-- **A one-off migration**, `tools/migrate_ru_to_en.py`, converts a journal
-  written in the old format: folder and file names, header keys, the closed
-  vocabularies (style, adjustment kind) and section headings. Everything written
-  by hand — idea texts, conclusions, notes, card sections — is left untouched.
-  Run it on a copy first: every computed figure has to come out the same.
+- **A one-off migration** converted the journal that was written in the old
+  format: folder and file names, header keys, the closed vocabularies (style,
+  adjustment kind) and section headings. Everything written by hand — idea
+  texts, conclusions, notes, card sections — was left untouched. The script was
+  run on a copy first and every computed figure compared before and after; it
+  lives with the records it converted, not here.
 - Style values are now the words the interface shows: `swing`, `EMT`,
   `EMT prop`, `intraday`. The display-name mapping went away with them.
 

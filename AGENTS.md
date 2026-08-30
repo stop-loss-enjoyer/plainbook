@@ -67,7 +67,6 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/html.py` | the palette, the CSS, the page shell, the SVG charts |
 | `plainbook/server.py` | routes, pages, forms — everything HTTP |
 | `tools/check_public.py` | the guard that keeps records out of the repository |
-| `tools/migrate_ru_to_en.py` | a one-off format migration, kept as a worked example |
 
 The dependency direction is one way: `server → html, stats, reports, balances,
 store → model → mdfile`. Nothing points back up. If you find yourself importing
@@ -131,11 +130,12 @@ gradients, no shadows except the one on the filter popover, no animation.
 computation free of HTML and the display free of arithmetic; that split is why
 the numbers can be tested at all.
 
-**Change the record format.** Write a migration in `tools/`, following
-`migrate_ru_to_en.py`: run it on a *copy* first, then compare every computed
-figure — trade count, balances per account, Σ R, Σ PnL, screenshot counts —
-before and after. They must match exactly. Only then touch the real journal, and
-say so in `CHANGELOG.md`.
+**Change the record format.** Write a migration script in `tools/` and run it on
+a *copy* of the journal first. Then compare every computed figure — trade count,
+balances per account, Σ R, Σ PnL, screenshot counts, the length of every text
+field — before and after. They must match exactly, or the migration is wrong.
+Only then touch the real journal, and say so in `CHANGELOG.md`. Make the script
+idempotent: running it twice must be a no-op, because it will be run twice.
 
 ## 6. Verifying a change
 
@@ -154,7 +154,8 @@ In this order, every time:
 ## 7. Conventions
 
 - **Commit messages say why**, not what — the diff already says what. A subject
-  line, a blank line, then the reasoning. Write them in the owner's language.
+  line, a blank line, then the reasoning. **In English**: a commit message is
+  published text, sitting next to every file on the repository page.
 - **`CHANGELOG.md` gets a line** for anything a user would notice, phrased as
   what changed for them.
 - **`GUIDE.md` gets updated** when the interface changes. It is the owner's

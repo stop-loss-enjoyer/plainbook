@@ -82,6 +82,9 @@ first place: plain files, no dependencies, a small surface.
 - **The whole program is ~3 000 lines** of straightforward Python, and the
   routing table fits on one screen. It fits in a context window, so an agent
   reasons about the real thing rather than about a summary of it.
+- **One language throughout** — code, comments, documents and commit messages.
+  The guard enforces it, so a contributor's own language never leaks into a
+  public page.
 
 `CLAUDE.md` points at the same guide, so Claude Code picks it up unprompted.
 
