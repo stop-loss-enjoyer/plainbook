@@ -4,7 +4,7 @@
 fast — and built to be kept by an agent. Your trades are markdown files and
 screenshots in a folder you own: no account, no cloud, no network calls.
 
-[![tests](https://github.com/OWNER/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/OWNER/plainbook/actions/workflows/tests.yml)
+[![tests](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](#what-it-is-not)
@@ -90,7 +90,7 @@ first place: plain files, no dependencies, a small surface.
 Python 3.10 or newer. Nothing to install.
 
 ```bash
-git clone https://github.com/OWNER/plainbook.git
+git clone https://github.com/stop-loss-enjoyer/plainbook.git
 cd plainbook
 python3 -m plainbook.server
 ```
