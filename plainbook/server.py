@@ -23,7 +23,7 @@ from .model import (Trade, Account, IdeaBlock, Card, RecordError,
                     PAIR_NOT_SET)
 
 PORT = int(os.environ.get("PLAINBOOK_PORT") or 8778)
-# the journal root can be overridden — the tests and a split data folder use it
+# the journal root can be overridden; the tests and a split data folder use it
 ROOT = os.path.abspath(os.environ.get("PLAINBOOK_ROOT") or
                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DRAFTS = os.path.join(ROOT, ".drafts")
@@ -94,7 +94,7 @@ def filter_form(j, q):
     months = stats.months(j.trades)
     for name, label in (("from", "from month"), ("to", "to month")):
         current = (q.get(name) or [""])[0]
-        options = '<option value="">—</option>' + "".join(
+        options = '<option value="">-</option>' + "".join(
             f'<option value="{m}"{" selected" if m == current else ""}>{m}</option>'
             for m in months)
         parts.append(f'<div><label>{label}</label>'
@@ -123,7 +123,7 @@ def group_label(key, group, sample):
     calendar bounds of a week cannot be recovered from the key alone."""
     if group == "week":
         monday = sample.opened - timedelta(days=sample.opened.weekday())
-        return key.split("-")[1], f"{monday:%d.%m} — {monday + timedelta(days=6):%d.%m.%Y}"
+        return key.split("-")[1], f"{monday:%d.%m} - {monday + timedelta(days=6):%d.%m.%Y}"
     if group == "quarter":
         year, q = key.split("-")
         return f"{q} {year}", ""
@@ -157,9 +157,9 @@ def filters_box(j, q):
     """The filters hide behind a button: the list matters on the front page,
     not the form.
 
-    Since the form is out of sight, the button has to show that a filter is on —
-    otherwise it is a mystery why there are so few trades. Hence the accent and
-    the count on the button."""
+    Since the form is out of sight, the button has to show that a filter is on,
+    or it is a mystery why there are so few trades. Hence the accent and the
+    count on the button."""
     count = active_filters(q)
     badge = f'<span class="badge">{count}</span>' if count else ""
     return (f'<details class="filters-box">'
@@ -177,13 +177,13 @@ def result_class(t):
 def trade_row(j, t):
     r = j.r(t.id)
     return (f'<tr><td><a href="/trade/{U(t.id)}">{t.opened:%d.%m.%Y}</a></td>'
-            f'<td>{esc(t.account)}</td><td>{esc(t.pair)}</td>'
+            f'<td>{esc(t.account)}</td><td>{H.pair(t.pair)}</td>'
             f'<td>{esc(t.direction)}</td><td>{esc(t.style)}</td>'
             f'<td>{esc(t.entry_tf)}</td>'
             f'<td class="num">{t.risk:g}%</td>'
             f'<td class="{result_class(t)}">{esc(t.result or "open")}</td>'
             f'<td class="num {result_class(t)}">{H.money(t.pnl, signed=True)}</td>'
-            f'<td class="num">{"—" if r is None else f"{r:+.2f}"}</td></tr>')
+            f'<td class="num">{"-" if r is None else f"{r:+.2f}"}</td></tr>')
 
 
 def sum_class(x):
@@ -204,7 +204,7 @@ def trades_table(j, trades, group="week"):
         batch = sorted(buckets[key], key=lambda t: t.opened, reverse=True)
         s = stats.summary(j, batch)
         label, dates = group_label(key, group, batch[0])
-        wr = f"WR {s.wr:.0f}%" if s.decided else "—"
+        wr = f"WR {s.wr:.0f}%" if s.decided else "-"
         rows.append(
             f'<tr class="group"><td colspan="7">'
             f'<span class="label">{esc(label)}</span>'
@@ -219,7 +219,7 @@ def trades_table(j, trades, group="week"):
 
 
 def period_tile(j, trades, group):
-    """The total of the current week (month, quarter) — what you look at first."""
+    """The total of the current week (month, quarter): what you look at first."""
     name = {"week": "this week", "month": "this month",
             "quarter": "this quarter"}[group]
     key = group_key(datetime.now(), group)
@@ -227,7 +227,7 @@ def period_tile(j, trades, group):
     s = stats.summary(j, inside)
     if not inside:
         return (f'<div class="tile"><div class="name">{name}</div>'
-                f'<div class="value muted">—</div>'
+                f'<div class="value muted">-</div>'
                 f'<div class="sub">no trades yet</div></div>')
     sub = f"{len(inside)} trades"
     if s.decided:
@@ -243,8 +243,8 @@ def period_tile(j, trades, group):
 
 
 def account_tiles(j):
-    """Balances of the live accounts. Archived ones are not on the front page —
-    the account is done with, there is nothing to watch; it stays in the
+    """Balances of the live accounts. Archived ones are not on the front page:
+    the account is done with and there is nothing to watch, so it stays in the
     statistics and in the history."""
     parts = []
     for a in sorted(j.accounts):
@@ -252,7 +252,7 @@ def account_tiles(j):
         if account.archived:
             continue
         # Start balance, current balance and the difference in colour. Turning
-        # the risk percent into dollars is done in the head — no line for it here.
+        # the risk percent into dollars is done in the head, no line for it here.
         balance = j.balance(a)
         growth = balance - account.start_balance
         colour = H.GOOD if growth >= 0 else H.BAD
@@ -271,12 +271,12 @@ def open_positions(j):
         return ""
     rows = "".join(
         f'<tr><td><a href="/trade/{U(t.id)}">{t.opened:%d.%m.%Y %H:%M}</a></td>'
-        f'<td>{esc(t.account)}</td><td>{esc(t.pair)}</td><td>{esc(t.direction)}</td>'
+        f'<td>{esc(t.account)}</td><td>{H.pair(t.pair)}</td><td>{esc(t.direction)}</td>'
         f'<td>{esc(t.style)}</td><td class="num">{t.risk:g}%</td>'
         f'<td class="num">{H.money(j.computed[t.id].risk_money)} $</td>'
         f'<td><a class="btn" href="/close/{U(t.id)}">Close</a></td></tr>'
         for t in open_trades)
-    return (f'<div class="card is-open"><h2>Open positions — {len(open_trades)}</h2>'
+    return (f'<div class="card is-open"><h2>Open positions: {len(open_trades)}</h2>'
             f'<table><thead><tr><th>entry</th><th>account</th><th>pair</th>'
             f'<th>direction</th><th>style</th><th class="num">risk</th>'
             f'<th class="num">in money</th><th></th></tr></thead>'
@@ -291,12 +291,12 @@ def winrate_tile(name, styles, j, trades):
     s = stats.summary(j, [t for t in trades if t.style in styles])
     if not s.trades:
         return (f'<div class="tile"><div class="name">{esc(name)}</div>'
-                f'<div class="value muted">—</div>'
+                f'<div class="value muted">-</div>'
                 f'<div class="sub muted">no trades</div></div>')
     sub = (f'<span class="breakdown"><span class="win">{s.wins}</span> / '
            f'<span class="lose">{s.losses}</span> / '
            f'<span class="be">{s.be}</span></span>')
-    value = f"{s.wr:.1f}%" if s.decided else "—"
+    value = f"{s.wr:.1f}%" if s.decided else "-"
     return (f'<div class="tile"><div class="name">{esc(name)}</div>'
             f'<div class="value">{value}</div>'
             f'<div class="sub">{sub}</div></div>')
@@ -346,17 +346,17 @@ def trade_page(trade_id):
     r = j.r(t.id)
     fields = [("account", j.accounts[t.account].name
                if t.account in j.accounts else t.account),
-              ("pair", t.pair), ("direction", t.direction),
+              ("pair", H.pair(t.pair)), ("direction", t.direction),
               ("style", t.style),
-              ("entry TF", t.entry_tf), ("execution", ", ".join(t.execution) or "—"),
+              ("entry TF", t.entry_tf), ("execution", ", ".join(t.execution) or "-"),
               ("risk", f"{t.risk:g}% = {H.money(computed.risk_money)} $"),
               ("balance at entry", f"{H.money(computed.balance_at_entry)} $"),
               ("entry", f"{t.opened:%d.%m.%Y %H:%M}" if t.opened_time
                else f"{t.opened:%d.%m.%Y}"),
-              ("exit", f"{t.closed:%d.%m.%Y}" if t.closed else "—"),
+              ("exit", f"{t.closed:%d.%m.%Y}" if t.closed else "-"),
               ("result", t.result or "position open"),
-              ("PnL", f"{H.money(t.pnl, signed=True)} $" if t.pnl is not None else "—"),
-              ("R", f"{r:+.2f}" if r is not None else "—")]
+              ("PnL", f"{H.money(t.pnl, signed=True)} $" if t.pnl is not None else "-"),
+              ("R", f"{r:+.2f}" if r is not None else "-")]
     table = "".join(f'<tr><td class="muted">{esc(k)}</td><td>{esc(v)}</td></tr>'
                     for k, v in fields)
     if t.note:
@@ -428,7 +428,7 @@ def stats_page(q):
     if selected and selected in j.accounts:
         points = stats.equity(j, selected, trades)
         name = j.accounts[selected].name or selected
-        charts = (f'<div class="card"><h2>Equity — {esc(name)}</h2>'
+        charts = (f'<div class="card"><h2>Equity: {esc(name)}</h2>'
                   f'{account_tabs(j, q, selected)}'
                   f'{H.equity_svg([(name, H.SERIES[0], points)], height=300, cid="acc")}'
                   f'</div>')
@@ -444,15 +444,15 @@ def stats_page(q):
         charts = (f'<div class="card"><h2>Equity by account</h2>'
                   f'{account_tabs(j, q, "")}'
                   f'{cards or "<p class=\'muted\'>Nothing to plot yet.</p>"}'
-                  f'<p class="caption">Each account has its own scale — that is why '
-                  f'they are drawn separately.</p></div>')
+                  f'<p class="caption">Each account has its own scale, which is '
+                  f'why they are drawn separately.</p></div>')
 
     slices = ""
-    for heading, key in (("By style", lambda t: t.style),
-                         ("By pair", lambda t: t.pair),
-                         ("By account", lambda t: t.account)):
+    for heading, key, show in (("By style", lambda t: t.style, esc),
+                               ("By pair", lambda t: t.pair, H.pair),
+                               ("By account", lambda t: t.account, esc)):
         rows = "".join(
-            f'<tr><td>{esc(v)}</td><td class="num">{s.trades}</td>'
+            f'<tr><td>{show(v)}</td><td class="num">{s.trades}</td>'
             f'<td class="num">{s.wr:.1f}%</td>'
             f'<td class="num">{s.sum_r:+.2f}</td><td class="num">{s.average_r:+.2f}</td>'
             f'<td class="num">{H.money(s.sum_pnl, signed=True)}</td></tr>'
@@ -482,11 +482,11 @@ _FILE_NAME = re.compile(r"^[a-z0-9_-]+\.(png|jpg|jpeg|gif|webp)$")
 _TOKEN = re.compile(r"^[0-9a-f]{16}$")
 
 FORM_SCRIPT = """
-// the token is set by a script further down the page — read it when sending
+// the token is set by a script further down the page, so read it when sending
 const token = () => document.body.dataset.token || '';
 // A screenshot is held in the form by its own hidden field: remove the node and
 // the field never reaches the server, so the picture leaves the trade. No
-// separate "delete" call is needed — the shots folder is rewritten whole from
+// separate "delete" call is needed: the shots folder is rewritten whole from
 // whatever the form sent.
 function refresh_zone(zone){
   const hint = zone.querySelector('.hint');
@@ -560,8 +560,8 @@ def select(name, values, current="", empty=None):
 def shot_in_zone(trade_id, path, field):
     """A thumbnail of an already saved screenshot, with a cross.
 
-    The cross simply removes the node from the form — together with the hidden
-    field that is what keeps the screenshot in the trade."""
+    The cross simply removes the node from the form, and together with the
+    hidden field that is what keeps the screenshot in the trade."""
     return (f'<span class="shot">'
             f'<img src="/shot/{U(trade_id)}/{U(os.path.basename(path))}" '
             f'alt="screenshot">'
@@ -590,7 +590,7 @@ def block_inside(n, tf="", text="", existing=(), trade_id=None):
 
 
 def trade_form(t=None, token=""):
-    """One form for opening and for editing — the fields are the same."""
+    """One form for opening and for editing: the fields are the same."""
     j = journal()
     editing = t is not None
     accounts = [a for a in sorted(j.accounts) if not j.accounts[a].archived or
@@ -617,9 +617,9 @@ def trade_form(t=None, token=""):
 
     action = f"/edit/{U(t.id)}" if editing else "/new"
     title = "Edit trade" if editing else "New trade"
-    # For a closed trade the exit and the conclusions are edited here too —
-    # otherwise editing the idea would wipe their screenshots: the shots folder
-    # is rewritten from whatever the form sent.
+    # For a closed trade the exit and the conclusions are edited here too,
+    # or editing the idea would wipe their screenshots: the shots folder is
+    # rewritten from whatever the form sent.
     closing = ""
     if editing and not t.is_open:
         closing = f"""<input type="hidden" name="closed" value="1">
@@ -628,7 +628,7 @@ def trade_form(t=None, token=""):
           [shot_in_zone(t.id, s, "have_exit") for s in t.exit_images])}</div>
 <div class="card"><h2>Conclusions</h2>
 <textarea name="conclusions">{esc(conclusions_text(t.conclusions))}</textarea>
-{dropzone("concl", "screenshots for conclusions — Ctrl+V here",
+{dropzone("concl", "screenshots for conclusions, Ctrl+V here",
           [shot_in_zone(t.id, s, "have_concl")
            for s in conclusion_images(t.conclusions)])}</div>"""
     return f"""<form method="post" action="{action}">
@@ -647,7 +647,7 @@ def trade_form(t=None, token=""):
 {select("style", NEW_STYLES if not editing else sorted({*NEW_STYLES, t.style}),
         t.style if editing else "")}</div>
 <div class="field"><label>entry TF</label>
-{select("entry_tf", TIMEFRAMES, t.entry_tf if editing else "", empty="—")}</div>
+{select("entry_tf", TIMEFRAMES, t.entry_tf if editing else "", empty="-")}</div>
 <div class="field"><label>risk, %</label>
 <input type="number" name="risk" step="0.05" min="0.05" style="width:90px"
  value="{t.risk if editing else 1}"></div>
@@ -686,13 +686,13 @@ def close_form(t, token):
 <input type="date" name="exit" value="{(t.closed or datetime.now()):%Y-%m-%d}"
  onclick="this.showPicker && this.showPicker()"></div>
 </div>
-<p class="caption">Risk was {t.risk:g}% = {H.money(journal().computed[t.id].risk_money)} $ —
+<p class="caption">Risk was {t.risk:g}% = {H.money(journal().computed[t.id].risk_money)} $.
 R is calculated automatically.</p></div>
 <div class="card"><h2>Exit moment</h2>
 {dropzone("exit", "click here and press Ctrl+V", exit_shots)}</div>
 <div class="card"><h2>Conclusions</h2>
 <textarea name="conclusions">{esc(conclusions_text(t.conclusions))}</textarea>
-{dropzone("concl", "screenshots for conclusions — Ctrl+V here", concl_shots)}</div>
+{dropzone("concl", "screenshots for conclusions, Ctrl+V here", concl_shots)}</div>
 <div class="actions"><button class="btn primary">Close trade</button>
 <a class="btn" href="/trade/{U(t.id)}">Cancel</a></div>
 </form>
@@ -744,7 +744,7 @@ def zone_sources(data, zone, t, token):
 
 
 def apply_shots(t, zones):
-    """Rewrites the shots folder whole — no leftovers from editing stay behind."""
+    """Rewrites the shots folder whole, so no leftovers from editing stay behind."""
     folder = store.shots_dir(ROOT, t.id)
     fresh = folder + ".new"
     shutil.rmtree(fresh, ignore_errors=True)
@@ -772,7 +772,7 @@ DRAFT_LIFETIME = 24 * 3600
 
 
 def sweep_drafts(lifetime=DRAFT_LIFETIME):
-    """An abandoned form keeps its pasted screenshots forever — sweep them.
+    """An abandoned form keeps its pasted screenshots forever, so sweep them.
 
     Called when a new form is handed out: the drafts folder is small, and
     walking it on every form is cheaper than a timer of its own."""
@@ -930,7 +930,7 @@ def close_trade(t, data):
 
 # --- daily card ------------------------------------------------------------
 # The paper Daily Report Card carried over as it is: the same fields in the same
-# order. One file per day in journal/cards — next to the trades, under git.
+# order. One file per day in journal/cards, next to the trades, under git.
 
 GRADES = ["A", "B", "C", "D", "F"]
 # how tall a section field is, as on paper: the focus needs a line, the review does not
@@ -945,7 +945,7 @@ def day_from_url(text):
 
 
 def day_pnl(j, day):
-    """What the day gave by closed trades — offered in a new card."""
+    """What the day gave by closed trades, offered in a new card."""
     return sum(t.pnl or 0.0 for t in j.trades
                if not t.is_open and t.closed and t.closed.date() == day.date())
 
@@ -961,10 +961,10 @@ def cards_page():
         return H.page("Cards", body, "cards", right)
     rows = "".join(
         f'<tr><td><a href="/card/{U(k.id)}">{k.day:%d.%m.%Y}</a></td>'
-        f'<td>{esc(k.grade) or "—"}</td>'
+        f'<td>{esc(k.grade) or "-"}</td>'
         f'<td class="num {sum_class(k.pnl or 0)}">'
-        f'{H.money(k.pnl, signed=True) if k.pnl is not None else "—"}</td>'
-        f'<td>{esc(k.quality) or "—"}</td>'
+        f'{H.money(k.pnl, signed=True) if k.pnl is not None else "-"}</td>'
+        f'<td>{esc(k.quality) or "-"}</td>'
         f'<td class="muted">{esc(first_line(k.overview or k.focus))}</td></tr>'
         for k in cards)
     body = (f'<div class="card"><h2>Daily report cards</h2>'
@@ -1014,7 +1014,7 @@ def card_page(day):
  placeholder="B" style="width:150px"></div>
 </div>
 <p class="caption">P&amp;L for the day by closed trades:
-{H.money(day_pnl(j, day), signed=True)} $ — the field is yours to override.</p>
+{H.money(day_pnl(j, day), signed=True)} $. The field is yours to override.</p>
 </div>
 <div class="card">{sections}</div>
 <div class="actions"><button class="btn primary">Save card</button>
@@ -1035,7 +1035,7 @@ def save_card(data):
     if old is not None:
         k.extra = old.extra
     store.save_card(ROOT, k)
-    # the date was changed in the form — that is a rename, not a second card
+    # the date was changed in the form, which is a rename, not a second card
     if previous and previous != k.id:
         store.delete_card(ROOT, day_from_url(previous))
     return k
@@ -1045,7 +1045,7 @@ def save_card(data):
 
 def md_to_html(text):
     """A tiny renderer: we generate the reports ourselves, their markup is simple."""
-    parts, in_table = [], False
+    parts, in_table, section = [], False, ""
     for line in text.split("\n"):
         s = line.strip()
         if s.startswith("|"):
@@ -1055,15 +1055,19 @@ def md_to_html(text):
             if not in_table:
                 parts.append("<table><tbody>")
                 in_table = True
+            # under "By pair" the first column holds symbols, so they get their
+            # icons here, the same as everywhere else
+            show = H.pair if section == "By pair" else esc
             parts.append("<tr>" + "".join(
-                f'<td class="{"num" if i else ""}">{esc(c)}</td>'
+                f'<td class="{"num" if i else ""}">{(esc if i else show)(c)}</td>'
                 for i, c in enumerate(cells)) + "</tr>")
             continue
         if in_table:
             parts.append("</tbody></table>")
             in_table = False
         if s.startswith("### "):
-            parts.append(f"<h3>{esc(s[4:])}</h3>")
+            section = s[4:]
+            parts.append(f"<h3>{esc(section)}</h3>")
         elif s.startswith("## "):
             parts.append(f"<h2>{esc(s[3:])}</h2>")
         elif s.startswith("# "):
@@ -1086,10 +1090,10 @@ def reports_page():
     ) or '<tr><td class="muted">none yet</td><td></td></tr>'
     form = f"""<form method="post" action="/report/build" class="filters">
 <div><label>month</label>
-{select("period_month", list(reversed(months)), "", empty="—")}</div>
+{select("period_month", list(reversed(months)), "", empty="-")}</div>
 <div><button class="btn primary" name="what" value="month">Build month</button></div>
 <div><label>quarter</label>
-{select("period_quarter", list(reversed(quarters)), "", empty="—")}</div>
+{select("period_quarter", list(reversed(quarters)), "", empty="-")}</div>
 <div><button class="btn" name="what" value="quarter">Build quarter</button></div>
 </form>"""
     body = (f'<div class="card"><h2>Build a report</h2>{form}'
@@ -1141,8 +1145,8 @@ def accounts_page(message=""):
             f'<input type="hidden" name="id" value="{esc(a)}">'
             f'<button class="btn danger">Delete</button></form>'
             if used == 0 else
-            f'<span class="caption">has {trades} trades / {adjustments} adjustments — '
-            f'archive instead</span>')
+            f'<span class="caption">has {trades} trades / {adjustments} '
+            f'adjustments, archive instead</span>')
         rows.append(
             f'<tr><td>{esc(account.name or a)}<div class="caption">{esc(a)}</div></td>'
             f'<td class="num">{H.money(account.start_balance)} $</td>'
@@ -1158,13 +1162,13 @@ def accounts_page(message=""):
     # A pair that comes from trades has no button: the suggestion list does not
     # hold it anyway, and "remove" would look like an action that changes nothing.
     pair_rows = "".join(
-        f'<tr><td>{esc(p)}</td>'
+        f'<tr><td>{H.pair(p)}</td>'
         f'<td class="caption">{"used in trades" if p in from_trades else "manual"}</td>'
         f'<td>' + (
             f'<form method="post" action="/pair/delete" style="display:inline">'
             f'<input type="hidden" name="pair" value="{esc(p)}">'
             f'<button class="btn">Remove</button></form>'
-            if p not in from_trades else '<span class="caption">—</span>')
+            if p not in from_trades else '<span class="caption">-</span>')
         + '</td></tr>'
         for p in sorted(set(pairs) | from_trades))
 
@@ -1174,7 +1178,7 @@ def accounts_page(message=""):
 <table><thead><tr><th>account</th><th class="num">start</th><th class="num">current</th>
 <th class="num">trades</th><th>status</th><th></th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table>
-<p class="caption">An account with trades cannot be deleted — archive it instead.
+<p class="caption">An account with trades cannot be deleted, archive it instead.
 Archived accounts stay in history and statistics but are not offered when opening
 a trade.</p></div>
 
@@ -1200,7 +1204,7 @@ a trade.</p></div>
 </form>
 <table><thead><tr><th>pair</th><th>source</th><th></th></tr></thead>
 <tbody>{pair_rows}</tbody></table>
-<p class="caption">Removing a pair only takes it out of the suggestion list —
+<p class="caption">Removing a pair only takes it out of the suggestion list;
 trades already recorded with it are not touched.</p></div>"""
     return H.page("Accounts", body, "accounts")
 
@@ -1239,7 +1243,8 @@ def delete_account(data):
     used = (sum(1 for t in j.trades if t.account == account_id)
             + sum(1 for c in j.adjustments if c.account == account_id))
     if used:
-        raise RecordError(f"account {account_id} has {used} records — archive it instead")
+        raise RecordError(f"account {account_id} has {used} records, "
+                          f"archive it instead")
     store.delete_account(ROOT, account_id)
     drop_cache()
     return f"Account {account_id} deleted."

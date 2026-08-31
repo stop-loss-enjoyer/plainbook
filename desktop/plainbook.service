@@ -1,12 +1,12 @@
 [Unit]
-Description=Plainbook — a local trading journal (127.0.0.1:8778)
+Description=Plainbook, a local trading journal (127.0.0.1:8778)
 After=default.target
 
 [Service]
 Type=simple
 WorkingDirectory=%h/plainbook
 # Where the records live. Leave it out and the journal keeps them next to the
-# program, in ./journal — handy for trying it out, worse once the code is under
+# program, in ./journal. Handy for trying it out, worse once the code is under
 # git and shared: then the data belongs in a folder of its own.
 Environment=PLAINBOOK_ROOT=%h/plainbook-data
 ExecStart=/usr/bin/python3 -m plainbook.server

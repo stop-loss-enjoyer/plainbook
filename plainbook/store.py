@@ -58,7 +58,7 @@ def _date_to_text(dt, with_time=False):
 def _text(v):
     """A header value as a string.
 
-    An empty key (`pnl $:` with nothing after it) parses into an empty LIST —
+    An empty key (`pnl $:` with nothing after it) parses into an empty LIST,
     that is how lists are written in a header. str() would turn it into "[]",
     which would show up in the interface and break number parsing."""
     if v is None or isinstance(v, (list, tuple)):
@@ -74,7 +74,7 @@ def _number(s):
 
 
 def _number_to_text(x):
-    """Whole numbers are written without a .0 tail — the file reads better."""
+    """Whole numbers are written without a .0 tail, so the file reads better."""
     if x is None:
         return ""
     return str(int(x)) if float(x) == int(x) else repr(round(float(x), 4))
@@ -325,7 +325,7 @@ def make_layout(root):
 
 
 def safe_dir_name(name):
-    """A trade id becomes a directory name — no path separators, no climbing
+    """A trade id becomes a directory name: no path separators, no climbing
     up, no hidden names. Everything that arrives from a URL is checked."""
     return bool(name) and not name.startswith(".") and \
         "/" not in name and "\\" not in name and "\0" not in name
@@ -423,7 +423,7 @@ def all_cards(root):
 
 
 def delete_card(root, day):
-    """The card goes to the trash — like a trade, there is nothing to shred."""
+    """The card goes to the trash; like a trade, there is nothing to shred."""
     path = card_path(root, day)
     if not os.path.isfile(path):
         return None

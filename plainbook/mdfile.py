@@ -3,7 +3,7 @@
 """
 Reading and writing a markdown file with a front matter header.
 
-The format is deliberately simple — a subset of YAML — so the project needs no
+The format is deliberately simple, a subset of YAML, so the project needs no
 dependencies and the files stay readable by eye:
 
     ---

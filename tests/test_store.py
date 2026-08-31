@@ -35,7 +35,7 @@ def sample_trade(**kw):
             IdeaBlock(tf="M15", text="Entry on confirmation.", images=[]),
         ],
         exit_images=["shots/exit-01.png"],
-        conclusions="Held to target. Did not move the stop — right call.",
+        conclusions="Held to target. Did not move the stop, right call.",
     )
     for k, v in kw.items():
         setattr(t, k, v)
@@ -213,7 +213,7 @@ class Layout(unittest.TestCase):
             for name in store.JOURNAL_DIRS:
                 path = os.path.join(root, store.JOURNAL, name)
                 self.assertTrue(os.path.isdir(path), name)
-                # git does not keep an empty folder — the layout must survive a clone
+                # git does not keep an empty folder, so the layout must survive a clone
                 self.assertTrue(os.path.isfile(os.path.join(path, ".gitkeep")))
             self.assertEqual(store.make_layout(root), [])   # a second call is quiet
 

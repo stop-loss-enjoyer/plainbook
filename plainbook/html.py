@@ -10,6 +10,8 @@ been checked for colour blindness on a dark surface.
 import html as _html
 import json
 
+from . import flags
+
 # --- palette ---------------------------------------------------------------
 GROUND = "#0a0a0b"         # page background
 SURFACE = "#121214"        # cards and tables
@@ -82,7 +84,7 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
  background:{RAISED};border:1px solid {AXIS};border-radius:5px;padding:13px 15px;
  box-shadow:0 10px 28px rgba(0,0,0,.5)}}
 
-/* period switch — segments inside one frame */
+/* period switch: segments inside one frame */
 .switch{{display:inline-flex;border:1px solid {AXIS};border-radius:4px;
  overflow:hidden}}
 .switch a{{padding:4px 12px;font-size:12px;color:{DIM};
@@ -126,7 +128,7 @@ th{{text-align:left;color:{DIM};font-weight:500;font-size:10px;
  background:{SURFACE};border-bottom:1px solid {AXIS};
  position:sticky;top:49px;z-index:2}}
 td{{padding:6px 10px;border-bottom:1px solid {GRID}}}
-/* there are many links in the table — they are painted as text, and the accent
+/* there are many links in the table, so they are painted as text and the accent
    is kept for hovering */
 td a{{color:{INK}}}
 td a:hover{{color:{ACCENT}}}
@@ -194,6 +196,11 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .caption{{color:{DIM};font-size:11px}}
 .caption a{{color:{INK2}}}
 
+/* trading pairs: two round flags before the name, as a terminal draws them */
+.sprite{{position:absolute;width:0;height:0;overflow:hidden}}
+.pair{{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}}
+.pair .pi{{flex:none;display:block}}
+
 /* charts */
 .legend{{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 0;font-size:11px;
  color:{INK2}}}
@@ -206,13 +213,30 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 """
 
 
+class Safe(str):
+    """Markup that is already built and must not be escaped again.
+
+    It exists so that a value carrying an icon can travel through the same
+    table-building code as a plain string."""
+
+
 def esc(s):
+    if isinstance(s, Safe):
+        return s
     return _html.escape("" if s is None else str(s), quote=True)
+
+
+def pair(name):
+    """A trading pair with its coins: the icon plus the name."""
+    icon = flags.icon(name)
+    if not icon:
+        return Safe(f'<span class="pair">{esc(name)}</span>')
+    return Safe(f'<span class="pair">{icon}{esc(name)}</span>')
 
 
 def money(x, signed=False):
     if x is None:
-        return "—"
+        return "-"
     text = f"{x:+,.0f}" if signed else f"{x:,.0f}"
     return text.replace(",", " ")
 
@@ -226,8 +250,9 @@ def page(title, body, tab="journal", header_right=""):
         for code, href, name in links)
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>{"Plainbook" if title == "Journal"
-          else "Plainbook — " + esc(title)}</title><style>{CSS}</style>
+          else "Plainbook: " + esc(title)}</title><style>{CSS}</style>
 <script>{HOVER}{PAGE_SCRIPT}</script></head><body>
+{flags.SPRITE}
 <div class="wrap">
 <header><span class="logo">Plainbook</span><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
@@ -238,7 +263,7 @@ def page(title, body, tab="journal", header_right=""):
 
 
 # Small things shared by every page. The script sits in the head and hooks
-# listeners onto document — before the markup, but document is already there.
+# listeners onto document, before the markup, but document is already there.
 PAGE_SCRIPT = """
 function close_popovers(except){
   document.querySelectorAll('details.filters-box[open]').forEach(box => {
@@ -288,7 +313,7 @@ def equity_svg(series, width=980, height=260, cid="equity"):
                      f'y2="{y:.1f}" stroke="{GRID}" stroke-width="1"/>')
         parts.append(f'<text x="{pad[0]-6}" y="{y+3:.1f}" fill="{DIM}" '
                      f'font-size="10" text-anchor="end">{money(v)}</text>')
-    # over a short stretch the month and the year would repeat — show days there
+    # over a short stretch the month and the year would repeat, so show days
     fmt = "%d.%m" if (x1 - x0).days < 150 else "%m.%Y"
     for i in range(4):
         d = x0 + (x1 - x0) * (i / 3)
@@ -331,7 +356,7 @@ function hover_chart(cid){
   const ray = document.getElementById(cid + '-ray');
   const dots = document.getElementById(cid + '-dots');
   const catcher = document.getElementById(cid + '-catcher');
-  // the tip lives at the end of body — look it up while hovering, not at build
+  // the tip lives at the end of body, so look it up while hovering, not at build
   const tip = () => document.getElementById('tip');
   const NS = 'http://www.w3.org/2000/svg';
   catcher.addEventListener('mousemove', e => {
@@ -343,7 +368,7 @@ function hover_chart(cid){
     for (const s of series) {
       // An account is shown only while the cursor is inside its own stretch of
       // time: before its first trade and after its last one it is not on the
-      // chart. Cutting by distance will not do — with sparse points the gaps
+      // chart. Cutting by distance will not do: with sparse points the gaps
       // are large.
       const first = s.points[0], last = s.points[s.points.length - 1];
       if (!first || x < first[0] - 6 || x > last[0] + 6) continue;
@@ -383,7 +408,7 @@ function hover_chart(cid){
 def histogram_svg(buckets, width=980, height=220):
     """R distribution. buckets: [(left, right, count)].
 
-    Under every bar stands its R value with a sign — otherwise it is not clear
+    Under every bar stands its R value with a sign, or it is not clear
     which result the bar describes.
     """
     if not buckets:

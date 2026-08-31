@@ -3,17 +3,17 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Trading journal — a local server on :8778 (unit plainbook.service).
+// Trading journal: a local server on :8778 (unit plainbook.service).
 // A click of any button opens or hides the window with the same script the
 // hotkey uses, so the two never drift apart.
 //
 // The button carries the number of OPEN positions: that is the only thing
-// wanting attention right now. Zero positions — just the icon, no number.
+// wanting attention right now. Zero positions means just the icon, no number.
 //
 // The server state is told by the SHAPE of the glyph rather than by colour:
 // in monochrome themes an urgent colour is indistinguishable from the normal one.
-//   ok   a book         — the server answers
-//   down a broken link  — the server does not
+//   ok   a book         the server answers
+//   down a broken link  the server does not
 // The glyphs are written as escapes: PUA characters are invisible in an
 // editor and used to get lost while editing.
 //
@@ -97,7 +97,7 @@ BarWidget {
 
   // The open-position counter: a filled badge in the corner of the icon. The
   // fill is needed because a thin digit over a dark bar read badly, and the
-  // background colour differs between themes — so it is taken from the bar.
+  // background colour differs between themes, so it is taken from the bar.
   Rectangle {
     id: badge
     visible: root.up && root.openCount > 0

@@ -90,7 +90,8 @@ def build(root, journal, period, conclusions=None):
         after = balance_at(journal, account, end)
         lines.append(f"| {account} | {before:,.0f} | {after:,.0f} | {after-before:+,.0f} |"
                      .replace(",", " "))
-    lines += ["", "## Conclusions", "", text or "_(empty — write it in the browser)_"]
+    lines += ["", "## Conclusions", "",
+              text or "_(empty, write it in the browser)_"]
 
     head = {"period": period, "kind": "quarter" if "Q" in period else "month",
             "updated": datetime.now().strftime("%Y-%m-%d %H:%M")}

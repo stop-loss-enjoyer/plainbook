@@ -26,7 +26,7 @@ class Balances(unittest.TestCase):
     def test_balance_grows_by_closed_pnl(self):
         j = Journal(self.accounts, [
             trade("t1", (2025, 6, 25), pnl=1000, result="Win", closed=(2025, 6, 26)),
-            trade("t2", (2025, 7, 1)),                     # open — not in the balance
+            trade("t2", (2025, 7, 1)),                     # open, not in the balance
         ], [])
         self.assertEqual(j.balance("bybit"), 11000)
 

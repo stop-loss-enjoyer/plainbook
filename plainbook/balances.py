@@ -5,7 +5,7 @@ Dynamic balances and R.
 
 Account balance = start balance + sum of PnL of closed trades + adjustments.
 Risk in dollars and R are measured against the balance AT THE MOMENT OF ENTRY,
-not against a fixed number — otherwise 1% of risk would always look like the
+not against a fixed number, or 1% of risk would always look like the
 same amount of money no matter how the account has grown.
 
 Order of events when replaying the history:

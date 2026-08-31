@@ -1,6 +1,6 @@
 # Plainbook
 
-**Read [AGENTS.md](AGENTS.md) first** — it is the working guide for this
+**Read [AGENTS.md](AGENTS.md) first.** It is the working guide for this
 repository: whose data this is, how to run and verify a change, the map of the
 code, the invariants that must not be broken, and the traps that have already
 bitten. This file only adds what is specific to talking with the owner.

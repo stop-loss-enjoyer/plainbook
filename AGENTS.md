@@ -1,6 +1,6 @@
 # Agent guide
 
-This project is meant to be kept by a coding agent. Not tolerated by one —
+This project is meant to be kept by a coding agent. Not tolerated by one, but
 built for it: no dependencies to resolve, no build step to wait for, a test
 suite that finishes in under a second, and every rule that matters written down
 here instead of living in someone's head.
@@ -23,7 +23,7 @@ records.
   quote a trade only when the owner asked about that trade.
 - **Never commit records.** `python3 tools/check_public.py` refuses a push that
   would leak them, and it runs as a pre-push hook and in CI. Do not work around
-  it — if it fires, it is right and you are wrong.
+  it. If it fires, it is right and you are wrong.
 - **Never delete outright.** Removing a trade or a card means moving it to
   `.trash`. If you delete something yourself, do the same.
 - **Never rewrite history to fix a number.** A balance that disagrees with the
@@ -65,16 +65,17 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/stats.py` | summaries, the equity curve, the R distribution |
 | `plainbook/reports.py` | monthly and quarterly reports |
 | `plainbook/html.py` | the palette, the CSS, the page shell, the SVG charts |
-| `plainbook/server.py` | routes, pages, forms — everything HTTP |
+| `plainbook/flags.py` | the round flag icons of a trading symbol, and what a symbol is taken apart into |
+| `plainbook/server.py` | routes, pages, forms: everything HTTP |
 | `tools/check_public.py` | the guard that keeps records out of the repository |
 
-The dependency direction is one way: `server → html, stats, reports, balances,
-store → model → mdfile`. Nothing points back up. If you find yourself importing
-`server` from anywhere, the design has gone wrong.
+The dependency direction is one way: `server → html → flags`, `server → stats,
+reports, balances, store → model → mdfile`. Nothing points back up. If you find
+yourself importing `server` from anywhere, the design has gone wrong.
 
 Routes live in `Handler.do_GET` and `Handler.do_POST` at the bottom of
-`server.py`, and they are a flat list of `if` statements on purpose — the whole
-routing table fits on one screen and needs no framework to read.
+`server.py`, and they are a flat list of `if` statements on purpose, so that the
+whole routing table fits on one screen and needs no framework to read.
 
 ## 4. Invariants
 
@@ -89,7 +90,7 @@ data. Each one is followed by what it prevents.
    *Prevents:* screenshots vanishing off the disk when an unrelated field is
    edited. This has already happened once, to the exit shots.
 3. **A header key with no value parses into an empty list, not an empty
-   string** — that is how lists are written in the format. Read header strings
+   string**, which is how lists are written in the format. Read header strings
    through `store._text`, and never write an empty value into a header.
    *Prevents:* `float('[]')` killing the page, and `"[]"` showing up in the
    interface.
@@ -114,7 +115,7 @@ data. Each one is followed by what it prevents.
 can be wrong. `store.py`: write it in `trade_to_text`, read it in
 `text_to_trade`. `server.py`: the input in `trade_form`, the read in
 `apply_fields`, a row in `trade_page`. Then a round-trip test in
-`tests/test_store.py`. Old files without the key must still load — that is what
+`tests/test_store.py`. Old files without the key must still load, which is what
 `extra` and the `.get` defaults are for.
 
 **Add a page.** A function returning `H.page(title, body, tab, header_right)`,
@@ -122,18 +123,21 @@ one `if` in `do_GET`, and a tab in the `links` list in `html.page` if it belongs
 in the navigation. Anything user-supplied goes through `esc()`.
 
 **Change the look.** Everything visual is in `html.py`: the palette constants at
-the top, then one `CSS` string. Class names are English and short (`card`,
-`tile`, `dropzone`, `shot`, `num`). The theme is deliberately flat — no
-gradients, no shadows except the one on the filter popover, no animation.
+the top, then one `CSS` string. The one exception is `flags.py`, which draws the
+coins of a trading symbol; `html.pair()` is what a page calls, and anything that
+prints a pair should call it instead of `esc()`. Class names are English and
+short (`card`, `tile`, `dropzone`, `shot`, `num`). The theme is deliberately
+flat: no gradients, no shadows except the one on the filter popover, no
+animation.
 
 **Add a statistic.** `stats.py` computes, `server.py` displays. Keep the
 computation free of HTML and the display free of arithmetic; that split is why
 the numbers can be tested at all.
 
 **Change the record format.** Write a migration script in `tools/` and run it on
-a *copy* of the journal first. Then compare every computed figure — trade count,
-balances per account, Σ R, Σ PnL, screenshot counts, the length of every text
-field — before and after. They must match exactly, or the migration is wrong.
+a *copy* of the journal first. Then compare every computed figure before and
+after: trade count, balances per account, Σ R, Σ PnL, screenshot counts, the
+length of every text field. They must match exactly, or the migration is wrong.
 Only then touch the real journal, and say so in `CHANGELOG.md`. Make the script
 idempotent: running it twice must be a no-op, because it will be run twice.
 
@@ -141,8 +145,8 @@ idempotent: running it twice must be a no-op, because it will be run twice.
 
 In this order, every time:
 
-1. `python3 -m unittest discover -s tests` — all green.
-2. `python3 tools/check_public.py` — clean.
+1. `python3 -m unittest discover -s tests`, all green.
+2. `python3 tools/check_public.py`, clean.
 3. **Look at the page.** About half of this code is markup and one form script,
    and the tests go around the browser entirely. A headless screenshot is enough:
    `chromium --headless --screenshot=/tmp/page.png --window-size=1400,1000 http://localhost:8778/`
@@ -153,9 +157,13 @@ In this order, every time:
 
 ## 7. Conventions
 
-- **Commit messages say why**, not what — the diff already says what. A subject
-  line, a blank line, then the reasoning. **In English**: a commit message is
-  published text, sitting next to every file on the repository page.
+- **No long dashes.** Not in the documents, not in the comments, not in the
+  interface. A comma, a colon, a semicolon or a full stop carries the same
+  clause, and an empty value in the interface is a plain hyphen.
+  `check_public.py` fires on the character, so the rule cannot quietly lapse.
+- **Commit messages say why**, not what, because the diff already says what. A
+  subject line, a blank line, then the reasoning. **In English**: a commit
+  message is published text, sitting next to every file on the repository page.
 - **`CHANGELOG.md` gets a line** for anything a user would notice, phrased as
   what changed for them.
 - **`GUIDE.md` gets updated** when the interface changes. It is the owner's
@@ -176,7 +184,7 @@ and none of them was obvious from the code.
   need the value, not when the script parses.
 - **A form that hid a field deleted it.** See invariant 2.
 - **A window matched by title.** The desktop toggle looked for a window whose
-  title starts with the app name — which is also the title of a file manager
+  title starts with the app name, which is also the title of a file manager
   opened on the project folder. It raised the folder instead of the journal.
   *Lesson:* match windows by class.
 - **An empty header key.** See invariant 3.

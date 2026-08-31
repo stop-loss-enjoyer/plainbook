@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plainbook import store
 from plainbook.model import Account
 
-# a one-pixel PNG — enough to exercise the whole screenshot path
+# a one-pixel PNG, enough to exercise the whole screenshot path
 PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d494844520000000100000001080600000"
     "01f15c4890000000a49444154789c6360000002000100ffff0300000600"
@@ -273,7 +273,7 @@ class ServerCase(unittest.TestCase):
         self.assertIn("held to target", t.conclusions)
 
     def test_18_a_screenshot_leaves_with_its_own_field(self):
-        """The cross in the form only drops a hidden field — the server knows
+        """The cross in the form only drops a hidden field, and the server knows
         nothing about a delete, it rebuilds the folder from what arrived."""
         q = urllib.parse.quote(ServerCase.trade_id)
         _, html = self.get(f"/edit/{q}")
@@ -306,7 +306,7 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(len(store.all_trades(self.root)), before - 1)
         self.assertFalse(os.path.isdir(store.trade_dir(self.root, ServerCase.trade_id)))
         trash = os.path.join(self.root, store.TRASH)
-        # the record has not vanished — it sits in the trash under its own id
+        # the record has not vanished: it sits in the trash under its own id
         self.assertTrue(any(name.startswith(ServerCase.trade_id)
                             for name in os.listdir(trash)))
         with self.assertRaises(urllib.error.HTTPError) as e:

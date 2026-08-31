@@ -5,7 +5,7 @@ Journal records: trade, account, adjustment, daily card.
 
 Storage is one markdown file per record (see mdfile.py). Header keys are the
 same words the interface shows, so a file reads like the screen it came from.
-Anything that can be computed (balance, R) is NOT stored — see balances.py.
+Anything that can be computed (balance, R) is NOT stored; see balances.py.
 """
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -23,7 +23,7 @@ PAIR_NOT_SET = "pair not set"
 
 
 class RecordError(ValueError):
-    """A record fails its check — a broken file or junk from a form."""
+    """A record fails its check: a broken file or junk from a form."""
 
 
 # --- trade -----------------------------------------------------------------

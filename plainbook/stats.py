@@ -3,7 +3,7 @@
 """
 Summary figures: WR, R and PnL across slices; the equity curve; R distribution.
 
-Only closed trades count — an open one has neither a result nor an R.
+Only closed trades count: an open one has neither a result nor an R.
 """
 from dataclasses import dataclass
 
@@ -28,7 +28,7 @@ class Summary:
 
         Break-even trades stay out of the denominator: a trade closed at zero
         was neither won nor lost, and diluting the hit rate with it would be
-        dishonest. What they do cost — commission, the opportunity spent — is
+        dishonest. What they do cost (commission, the opportunity spent) is
         fully visible in the sum and the average R, where BE counts like
         everything else."""
         return 100.0 * self.wins / self.decided if self.decided else 0.0
@@ -82,7 +82,7 @@ def r_distribution(journal, trades, step=0.5, limit=4.0):
 
 
 def equity(journal, account_id=None, trades=None):
-    """Points of (date, balance) — as in balances, but honouring the filter."""
+    """Points of (date, balance), as in balances, but honouring the filter."""
     if trades is None:
         return journal.equity(account_id)
     chosen = {t.id for t in trades}

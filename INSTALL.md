@@ -1,19 +1,19 @@
 # Install
 
 Written for an agent (Claude Code) setting the journal up on someone's machine.
-Talk to them in their own language; they are a trader, not a developer — show
+Talk to them in their own language; they are a trader, not a developer, so show
 the result, not the code. Installing by hand works the same way.
 
 ## What is needed
 
-- **Python 3.10+**, the standard library only — no pip packages to install.
+- **Python 3.10+**, the standard library only. No pip packages to install.
   - Linux/macOS: `python3 --version`. On macOS without Python, offer
     `xcode-select --install` or Homebrew.
   - Windows: `py --version`. If missing, the installer from python.org, ticking
     "Add python.exe to PATH".
-- **A browser** — any; a Chromium-based one (Chrome, Edge, Brave) understands
+- **A browser**, any of them. A Chromium-based one (Chrome, Edge, Brave) understands
   `--app=URL`, which makes the journal look like an application rather than a tab.
-- **git** — optional but well worth it: the journal is files, and git gives them
+- **git**, optional but well worth it: the journal is files, and git gives them
   a history and a guard against an accidental mangling.
 
 ## Common steps (every OS)
@@ -21,27 +21,27 @@ the result, not the code. Installing by hand works the same way.
 1. Put the `Plainbook` folder where they keep their projects (agree the
    path with them).
 2. Run the tests: `python3 -m unittest discover -s tests` (Windows:
-   `py -m unittest discover -s tests`). They all have to pass — that is the
+   `py -m unittest discover -s tests`). They all have to pass; that is the
    check that Python and the encodings are in order.
 3. **Decide where the records will live.** Two arrangements:
-   - *next to the program* — nothing to do, the journal writes into `./journal`;
-   - *in a folder of their own* — set `PLAINBOOK_ROOT` (see the unit below). Prefer
+   - *next to the program*: nothing to do, the journal writes into `./journal`;
+   - *in a folder of their own*: set `PLAINBOOK_ROOT` (see the unit below). Prefer
      this one if the program itself is going to be under git or shared: then the
      code and the private records never share a repository.
 
    The folders inside `journal/` are created by the server on start, so there is
    nothing to lay out by hand.
 4. If there is git: `git init && git add -A && git commit` in the **data**
-   folder — that is the one worth a history. Agree a rhythm with them (new
+   folder, the one worth a history. Agree a rhythm with them (new
    trades do not commit themselves).
 5. Start the server (see your OS below) and open http://localhost:8778.
-6. Create their account together: name and start balance — **the start balance
+6. Create their account together: name and start balance. **The start balance
    is the real balance of the account today**, then the computed balance is
    right from the first minute. Add their trading pairs.
 7. Check it together: create a test trade, close it, see that the balance and R
-   were worked out, then delete the test trade (it lands in `.trash` — show them
+   were worked out, then delete the test trade (it lands in `.trash`, show them
    that, deleting has to feel reversible). Show where the files live.
-8. Hand them [GUIDE.md](GUIDE.md) — the daily round is all in there. Do not
+8. Hand them [GUIDE.md](GUIDE.md); the daily round is all in there. Do not
    recite it: show it once on a live example and say where the text is.
 
 The default port is 8778; if it is taken, set another one through `PLAINBOOK_PORT` (and
@@ -51,7 +51,7 @@ use it everywhere below).
 
 Autostart is a user systemd unit. The sample is `desktop/plainbook.service`
 (`WorkingDirectory=%h/plainbook` and `Environment=PLAINBOOK_ROOT=%h/plainbook-data`
-— correct both to the real paths).
+so correct both to the real paths).
 
     cp desktop/plainbook.service ~/.config/systemd/user/
     systemctl --user enable --now plainbook
@@ -64,16 +64,16 @@ On top of the unit, if they want it:
 - **A window toggle**: `desktop/plainbook-toggle` → `~/.local/bin/` (+`chmod +x`).
   The script opens the journal as a web app; pressing again focuses or closes it.
 
-  It finds the window by its CLASS — for a Chromium web app that is
+  It finds the window by its CLASS. For a Chromium web app that is
   `<browser>-localhost__-Default`, which is why the address in the script is
   `localhost` and not `127.0.0.1`. With another browser or another way of
   launching, check the real class (`hyprctl clients -j | jq -r '.[].class'`
   with the journal open) and fix the `test("localhost__")` line.
   Do NOT look the window up by TITLE: "Plainbook" is also the title of a
   file manager window opened on the project folder and of a terminal sitting in
-  that directory — the toggle would raise those instead of the journal.
+  that directory, or the toggle would raise those instead of the journal.
 - **A hotkey**: in `~/.config/hypr/bindings.lua` a line like
-  `o.bind("SUPER + E", "Trading journal", "plainbook-toggle")` — agree the
+  `o.bind("SUPER + E", "Trading journal", "plainbook-toggle")`. Agree the
   combination with them, SUPER+E may be taken.
 - **A button in the top bar**: `desktop/trader.plainbook/` →
   `~/.config/omarchy/plugins/`, then add `{"id":"trader.plainbook"}` to
@@ -91,7 +91,7 @@ through `chromium --app=http://localhost:8778`).
 
 By hand: `py -m plainbook.server` from the project folder.
 
-Autostart without a console window — a shortcut in the startup folder:
+Autostart without a console window, through a shortcut in the startup folder:
 
 1. Win+R → `shell:startup`.
 2. Create a shortcut there with the target `pythonw -m plainbook.server` and "Start in"
@@ -138,14 +138,14 @@ An application shortcut: Chrome → "Save as application" on the journal page, o
    front page equals their real balance.
 3. After a reboot the server comes up by itself (if autostart was set up).
 4. With you watching, they opened and closed a test trade with a screenshot
-   pasted by Ctrl+V — all of it worked, and the files appeared under
+   pasted by Ctrl+V, that all of it worked, and that the files appeared under
    `journal/trades/`.
 5. With you watching, they filled a daily card (**+ Card**) and it opened again
    filled in after saving.
 
 Pasting a screenshot is the one place where browser script does the work: if
-something breaks, it usually breaks there. Check it by hand — the tests go
+something breaks, it usually breaks there. Check it by hand, because the tests go
 around the browser on that path.
 
-When you are done, read [CLAUDE.md](CLAUDE.md) — the rules for living with the
+When you are done, read [CLAUDE.md](CLAUDE.md), the rules for living with the
 journal afterwards.
