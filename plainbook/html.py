@@ -33,7 +33,7 @@ WARN = "#d9a441"
 # brighter as R grows, so the order of the buckets is visible in the colour
 # itself and not only in the legend. Checked against the card surface: every
 # step clears 3:1 contrast and stays colourful enough not to read as grey.
-LOSS_STEPS = ["#9c4741", "#c56158", "#ef8b81"]
+LOSS_STEPS = ["#9c4741", "#c56158", "#ef8b81", "#ffb7aa"]
 WIN_STEPS = ["#2a7d55", "#37996a", "#4ab882", "#66d29c", "#93e6bd"]
 
 MONO = ('ui-monospace,"JetBrains Mono","CaskaydiaMono Nerd Font",'

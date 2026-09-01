@@ -501,7 +501,10 @@ def r_rings(j, trades):
             f'<p class="caption">Each ring is one pile of trades cut by the size '
             f'of R: the further from zero, the brighter the slice. In the middle '
             f'of a ring stands the number of trades in it and their total R. '
-            f'Break-even trades are in neither ring; they ended at zero.</p>'
+            f'Break-even trades are in neither ring; they ended at zero. On the '
+            f'losses, -1 to -1.2 R is the stop as designed, since commission and '
+            f'swap are paid on top of it; a loss past -1.2 R was not the stop '
+            f'but too much size.</p>'
             f'</div>')
 
 

@@ -94,7 +94,15 @@ def drawdown_r(journal, trades):
 # The R buckets of the two rings. Coarse at the tails on purpose: a ring is
 # only readable up to about six slices, and the difference between +3R and +4R
 # matters less than the difference between a small win and a big one.
-LOSS_BUCKETS = [("-0.5…0", 0.5), ("-1.0…-0.5", 1.0), ("-1R and worse", None)]
+#
+# The losses are cut where a stop actually lands. A trade taken to the stop
+# comes back a little worse than -1R, because commission and swap are paid on
+# top of it, so -1 to -1.2 is one bucket: the stop, as designed. Anything past
+# -1.2 was not the stop but too much size, and it is kept apart to be seen.
+# Every bucket holds its lower edge and not its upper one, so exactly -1R is a
+# stop and not a loss that stayed short of it.
+LOSS_BUCKETS = [("-0.5…0", 0.5), ("-1…-0.5", 1.0), ("-1…-1.2", 1.2),
+                ("-1.2R and worse", None)]
 WIN_BUCKETS = [("0…+0.5", 0.5), ("+0.5…+1", 1.0), ("+1…+2", 2.0),
                ("+2…+3", 3.0), ("+3R and more", None)]
 

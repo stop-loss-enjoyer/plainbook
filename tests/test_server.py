@@ -460,8 +460,8 @@ class ServerCase(unittest.TestCase):
         self.assertIn("Losses", rings)
         self.assertIn("Wins", rings)
         self.assertIn("closed", rings)
-        # the loss is about one R, the win about three: each in its own bucket
-        self.assertIn("-1R and worse", rings)
+        # the loss is the stop itself, the win about three R: each in its bucket
+        self.assertIn("-1…-1.2", rings)
         self.assertIn("+3R and more", rings)
 
     def test_31_the_pair_field_offers_pairs_with_their_flags(self):

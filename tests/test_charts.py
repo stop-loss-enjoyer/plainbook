@@ -100,7 +100,8 @@ class RSplitCase(unittest.TestCase):
         losses, wins, be = stats.r_split(j, j.trades)
         self.assertEqual(be, 1)
         self.assertEqual([(label, n) for label, n, _ in losses],
-                         [("-0.5…0", 1), ("-1.0…-0.5", 0), ("-1R and worse", 1)])
+                         [("-0.5…0", 1), ("-1…-0.5", 0), ("-1…-1.2", 1),
+                          ("-1.2R and worse", 0)])
         self.assertEqual([(label, n) for label, n, _ in wins],
                          [("0…+0.5", 1), ("+0.5…+1", 0), ("+1…+2", 0),
                           ("+2…+3", 0), ("+3R and more", 1)])
@@ -109,6 +110,24 @@ class RSplitCase(unittest.TestCase):
         self.assertEqual(sum(n for _, n, _ in losses), s.losses)
         self.assertEqual(sum(n for _, n, _ in wins), s.wins)
         self.assertEqual(be, s.be)
+
+    def test_the_stop_is_told_apart_from_too_much_size(self):
+        """A stop costs a little more than -1R; past -1.2R it was not the stop.
+
+        Commission and swap are paid on top of the stop, so the bucket that
+        means "taken to the stop" runs to -1.2R. Anything worse says the
+        position was too big, which is the whole reason to keep it apart."""
+        j = Journal(self.accounts, [
+            self.trade("t1", "Lose", -100),      # -1.00 R exactly: the stop
+            self.trade("t2", "Lose", -115),      # -1.15 R: the stop and its fees
+            self.trade("t3", "Lose", -120),      # -1.20 R: over the tolerance
+            self.trade("t4", "Lose", -250),      # -2.50 R: too much size
+            self.trade("t5", "Lose", -99),       # -0.99 R: never reached it
+        ], [])
+        losses, _, _ = stats.r_split(j, j.trades)
+        self.assertEqual([(label, n) for label, n, _ in losses],
+                         [("-0.5…0", 0), ("-1…-0.5", 1), ("-1…-1.2", 2),
+                          ("-1.2R and worse", 2)])
 
     def test_a_break_even_stays_out_of_both_rings(self):
         j = Journal(self.accounts, [self.trade("t1", "BE", 0)], [])

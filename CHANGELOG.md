@@ -54,6 +54,17 @@ reports that say more than the numbers of the period.
   in your list gets one as soon as it has trades, and **winrate overall** counts
   the styles the list holds.
 
+### Statistics
+
+- **The losses are cut where a stop actually lands.** The ring used to end with
+  "-1R and worse", which put the stop you designed and a position twice too big
+  in the same slice. A trade taken to the stop comes back a little worse than
+  -1R, because commission and swap are paid on top of it, so **-1…-1.2** is now
+  one bucket: the stop as it was meant to be. Everything past -1.2R stands
+  apart, and that slice is the answer to whether the risk was overrun. Exactly
+  -1R counts as the stop, not as a loss that stopped short of it. The reports
+  draw the same rings, so they are cut the same way.
+
 ### Reports
 
 - **Building a report moved to the Reports tab.** The header button is gone; the

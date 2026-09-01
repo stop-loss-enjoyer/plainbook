@@ -178,8 +178,17 @@ in it and their total R; beside it every slice is written out with its count,
 its share and its R. The further a bucket is from zero, the brighter the slice.
 Break-even trades are in neither ring, and their number is named above.
 
+**The losses are cut where a stop lands.** A trade taken to the stop comes back
+a little worse than -1R, because commission and swap are paid on top of it, so
+the bucket **-1…-1.2** means the stop as designed. Anything past -1.2R is a
+bucket of its own: that loss was not the stop but too much size, and it is the
+one number that says the risk was overrun. The two buckets above them are losses
+that never reached the stop: **-0.5…0** and **-1…-0.5**. Exactly -1R belongs to
+the stop, not to the bucket that stops short of it.
+
 Read together the two rings answer the question a trader actually asks: are the
-losses one size, and do the wins reach far enough to pay for them.
+losses one size, and do the wins reach far enough to pay for them. The rings in
+a monthly or quarterly report are cut the same way, on the trades of that period.
 
 ## Money in and out
 
