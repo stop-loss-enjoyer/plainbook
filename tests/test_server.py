@@ -371,6 +371,168 @@ class ServerCase(unittest.TestCase):
             self.get("/card/2026-13-99")
         self.assertEqual(e.exception.code, 404)
 
+    def test_25_money_goes_in_and_out_and_cashouts_are_counted(self):
+        self.post("/account/new", {"id": "money-acc", "name": "Money",
+                                   "start": "10000", "currency": "USD"})
+        self.post("/money/new", {"account": "money-acc", "kind": "deposit",
+                                 "amount": "2000", "day": "2026-08-20",
+                                 "comment": "top up"})
+        self.post("/money/new", {"account": "money-acc", "kind": "withdrawal",
+                                 "amount": "500", "day": "2026-08-25",
+                                 "comment": "payout"})
+        kept = {c.id: c for c in store.all_adjustments(self.root)}
+        deposit = kept["2026-08-20-deposit-money-acc"]
+        payout = kept["2026-08-25-withdrawal-money-acc"]
+        self.assertEqual(deposit.amount, 2000)
+        self.assertEqual(payout.amount, -500)           # the sign is the kind's
+        code, html = self.get("/accounts")
+        self.assertEqual(code, 200)
+        self.assertIn("11 500", html)                   # balance after both
+        self.assertIn("500", html)                      # cashed out
+        # a payout is not a loss: the tile shows what was earned, and says
+        # separately what was moved
+        _, home = self.get("/")
+        self.assertIn("cashed out", home)
+        self.assertIn("added", home)
+
+    def test_26_correcting_a_balance_writes_down_the_difference(self):
+        self.post("/money/correct", {"account": "money-acc", "balance": "11450",
+                                     "day": "2026-08-26", "comment": "swap"})
+        gap = {c.id: c for c in store.all_adjustments(self.root)}[
+            "2026-08-26-reconciliation-money-acc"]
+        self.assertEqual(gap.kind, "reconciliation")
+        self.assertEqual(gap.amount, -50)
+        _, where = self.post("/money/correct", {"account": "money-acc",
+                                                "balance": "11450"})
+        self.assertIn("nothing to correct", urllib.parse.unquote(where))
+
+    def test_27_a_money_record_is_deleted_into_the_trash(self):
+        self.post("/money/delete", {"id": "2026-08-26-reconciliation-money-acc"})
+        left = {c.id for c in store.all_adjustments(self.root)}
+        self.assertNotIn("2026-08-26-reconciliation-money-acc", left)
+        self.assertTrue(any("2026-08-26-reconciliation-money-acc" in name
+                            for name in os.listdir(os.path.join(self.root, ".trash"))))
+        _, where = self.post("/money/delete", {"id": "no-such-record"})
+        self.assertIn("no such record", urllib.parse.unquote(where))
+
+    def test_28_a_bad_money_form_is_refused(self):
+        _, where = self.post("/money/new", {"account": "nowhere", "kind": "deposit",
+                                            "amount": "10"})
+        self.assertIn("no such account", urllib.parse.unquote(where))
+        _, where = self.post("/money/new", {"account": "money-acc",
+                                            "kind": "reconciliation", "amount": "10"})
+        self.assertIn("bad kind", urllib.parse.unquote(where))
+        _, where = self.post("/money/new", {"account": "money-acc", "kind": "fee",
+                                            "amount": "0"})
+        self.assertIn("amount is zero", urllib.parse.unquote(where))
+
+    def test_29_statistics_leaves_archived_accounts_off_the_charts(self):
+        """An archived account is done with: nothing to watch on its curve.
+        Its trades still count in the figures underneath."""
+        code, html = self.get("/stats")
+        self.assertEqual(code, 200)
+        tabs = re.search(r'Equity by account.*?</p>', html, re.S).group(0)
+        self.assertIn("Bybit", tabs)
+        self.assertNotIn("Legacy", tabs)                 # archived
+        self.assertIn("Archived accounts are not drawn", html)
+        # picked by hand through the filter, it is shown again
+        _, html = self.get("/stats?account=legacy")
+        self.assertIn("Legacy", html)
+
+    def test_30_the_r_rings_split_wins_from_losses(self):
+        """A win and a loss land in their own ring, with their R in the middle."""
+        for result, pnl in (("Win", "300"), ("Lose", "-100")):
+            _, html = self.get("/new")
+            token = self.form_token(html)
+            _, where = self.post("/new", {
+                "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+                "direction": "long", "style": "swing", "entry_tf": "H4",
+                "risk": "1", "entry": "2026-08-20T10:00"})
+            tid = urllib.parse.unquote(where.rsplit("/", 1)[1])
+            _, html = self.get(f"/close/{urllib.parse.quote(tid)}")
+            self.post(f"/close/{urllib.parse.quote(tid)}", {
+                "token": self.form_token(html), "result": result, "pnl": pnl,
+                "exit": "2026-08-21", "conclusions": ""})
+        code, html = self.get("/stats")
+        self.assertEqual(code, 200)
+        rings = re.search(r'R distribution.*?</div></div>\s*<p class="caption">',
+                          html, re.S).group(0)
+        self.assertIn("Losses", rings)
+        self.assertIn("Wins", rings)
+        self.assertIn("closed", rings)
+        # the loss is about one R, the win about three: each in its own bucket
+        self.assertIn("-1R and worse", rings)
+        self.assertIn("+3R and more", rings)
+
+    def test_31_the_pair_field_offers_pairs_with_their_flags(self):
+        """The browser's own list cannot carry the flags, so the form has its
+        own. Typing a pair that is not in it still has to work."""
+        self.post("/pair/new", {"pair": "EURUSD"})
+        _, html = self.get("/new")
+        self.assertIn('class="picker"', html)
+        self.assertIn('data-value="EURUSD"', html)
+        self.assertIn('<use href="#fl-eu"', html)       # the flag itself
+        self.assertNotIn('<datalist', html)
+        # a pair nobody has heard of goes in by hand, as before
+        _, html = self.get("/new")
+        token = self.form_token(html)
+        _, where = self.post("/new", {
+            "token": token, "blocks": "1", "account": "bybit", "pair": "WHATEVER",
+            "direction": "long", "style": "swing", "entry_tf": "H4",
+            "risk": "1", "entry": "2026-08-19T10:00"})
+        tid = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        self.assertEqual(store.load_trade(self.root, tid).pair, "WHATEVER")
+
+    def test_32_money_and_corrections_are_folded_and_kept_apart(self):
+        self.post("/money/new", {"account": "bybit", "kind": "withdrawal",
+                                 "amount": "100", "day": "2026-08-18"})
+        self.post("/money/correct", {"account": "bybit", "balance": "12345",
+                                     "day": "2026-08-19", "comment": "broker"})
+        _, html = self.get("/accounts")
+        self.assertIn('<details class="fold"><summary>Money in and out', html)
+        self.assertIn('<details class="fold"><summary>Correct a balance', html)
+        money = html[html.index("Money in and out"):html.index("Correct a balance")]
+        corrections = html[html.index("Correct a balance"):]
+        # a correction belongs under corrections, not among the deposits
+        self.assertIn("withdrawal", money)
+        self.assertNotIn("reconciliation", money)
+        self.assertIn("reconciliation", corrections)
+        self.assertNotIn("withdrawal", corrections)
+
+    def test_33_a_report_row_leads_to_the_trades_behind_it(self):
+        """A pair or an account in a report opens the journal filtered to it,
+        over the months of that report."""
+        self.post("/report/build", {"what": "month", "period_month": "2026-08"})
+        _, html = self.get("/report/2026-08")
+        self.assertIn("/?pair=EURUSD&from=2026-08&to=2026-08", html)
+        self.assertIn("/?account=bybit&from=2026-08&to=2026-08", html)
+        self.assertIn("/?style=swing&from=2026-08&to=2026-08", html)
+        # the head of a table is not a link: "account" is not an account
+        self.assertNotIn("/?account=account", html)
+        # and the address really does narrow the journal
+        _, page = self.get("/?pair=EURUSD&from=2026-08&to=2026-08")
+        self.assertIn("EURUSD", page)
+        _, page = self.get("/?pair=EURUSD&from=2026-01&to=2026-01")
+        self.assertIn("Nothing matches the filter", page)
+
+    def test_34_the_conclusions_field_starts_empty(self):
+        """It used to open with a hint inside it that had to be deleted first."""
+        # a period nobody has written conclusions for yet
+        self.post("/report/build", {"what": "month", "period_month": "2026-07"})
+        _, html = self.get("/report/2026-07")
+        field = re.search(r'<textarea name="conclusions".*?>(.*?)</textarea>',
+                          html, re.S).group(1)
+        self.assertEqual(field, "")
+        self.assertIn("What you learned this period", html)   # the placeholder
+        # a report built with the old hint inside opens empty as well
+        file = os.path.join(self.root, "journal", "reports", "2026-07.md")
+        with open(file, encoding="utf-8") as f:
+            text = f.read()
+        with open(file, "w", encoding="utf-8") as f:
+            f.write(text.rstrip() + "\n\n_(empty, write it in the browser)_\n")
+        _, html = self.get("/report/2026-07")
+        self.assertNotIn("write it in the browser", html)
+
 
 if __name__ == "__main__":
     unittest.main()

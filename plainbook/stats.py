@@ -64,21 +64,46 @@ def by_field(journal, trades, key):
     return rows
 
 
-def r_distribution(journal, trades, step=0.5, limit=4.0):
-    """R histogram: [(left edge, right edge, count)]. Tails fold into the edges."""
-    buckets = {}
-    n = int(limit / step)
+# The R buckets of the two rings. Coarse at the tails on purpose: a ring is
+# only readable up to about six slices, and the difference between +3R and +4R
+# matters less than the difference between a small win and a big one.
+LOSS_BUCKETS = [("-0.5…0", 0.5), ("-1.0…-0.5", 1.0), ("-1R and worse", None)]
+WIN_BUCKETS = [("0…+0.5", 0.5), ("+0.5…+1", 1.0), ("+1…+2", 2.0),
+               ("+2…+3", 3.0), ("+3R and more", None)]
+
+
+def _bucket(buckets, size):
+    for i, (label, top) in enumerate(buckets):
+        if top is None or size < top:
+            return i, label
+    return len(buckets) - 1, buckets[-1][0]
+
+
+def r_split(journal, trades):
+    """Closed trades cut into two ordered piles: [(label, count, sum_r)] for
+    the losses and for the wins, then the break-evens.
+
+    The pile is chosen by the result, not by the sign of R, so these counts are
+    the same wins and losses the winrate is built from. Inside a pile the
+    bucket is chosen by the size of R."""
+    piles = {"Lose": [[label, 0, 0.0] for label, _ in LOSS_BUCKETS],
+             "Win": [[label, 0, 0.0] for label, _ in WIN_BUCKETS]}
+    be = 0
     for t in trades:
         if t.is_open:
             continue
         r = journal.r(t.id) or 0.0
-        i = int(r // step)
-        i = max(-n, min(n - 1, i))
-        buckets[i] = buckets.get(i, 0) + 1
-    if not buckets:
-        return []
-    low, high = min(buckets), max(buckets)
-    return [(i * step, (i + 1) * step, buckets.get(i, 0)) for i in range(low, high + 1)]
+        if t.result == "BE":
+            be += 1
+            continue
+        if t.result not in piles:
+            continue
+        buckets = LOSS_BUCKETS if t.result == "Lose" else WIN_BUCKETS
+        i, _ = _bucket(buckets, abs(r))
+        piles[t.result][i][1] += 1
+        piles[t.result][i][2] += r
+    return ([tuple(row) for row in piles["Lose"]],
+            [tuple(row) for row in piles["Win"]], be)
 
 
 def equity(journal, account_id=None, trades=None):

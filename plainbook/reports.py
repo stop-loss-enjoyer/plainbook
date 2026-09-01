@@ -9,7 +9,7 @@ owner and is NEVER overwritten.
 """
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import mdfile, stats, store
 
@@ -41,9 +41,22 @@ def parse_period(period):
     return start, end, f"Q{q} {year}"
 
 
+def period_months(period):
+    """'2026-Q3' -> ('2026-07', '2026-09'): the months the journal filters by."""
+    start, end, _ = parse_period(period)
+    last = end - timedelta(days=1)
+    return f"{start:%Y-%m}", f"{last:%Y-%m}"
+
+
 def trades_of_period(journal, period):
     start, end, _ = parse_period(period)
     return [t for t in journal.trades if start <= t.opened < end]
+
+
+# Reports built before this used to carry a stub under the heading, and the
+# form loaded it as text the owner had to delete before writing anything. It is
+# not written any more; this recognises it in the files that already have it.
+_STUB = re.compile(r"^_\(empty.*\)_$")
 
 
 def previous_conclusions(root, period):
@@ -53,7 +66,8 @@ def previous_conclusions(root, period):
     with open(file, encoding="utf-8") as f:
         _, body = mdfile.parse(f.read())
     m = re.search(r"^## Conclusions\s*$(.*)", body, re.M | re.S)
-    return m.group(1).strip() if m else ""
+    text = m.group(1).strip() if m else ""
+    return "" if _STUB.match(text) else text
 
 
 def build(root, journal, period, conclusions=None):
@@ -90,8 +104,9 @@ def build(root, journal, period, conclusions=None):
         after = balance_at(journal, account, end)
         lines.append(f"| {account} | {before:,.0f} | {after:,.0f} | {after-before:+,.0f} |"
                      .replace(",", " "))
-    lines += ["", "## Conclusions", "",
-              text or "_(empty, write it in the browser)_"]
+    # An empty section stays empty: whatever stands here is loaded into the
+    # form as the owner's own text, so a hint would have to be deleted first.
+    lines += ["", "## Conclusions", "", text]
 
     head = {"period": period, "kind": "quarter" if "Q" in period else "month",
             "updated": datetime.now().strftime("%Y-%m-%d %H:%M")}

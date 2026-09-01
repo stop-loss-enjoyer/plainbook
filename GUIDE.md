@@ -23,7 +23,9 @@ who was right. In hindsight an idea always looks tidier than it was.
 **+ Trade** in the header. The fields:
 
 - **account**: archived accounts are not offered.
-- **pair**: pick one from the suggestions or type a new one.
+- **pair**: the list under the field carries the same flags the journal does,
+  and it opens and shuts on a click on the field. Typing filters it; a pair
+  that is not in the list is simply typed in and saved with the trade.
 - **direction**, **style**, **entry TF**.
 - **risk, %**: the risk as a percent of the current computed balance of the
   account. What that is in money shows on the trade page once it is saved.
@@ -72,7 +74,9 @@ that one. The **Cards** tab lists them all.
 ## The front page
 
 - **Account tiles**: the computed balance, the start balance and the difference
-  in colour. Archived accounts do not appear here.
+  in colour. The difference is what the account earned, so money you put in or
+  took out is named separately and is never mistaken for a win or a loss.
+  Archived accounts do not appear here.
 - **Open positions**: what is in the market right now, with the risk in money
   and a Close button.
 - **Summary tiles**: the current period, the size of the selection, the
@@ -109,6 +113,66 @@ wins in green, losses in red, break-evens in yellow.
 account: a dollar on a prop account and a dollar on your own are different kinds
 of money, which is why the front page carries no grand total in dollars.
 
+## The Statistics tab
+
+**Equity by account.** One picture per account, each on its own scale, because
+the small moves of a small account would vanish next to a 100k prop. The switch
+above picks a single account and applies to the tables below as well. Archived
+accounts are not drawn: the account is done with and there is nothing left to
+watch. Their trades stay in every figure underneath.
+
+The line is drawn softly, but it never invents a high or a low: the curve is
+bent only between the points it has. A peak on the picture is a peak that
+happened. Trades closed on the same day are laid out across that day in the
+order they were closed, because a journal records the date of a close and not
+the hour, and stacking them on one x would make a vertical wall out of an
+ordinary day.
+
+**R distribution.** Two rings: the losses on the left, the wins on the right,
+each cut by the size of R. Pointing at a slice, or at its line in the list
+beside the ring, lights up both and dims the rest: five steps of one colour
+cannot be told apart by eye, and they do not have to be. In the middle of a ring stands the number of trades
+in it and their total R; beside it every slice is written out with its count,
+its share and its R. The further a bucket is from zero, the brighter the slice.
+Break-even trades are in neither ring, and their number is named above.
+
+Read together the two rings answer the question a trader actually asks: are the
+losses one size, and do the wins reach far enough to pay for them.
+
+## Money in and out
+
+Money moves for reasons other than trades: you top an account up, you take a
+payout, the broker charges a fee. All of that lives on the **Accounts** tab, in
+the **Money and corrections** card. Both forms are folded away behind a line you
+click: they are needed rarely, and the balances above are what the page is for.
+
+Deposits, withdrawals and fees are under **Money in and out**; a correction has
+its own fold below, with its own list. They are apart because one is money you
+moved and the other is a difference you found.
+
+Pick the account, pick what happened (**deposit**, **withdrawal** or **fee**),
+type the amount as a plain positive number, set the date and add a comment.
+What the amount does to the balance is decided by what you picked, so a payout
+cannot be typed in as a plus by accident.
+
+**Withdrawals are counted separately.** The total taken off an account stands in
+the **cashed out** column of the table above, and on the front page the tile
+says it in words. That is the point of counting them: money you paid yourself is
+not a loss, and without that figure an account that pays out looks worse than it
+was. The line on the tile adds up exactly:
+
+    start balance + what the account earned + added - cashed out = balance
+
+Every movement is listed under the form, newest first, and **Delete** sends one
+to `.trash` like any other record. Balances are recomputed from what is left.
+
+**Correcting a balance.** When the broker shows a different number, do not touch
+the start balance and do not edit old trades. Use the **Correct a balance** card:
+type the balance the broker really shows, and the journal writes the difference
+down as a correction with your comment. The gap becomes a record with a date,
+which is what keeps the history honest. If there is nothing to correct, the
+journal says so and writes nothing.
+
 ## Accounts and pairs
 
 The **Accounts** tab.
@@ -126,10 +190,10 @@ The **Accounts** tab.
   before, so nothing depends on the icon.
 
 **The balance does not match the real one?** Do not change the start balance and
-do not edit old trades. The gap is written down as an adjustment: a file in
-`journal/adjustments/` with the kind `reconciliation`, `fee`, `deposit` or
-`withdrawal` and a comment saying where the difference came from. That way the
-history stays honest.
+do not edit old trades: use **Correct a balance** above. The gap is written down
+as a record of its own in `journal/adjustments/`, with the kind
+`reconciliation`, `fee`, `deposit` or `withdrawal` and a comment saying where
+the difference came from. That way the history stays honest.
 
 ## Reports
 
@@ -137,6 +201,11 @@ The **Reports** tab: pick a month or a quarter and press **Build**. A report is
 an ordinary file in `journal/reports/`. Building it again recomputes the figures
 and **never overwrites your conclusions**, so you can write them right in the
 report.
+
+**Every row leads to its trades.** Click a pair, an account or a style in the
+report tables and the journal opens filtered to it, over the months of that
+report. That is how a row like "XAU, 5 trades, -4.56 R" turns back into the five
+trades it was counted from, with the idea you wrote before each entry.
 
 ## Where the data lives
 

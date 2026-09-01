@@ -2,6 +2,87 @@
 
 What changed and why. Newest first.
 
+## v1.3, 01.09.2026
+
+Money that moves outside trades, and charts that can be read.
+
+### Money in and out
+
+- **Deposits, withdrawals and fees are written down in a form**, on the Accounts
+  tab, where before it meant writing a file by hand. The amount is typed as a
+  plain positive number and the sign belongs to what you picked, so a payout
+  cannot be entered as a plus by accident. Every record can be deleted, and goes
+  to `.trash` like everything else.
+
+- **Cashouts are counted.** The money taken off an account has a column of its
+  own in the accounts table, and the front page tile names it. Without that
+  figure a payout reads as a loss: the tile used to show the balance minus the
+  start balance, which counts your own money leaving the account against you.
+  The tile now shows what the account earned, and says separately what was added
+  and what was cashed out. The line adds up: start + earned + added - cashed out
+  is the balance.
+
+- **A balance is corrected by typing the real one.** You put in the number the
+  broker shows and the journal writes the difference down as a correction with
+  your comment. The start balance and the trades are never touched, which is the
+  rule this journal has always kept; up to now it just had no button.
+
+- **Both forms are folded away** behind a line you click, and corrections keep a
+  list of their own. A correction is a difference you found, not money you
+  moved, and the two lists had no business being one.
+
+### The charts
+
+- **The R distribution is two rings**, losses on the left and wins on the right,
+  each cut by the size of R, with the count, the share and the R of every bucket
+  written out beside the ring. The buckets are coarse at the tails on purpose: a
+  ring reads at a glance only up to about six slices, and the difference between
+  +3R and +4R matters less than the one between a small win and a big one.
+  Break-even trades are in neither ring and are counted above them. A slice and
+  its line in the list light each other up when pointed at, and the rest dims:
+  five steps of one colour are not meant to be told apart by eye. The histogram
+  the rings replace is gone.
+
+- **The equity line is drawn softly.** Straight segments between every close made
+  the curve read as a saw, sharper than the data was. It is bent through the
+  points now, with a wash underneath instead of a second line. The bend is
+  monotone, the one kind that cannot overshoot a point, so no peak is invented.
+  There is a test that holds it to that.
+
+- **Closes of one day no longer stack on one point.** A journal records the date
+  of a close, not the hour, so several trades closed on the same day stood on the
+  same x and the line between them was a vertical wall no curve could be bent
+  through. They are laid out across their day now, in the order they were closed.
+  The balances and the day are untouched; only the hour, which was never
+  recorded, is made up, and a day on the chart is a few pixels wide.
+
+- **Archived accounts are off the statistics charts**, as they are off the front
+  page: the account is done with, there is nothing left to watch on its curve.
+  Their trades stay in every figure underneath, and picking one by hand in the
+  filter still draws it.
+
+### Reports
+
+- **A row of a report opens the trades behind it.** A pair, an account or a style
+  in the report tables is a link into the journal, filtered to that value over the
+  months of the report. A figure you do not believe is now two clicks from the
+  trades it was counted from. The tables also grew a proper head row, which is
+  what stopped "account" from being read as the name of an account.
+
+- **The conclusions field opens empty.** A freshly built report used to put
+  "(empty, write it in the browser)" into the file, and the form loaded it as text
+  you had to delete before writing your own. The section is left empty now, the
+  field carries a placeholder instead, and a report built earlier with that line
+  inside opens empty as well.
+
+### Entering a trade
+
+- **The pair field has a list of its own**, with the same flags the rest of the
+  journal draws. The list the browser drew could not carry them, and it would not
+  close on a second click on the field. This one filters as you type, walks on
+  the arrow keys, and closes when the field is clicked again. A pair that is not
+  in the list is still just typed in.
+
 ## v1.2.1, 01.09.2026
 
 - **A trade opens from anywhere on its row.** In the list of trades and in the

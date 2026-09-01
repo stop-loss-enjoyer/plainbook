@@ -49,8 +49,10 @@ overview. The day's PnL is filled in from the trades you closed, and stays
 editable.
 
 **Statistics that answer honest questions.** An equity curve per account, the
-distribution of R, slices by style, pair and account, and a monthly or quarterly
-report built on a button, with the figures recomputed and your conclusions kept.
+distribution of R as two rings, losses and wins each cut by size, slices by
+style, pair and account, and a monthly or quarterly report built on a button,
+with the figures recomputed and your conclusions kept. Every row of a report is
+a link back to the trades it was counted from.
 
 **Pairs you recognise before you read them.** EURUSD carries two round flags,
 GER40 the German one, gold and the coins a lettered face. The flags are drawn in
@@ -63,8 +65,15 @@ or quarters. Filters hide behind a funnel button that says how many of them are 
 **Screenshots by Ctrl+V.** Click the drop zone, paste, done. From TradingView,
 from a screen capture, from anywhere. A cross on the thumbnail takes it back out.
 
-**Nothing is shredded.** Deleting a trade or a card moves it to `.trash`. A
-mis-click should not cost a record.
+**Money in and out, counted apart from trading.** Deposits, withdrawals and
+fees are written down on the Accounts tab, and the money taken off an account
+has a running total of its own. A payout is not a loss, and an account that pays
+out should not look worse than it was. When the broker shows a different
+balance, you type the real number and the journal records the difference as a
+correction: history is never edited to make a figure agree.
+
+**Nothing is shredded.** Deleting a trade, a card or a money record moves it to
+`.trash`. A mis-click should not cost a record.
 
 ## Built to be kept by an agent
 
@@ -74,7 +83,7 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in under a second.** 66 of them, no fixtures, no network.
+- **The tests finish in under a second.** 85 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
@@ -83,7 +92,7 @@ first place: plain files, no dependencies, a small surface.
 - **A guard stands between an agent and your records.** `tools/check_public.py`
   refuses a commit that would carry trade records, private paths or anything
   else it recognises as yours; it runs as a pre-push hook and in CI.
-- **The whole program is ~3 500 lines** of straightforward Python, and the
+- **The whole program is ~4 000 lines** of straightforward Python, and the
   routing table fits on one screen. It fits in a context window, so an agent
   reasons about the real thing rather than about a summary of it.
 - **One language throughout:** code, comments, documents and commit messages.
@@ -234,7 +243,7 @@ Measured on a journal of 159 trades with 363 screenshots:
 | a trade page | **2 ms**, 14 KB |
 | statistics with charts | **7 ms**, 37 KB |
 | server memory | **25 MB** |
-| the whole program | **~3 500 lines of Python** |
+| the whole program | **~4 000 lines of Python** |
 
 Pages are plain HTML rendered by one Python process: no framework, no bundler,
 no build step. The charts are SVG generated on the server. There is nothing to

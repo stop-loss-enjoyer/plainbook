@@ -9,6 +9,8 @@ been checked for colour blindness on a dark surface.
 """
 import html as _html
 import json
+import math
+from datetime import timedelta
 
 from . import flags
 
@@ -27,6 +29,12 @@ SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500"]
 GOOD = "#48ac7a"
 BAD = "#d05c55"
 WARN = "#d9a441"
+# The rings of the R distribution. One hue per ring with steps that get
+# brighter as R grows, so the order of the buckets is visible in the colour
+# itself and not only in the legend. Checked against the card surface: every
+# step clears 3:1 contrast and stays colourful enough not to read as grey.
+LOSS_STEPS = ["#9c4741", "#c56158", "#ef8b81"]
+WIN_STEPS = ["#2a7d55", "#37996a", "#4ab882", "#66d29c", "#93e6bd"]
 
 MONO = ('ui-monospace,"JetBrains Mono","CaskaydiaMono Nerd Font",'
         'SFMono-Regular,Menlo,Consolas,monospace')
@@ -211,6 +219,50 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
  color:{INK2}}}
 .legend i{{display:inline-block;width:8px;height:8px;border-radius:2px;
  margin-right:6px}}
+
+/* a field with its own list of options: the flags cannot live in the list the
+   browser draws */
+.picker{{position:relative}}
+.picker .options{{position:absolute;z-index:7;top:calc(100% + 3px);left:0;
+ min-width:100%;max-height:280px;overflow-y:auto;background:{RAISED};
+ border:1px solid {AXIS};border-radius:5px;padding:3px;
+ box-shadow:0 10px 26px rgba(0,0,0,.5)}}
+.picker .option{{display:block;width:100%;text-align:left;background:none;
+ border:none;color:{INK};padding:5px 8px;border-radius:4px;cursor:pointer;
+ font:13px/1.4 system-ui,sans-serif;white-space:nowrap}}
+.picker .option:hover,.picker .option.at{{background:{SURFACE};color:{INK}}}
+
+/* a block that opens on a click: the forms are needed rarely, the page is
+   read often */
+.fold{{margin-bottom:12px}}
+.fold:last-of-type{{margin-bottom:0}}
+.fold>summary{{display:flex;align-items:center;gap:10px;cursor:pointer;
+ list-style:none;border:1px solid {AXIS};border-radius:4px;padding:7px 12px;
+ color:{INK2};font-size:12px;user-select:none}}
+.fold>summary:hover{{border-color:{DIM};color:{INK}}}
+.fold[open]>summary{{border-color:{DIM};color:{INK};margin-bottom:12px}}
+.fold>summary::-webkit-details-marker{{display:none}}
+.fold>summary::before{{content:"+";color:{DIM};font-size:14px;line-height:1}}
+.fold[open]>summary::before{{content:"−"}}
+.fold>summary .caption{{margin-left:auto}}
+
+/* the two rings of the R distribution */
+.rings{{display:flex;flex-wrap:wrap;gap:14px}}
+.ring{{flex:1 1 380px;min-width:300px;background:{GROUND};
+ border:1px solid {EDGE};border-radius:8px;padding:14px 16px}}
+.ring h3{{margin:0 0 10px;color:{DIM};font-size:10px;font-weight:500;
+ text-transform:uppercase;letter-spacing:.09em}}
+.ring-body{{display:flex;align-items:center;gap:18px;flex-wrap:wrap}}
+.donut-legend{{flex:1 1 190px;width:auto;font-size:12px}}
+.donut-legend td{{border-bottom:none;padding:3px 0 3px 10px}}
+.donut-legend td:first-child{{padding-left:0;white-space:nowrap;color:{INK2}}}
+.donut-legend i{{display:inline-block;width:9px;height:9px;border-radius:2px;
+ margin-right:7px;vertical-align:baseline}}
+.donut-legend tr{{cursor:default}}
+.ring [data-slice]{{transition:opacity .12s ease}}
+.ring.lit [data-slice]:not(.on){{opacity:.22}}
+.ring.lit tr.on td{{background:rgba(255,255,255,.06)}}
+.ring.lit tr.on td:first-child{{color:{INK}}}
 .tip{{position:fixed;pointer-events:none;background:{RAISED};
  border:1px solid {AXIS};border-radius:4px;padding:6px 9px;font-size:11px;
  color:{INK};display:none;z-index:9;white-space:pre;
@@ -275,6 +327,92 @@ function close_popovers(except){
     if (!except || !box.contains(except)) box.open = false;
   });
 }
+// A slice and its line in the legend light each other up. Five steps of one
+// colour cannot be told apart by eye alone, and they should not have to be:
+// pointing at either half of the pair says which is which.
+function light_slice(ring, which){
+  ring.classList.toggle('lit', which !== null);
+  ring.querySelectorAll('[data-slice]').forEach(el => {
+    el.classList.toggle('on', el.dataset.slice === which);
+  });
+}
+document.addEventListener('mouseover', e => {
+  if (!e.target.closest) return;
+  const ring = e.target.closest('.ring');
+  if (!ring) return;
+  const part = e.target.closest('[data-slice]');
+  light_slice(ring, part ? part.dataset.slice : null);
+});
+document.addEventListener('mouseout', e => {
+  if (!e.target.closest) return;
+  const ring = e.target.closest('.ring');
+  if (ring && !ring.contains(e.relatedTarget)) light_slice(ring, null);
+});
+// A field with our own list under it. The browser's own list cannot show the
+// flags and will not close on a second click on the field, which is the whole
+// reason this exists.
+function close_pickers(except){
+  document.querySelectorAll('.picker').forEach(picker => {
+    if (picker !== except) picker.querySelector('.options').hidden = true;
+  });
+}
+function filter_picker(picker){
+  const typed = picker.querySelector('input').value.trim().toUpperCase();
+  let shown = 0;
+  picker.querySelectorAll('.option').forEach(option => {
+    const fits = !typed || option.dataset.value.includes(typed);
+    option.hidden = !fits;
+    if (fits) shown++;
+  });
+  return shown;
+}
+function open_picker(picker, open){
+  const list = picker.querySelector('.options');
+  list.hidden = !open || !filter_picker(picker);
+  if (!list.hidden) { close_pickers(picker); list.scrollTop = 0; }
+}
+document.addEventListener('mousedown', e => {
+  if (!e.target.closest) return;
+  const picker = e.target.closest('.picker');
+  close_pickers(picker);
+  if (!picker) return;
+  // a second click on the field shuts the list; the click itself is left
+  // alone, so the caret still lands where it was aimed
+  if (e.target.closest('input'))
+    open_picker(picker, picker.querySelector('.options').hidden);
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest) return;
+  const option = e.target.closest('.picker .option');
+  if (!option) return;
+  const picker = option.closest('.picker');
+  picker.querySelector('input').value = option.dataset.value;
+  open_picker(picker, false);
+});
+document.addEventListener('input', e => {
+  const picker = e.target.closest && e.target.closest('.picker');
+  if (picker) open_picker(picker, true);
+});
+document.addEventListener('keydown', e => {
+  const picker = e.target.closest && e.target.closest('.picker');
+  if (!picker) return;
+  if (e.key === 'Escape') { open_picker(picker, false); return; }
+  const shown = [...picker.querySelectorAll('.option')].filter(o => !o.hidden);
+  const here = shown.indexOf(picker.querySelector('.option.at'));
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    open_picker(picker, true);
+    const next = shown[Math.max(0, Math.min(shown.length - 1,
+                                here + (e.key === 'ArrowDown' ? 1 : -1)))];
+    shown.forEach(o => o.classList.toggle('at', o === next));
+    if (next) next.scrollIntoView({block: 'nearest'});
+  } else if (e.key === 'Enter' && here >= 0 &&
+             !picker.querySelector('.options').hidden) {
+    e.preventDefault();
+    picker.querySelector('input').value = shown[here].dataset.value;
+    open_picker(picker, false);
+  }
+});
 document.addEventListener('click', e => close_popovers(e.target));
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') close_popovers(null);
@@ -284,13 +422,82 @@ document.addEventListener('keydown', e => {
 
 # --- charts ----------------------------------------------------------------
 
+def smooth_path(points):
+    """A soft line through the points, without inventing a high or a low.
+
+    Straight segments between every close make an equity curve read as a saw:
+    the corners are sharper than the data is. The curve here is a monotone
+    cubic (Fritsch and Carlson), which is the one kind of smoothing that never
+    overshoots a point, so a peak on the picture is a peak that happened. Two
+    closes on the same day keep their vertical step: there is nothing to
+    interpolate across an x of zero width.
+    """
+    if len(points) < 2:
+        return ""
+    n = len(points)
+    slope = []                                   # secant of every segment
+    for i in range(n - 1):
+        dx = points[i + 1][0] - points[i][0]
+        slope.append((points[i + 1][1] - points[i][1]) / dx if dx > 1e-9 else None)
+    tangent = []
+    for i in range(n):
+        before = slope[i - 1] if i > 0 else None
+        after = slope[i] if i < n - 1 else None
+        if before is None or after is None:
+            tangent.append(after if before is None else before)
+        elif before * after <= 0:                # a turning point stays a corner
+            tangent.append(0.0)
+        else:                                    # harmonic mean keeps it monotone
+            tangent.append(2 * before * after / (before + after))
+        if tangent[-1] is None:
+            tangent[-1] = 0.0
+
+    d = [f"M{points[0][0]:.1f},{points[0][1]:.1f}"]
+    for i in range(n - 1):
+        (x0, y0), (x1, y1) = points[i], points[i + 1]
+        dx = x1 - x0
+        if dx <= 1e-9 or slope[i] is None:
+            d.append(f"L{x1:.1f},{y1:.1f}")
+            continue
+        c1 = (x0 + dx / 3.0, y0 + tangent[i] * dx / 3.0)
+        c2 = (x1 - dx / 3.0, y1 - tangent[i + 1] * dx / 3.0)
+        d.append(f"C{c1[0]:.1f},{c1[1]:.1f} {c2[0]:.1f},{c2[1]:.1f} "
+                 f"{x1:.1f},{y1:.1f}")
+    return " ".join(d)
+
+
+def spread_days(points):
+    """Points that share a date get their own place inside that day.
+
+    A journal records the date of a close, not the hour, so two trades closed
+    on the same day land on the same x and the line between them is a vertical
+    wall that no curve can be bent through. They are laid out evenly across
+    their day instead, in the order they were closed. The balances are
+    untouched and the day is unchanged; only the hour, which was never
+    recorded, is made up, and a day is a few pixels wide.
+    """
+    out, i = [], 0
+    while i < len(points):
+        j = i
+        while j + 1 < len(points) and points[j + 1][0].date() == points[i][0].date():
+            j += 1
+        run = j - i + 1
+        for k in range(run):
+            day, value = points[i + k]
+            out.append((day + timedelta(days=(k + 1) / (run + 1)) if run > 1
+                        else day, value))
+        i = j + 1
+    return out
+
+
 def equity_svg(series, width=980, height=260, cid="equity"):
     """Equity lines with hovering. series: [(name, colour, [(date, value)])].
 
     Only like quantities share a picture: accounts go on one chart, the total
     on its own. There are never two scales in one image.
     """
-    series = [(name, colour, pts) for name, colour, pts in series if len(pts) > 1]
+    series = [(name, colour, spread_days(pts))
+              for name, colour, pts in series if len(pts) > 1]
     if not series:
         return '<p class="muted">Nothing to plot yet.</p>'
     pad = (56, 14, 26, 92)                        # left, top, bottom, right
@@ -326,11 +533,23 @@ def equity_svg(series, width=980, height=260, cid="equity"):
                      f'font-size="10" text-anchor="middle">{d.strftime(fmt)}</text>')
 
     data = []
-    for name, colour, pts in series:
-        d = " ".join(f"{'M' if k == 0 else 'L'}{X(dt):.1f},{Y(v):.1f}"
-                     for k, (dt, v) in enumerate(pts))
+    for k, (name, colour, pts) in enumerate(series):
+        screen = [(X(dt), Y(v)) for dt, v in pts]
+        d = smooth_path(screen)
+        # a wash under the line instead of a second line: it gives the curve a
+        # body without adding a colour or a border to look at
+        fade = f"{cid}-fade-{k}"
+        parts.append(
+            f'<defs><linearGradient id="{fade}" x1="0" y1="0" x2="0" y2="1">'
+            f'<stop offset="0" stop-color="{colour}" stop-opacity="0.20"/>'
+            f'<stop offset="1" stop-color="{colour}" stop-opacity="0"/>'
+            f'</linearGradient></defs>')
+        parts.append(f'<path d="{d} L{screen[-1][0]:.1f},{pad[1]+ph:.1f} '
+                     f'L{screen[0][0]:.1f},{pad[1]+ph:.1f} Z" '
+                     f'fill="url(#{fade})" stroke="none"/>')
         parts.append(f'<path d="{d}" fill="none" stroke="{colour}" stroke-width="2" '
-                     f'stroke-linejoin="round"/>')
+                     f'stroke-linejoin="round" stroke-linecap="round" '
+                     f'shape-rendering="geometricPrecision"/>')
         dt, v = pts[-1]
         parts.append(f'<circle cx="{X(dt):.1f}" cy="{Y(v):.1f}" r="3" fill="{colour}"/>')
         parts.append(f'<text x="{X(dt)+7:.1f}" y="{Y(v)+3:.1f}" fill="{INK2}" '
@@ -410,43 +629,60 @@ function hover_chart(cid){
 """
 
 
-def histogram_svg(buckets, width=980, height=220):
-    """R distribution. buckets: [(left, right, count)].
+def donut_svg(segments, size=188, thickness=30, middle="", under=""):
+    """A ring of ordered slices. segments: [(label, count, colour)].
 
-    Under every bar stands its R value with a sign, or it is not clear
-    which result the bar describes.
+    The slices are separated by a gap of the card colour rather than by a
+    stroke: a ring read at a glance should not have a second colour in it.
     """
-    if not buckets:
+    total = sum(n for _, n, _ in segments)
+    if not total:
         return '<p class="muted">Nothing to plot yet.</p>'
-    pad = (34, 14, 34, 14)
-    pw, ph = width - pad[0] - pad[3], height - pad[1] - pad[2]
-    top = max(n for _, _, n in buckets) or 1
-    step = pw / len(buckets)
-    parts = [f'<rect width="{width}" height="{height}" fill="{SURFACE}"/>']
-    base = pad[1] + ph
-    for i, (left, right, n) in enumerate(buckets):
-        h = ph * n / top
-        x = pad[0] + i * step + 1
-        w = step - 2                               # a 2px gap between bars
-        colour = BAD if right <= 0 else GOOD
-        if n:
-            r = min(4, w / 2, h)
-            d = (f"M{x:.1f},{base:.1f} V{base-h+r:.1f} Q{x:.1f},{base-h:.1f} "
-                 f"{x+r:.1f},{base-h:.1f} H{x+w-r:.1f} Q{x+w:.1f},{base-h:.1f} "
-                 f"{x+w:.1f},{base-h+r:.1f} V{base:.1f} Z")
-            parts.append(f'<path d="{d}" fill="{colour}">'
-                         f'<title>R from {left:+.1f} to {right:+.1f}: {n} trades</title>'
-                         f'</path>')
-            parts.append(f'<text x="{x+w/2:.1f}" y="{base-h-4:.1f}" fill="{INK2}" '
-                         f'font-size="10" text-anchor="middle">{n}</text>')
-        # a label under every bar: the R range of that step, in one line
-        parts.append(f'<text x="{x+w/2:.1f}" y="{base+16:.1f}" fill="{INK2}" '
-                     f'font-size="10" text-anchor="middle">'
-                     f'{left:+.1f}…{right:+.1f}</text>')
-    parts.append(f'<line x1="{pad[0]}" y1="{base}" x2="{width-pad[3]}" y2="{base}" '
-                 f'stroke="{AXIS}" stroke-width="1"/>')
-    return (f'<svg viewBox="0 0 {width} {height}" width="100%" '
-            f'preserveAspectRatio="xMidYMid meet" role="img">' + "".join(parts) + "</svg>")
+    r = (size - thickness) / 2
+    c = size / 2
+    circumference = 2 * math.pi * r
+    gap = 3 if sum(1 for _, n, _ in segments if n) > 1 else 0
+    parts, offset = [], 0.0
+    for i, (label, n, colour) in enumerate(segments):
+        if not n:
+            continue
+        length = circumference * n / total
+        drawn = max(length - gap, 1.0)
+        parts.append(
+            f'<circle data-slice="{i}" cx="{c}" cy="{c}" r="{r:.2f}" fill="none" '
+            f'stroke="{colour}" stroke-width="{thickness}" '
+            f'stroke-dasharray="{drawn:.2f} {circumference - drawn:.2f}" '
+            f'stroke-dashoffset="{-offset:.2f}">'
+            f'<title>{esc(label)}: {n} trades, {100.0 * n / total:.0f}%</title>'
+            f'</circle>')
+        offset += length
+    text = ""
+    if middle:
+        text += (f'<text x="{c}" y="{c - 1}" fill="{INK}" font-size="30" '
+                 f'font-family="{MONO}" text-anchor="middle">{esc(middle)}</text>')
+    if under:
+        text += (f'<text x="{c}" y="{c + 17}" fill="{DIM}" font-size="11" '
+                 f'text-anchor="middle">{esc(under)}</text>')
+    # only the ring turns, so that the reading starts at twelve o'clock; the
+    # text in the middle stays upright
+    return (f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}" '
+            f'role="img"><g transform="rotate(-90 {c} {c})">'
+            + "".join(parts) + f'</g>{text}</svg>')
+
+
+def donut_legend(rows, total):
+    """The slices in words: a chip, the bucket, how many and what share.
+
+    A ring alone leaves the reader guessing at the sizes, so the numbers stand
+    next to it and the colour only carries the order."""
+    lines = "".join(
+        f'<tr data-slice="{i}"><td><i style="background:{colour}"></i>{esc(label)}</td>'
+        f'<td class="num">{n}</td>'
+        f'<td class="num muted">{100.0 * n / total:.0f}%</td>'
+        f'<td class="num {"win" if sum_r > 0 else "lose" if sum_r < 0 else "muted"}">'
+        f'{sum_r:+.1f} R</td></tr>'
+        for i, (label, n, sum_r, colour) in enumerate(rows) if n)
+    return f'<table class="donut-legend"><tbody>{lines}</tbody></table>'
 
 
 def legend(pairs):

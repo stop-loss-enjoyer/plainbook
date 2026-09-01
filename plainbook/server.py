@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from . import html as H
 from . import reports, stats, store
 from .balances import Journal
-from .model import (Trade, Account, IdeaBlock, Card, RecordError,
+from .model import (Trade, Account, Adjustment, IdeaBlock, Card, RecordError,
                     DIRECTIONS, RESULTS, NEW_STYLES, CARD_SECTIONS,
                     PAIR_NOT_SET)
 
@@ -28,6 +28,9 @@ ROOT = os.path.abspath(os.environ.get("PLAINBOOK_ROOT") or
                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DRAFTS = os.path.join(ROOT, ".drafts")
 TIMEFRAMES = ["M15", "H1", "H4", "D1"]
+# money moved by hand. A correction is not offered here: it has a form of its
+# own, where the real balance is typed in and the difference is worked out.
+MONEY_KINDS = ["deposit", "withdrawal", "fee"]
 EXECUTION = ["Market Entry", "IDM", "SNR", "FVG"]
 esc = H.esc
 
@@ -262,15 +265,24 @@ def account_tiles(j):
             continue
         # Start balance, current balance and the difference in colour. Turning
         # the risk percent into dollars is done in the head, no line for it here.
+        #
+        # The difference is what the account earned, not simply balance minus
+        # start: money paid out would otherwise read as a loss. The line adds
+        # up exactly, start + result + added - cashed out is the balance.
         balance = j.balance(a)
-        growth = balance - account.start_balance
-        colour = H.GOOD if growth >= 0 else H.BAD
+        result = j.result(a)
+        colour = H.GOOD if result >= 0 else H.BAD
+        moved = ""
+        if j.deposited(a):
+            moved += f' · added {H.money(j.deposited(a))} $'
+        if j.cashed_out(a):
+            moved += f' · cashed out {H.money(j.cashed_out(a))} $'
         parts.append(
             f'<div class="tile"><div class="name">{esc(account.name or a)}</div>'
             f'<div class="value">{H.money(balance)} $</div>'
             f'<div class="sub">start {H.money(account.start_balance)} $ · '
-            f'<span style="color:{colour}">{H.money(growth, signed=True)} $</span>'
-            f'</div></div>')
+            f'<span style="color:{colour}">{H.money(result, signed=True)} $</span>'
+            f'{moved}</div></div>')
     return '<div class="tiles narrow">' + "".join(parts) + "</div>"
 
 
@@ -412,10 +424,16 @@ def trade_page(trade_id):
 
 def account_tabs(j, q, selected):
     """The account switch above the chart. It reuses the account filter, so the
-    choice also applies to the tables below."""
+    choice also applies to the tables below.
+
+    Archived accounts are not offered: the account is done with and there is
+    nothing left to watch on its curve. One picked by hand through the filter
+    still gets its tab, or the page would answer a choice it does not show."""
+    shown = [a for a in sorted(j.accounts)
+             if not j.accounts[a].archived or a == selected]
     parts = []
     for code, name in [("", "All accounts")] + [(a, j.accounts[a].name or a)
-                                                for a in sorted(j.accounts)]:
+                                                for a in shown]:
         params = {k: v[:] for k, v in q.items()}
         if code:
             params["account"] = [code]
@@ -426,6 +444,45 @@ def account_tabs(j, q, selected):
         cls = "btn primary" if code == selected else "btn"
         parts.append(f'<a class="{cls}" href="{href}">{esc(name)}</a>')
     return '<p style="margin:0 0 10px">' + " ".join(parts) + "</p>"
+
+
+def ring(title, rows, steps, kind):
+    """One ring of the R distribution, with its slices written out beside it."""
+    total = sum(n for _, n, _ in rows)
+    coloured = [(label, n, sum_r, steps[i % len(steps)])
+                for i, (label, n, sum_r) in enumerate(rows)]
+    if not total:
+        return (f'<div class="ring"><h3>{esc(title)}</h3>'
+                f'<p class="muted">None yet.</p></div>')
+    sum_r = sum(r for _, _, r in rows)
+    return (f'<div class="ring"><h3>{esc(title)}</h3>'
+            f'<div class="ring-body">'
+            f'{H.donut_svg([(label, n, colour) for label, n, _, colour in coloured], middle=str(total), under=f"{sum_r:+.1f} R")}'
+            f'{H.donut_legend(coloured, total)}</div></div>')
+
+
+def r_rings(j, trades):
+    """Where the trades landed by the size of R: losses in one ring, wins in
+    the other. The share of a bucket is read off the ring directly, instead of
+    being measured against the tallest bar of a histogram."""
+    losses, wins, be = stats.r_split(j, trades)
+    if not sum(n for _, n, _ in losses) and not sum(n for _, n, _ in wins):
+        return ('<div class="card"><h2>R distribution</h2>'
+                '<p class="muted">Nothing to plot yet.</p></div>')
+    s = stats.summary(j, trades)
+    head = (f'{s.trades} closed · {s.wins} won · {s.losses} lost'
+            + (f' · {be} break-even' if be else ''))
+    return (f'<div class="card"><h2>R distribution</h2>'
+            f'<p class="caption">{esc(head)}</p>'
+            f'<div class="rings">'
+            f'{ring("Losses", losses, H.LOSS_STEPS, "lose")}'
+            f'{ring("Wins", wins, H.WIN_STEPS, "win")}'
+            f'</div>'
+            f'<p class="caption">Each ring is one pile of trades cut by the size '
+            f'of R: the further from zero, the brighter the slice. In the middle '
+            f'of a ring stands the number of trades in it and their total R. '
+            f'Break-even trades are in neither ring; they ended at zero.</p>'
+            f'</div>')
 
 
 def stats_page(q):
@@ -446,6 +503,8 @@ def stats_page(q):
     else:
         cards = ""
         for i, a in enumerate(sorted(j.accounts)):
+            if j.accounts[a].archived:
+                continue
             points = stats.equity(j, a, trades)
             if not points:
                 continue
@@ -456,7 +515,8 @@ def stats_page(q):
                   f'{account_tabs(j, q, "")}'
                   f'{cards or "<p class=\'muted\'>Nothing to plot yet.</p>"}'
                   f'<p class="caption">Each account has its own scale, which is '
-                  f'why they are drawn separately.</p></div>')
+                  f'why they are drawn separately. Archived accounts are not '
+                  f'drawn; their trades stay in the figures below.</p></div>')
 
     slices = ""
     for heading, key, show in (("By style", lambda t: t.style, esc),
@@ -480,10 +540,7 @@ def stats_page(q):
 
     body = (filter_form(j, q).replace('action="/"', 'action="/stats"')
             + charts
-            + f'<div class="card"><h2>R distribution</h2>'
-            f'{H.histogram_svg(stats.r_distribution(j, trades))}'
-            f'<p class="caption">Losses on the left, profits on the right. Under each '
-            f'bar is the R value of that step.</p></div>' + slices)
+            + r_rings(j, trades) + slices)
     return H.page("Statistics", body, "stats")
 
 
@@ -615,7 +672,12 @@ def trade_form(t=None, token=""):
         f'<label class="caption" style="display:inline-block;margin-right:10px">'
         f'<input type="checkbox" name="execution" value="{esc(v)}"'
         f'{" checked" if v in chosen else ""}> {esc(v)}</label>' for v in EXECUTION)
-    pair_list = "".join(f'<option value="{esc(p)}">' for p in pairs)
+    # A list of pairs drawn by the browser cannot carry the flags, and it does
+    # not close on a second click on the field. This one is ours: the same
+    # coins as everywhere else, and it opens and shuts on the field.
+    pair_options = "".join(
+        f'<button type="button" class="option" data-value="{esc(p)}">'
+        f'{H.pair(p)}</button>' for p in pairs)
 
     if editing and t.idea:
         blocks = ""
@@ -650,8 +712,10 @@ def trade_form(t=None, token=""):
 <div class="field"><label>account</label>
 {select("account", accounts, t.account if editing else "")}</div>
 <div class="field"><label>pair</label>
-<input type="text" name="pair" list="pairs" value="{esc(t.pair if editing else "")}"
- placeholder="EURUSD" required><datalist id="pairs">{pair_list}</datalist></div>
+<div class="picker">
+<input type="text" name="pair" value="{esc(t.pair if editing else "")}"
+ placeholder="EURUSD" autocomplete="off" required>
+<div class="options" hidden>{pair_options}</div></div></div>
 <div class="field"><label>direction</label>
 {select("direction", DIRECTIONS, t.direction if editing else "")}</div>
 <div class="field"><label>style</label>
@@ -1054,8 +1118,11 @@ def save_card(data):
 
 # --- reports ---------------------------------------------------------------
 
-def md_to_html(text):
-    """A tiny renderer: we generate the reports ourselves, their markup is simple."""
+def md_to_html(text, link=None):
+    """A tiny renderer: we generate the reports ourselves, their markup is simple.
+
+    `link(section, value)` may hand back an address for the first cell of a row,
+    which is how a line of a report leads to the trades behind it."""
     parts, in_table, section = [], False, ""
     for line in text.split("\n"):
         s = line.strip()
@@ -1064,14 +1131,22 @@ def md_to_html(text):
             if all(set(c) <= set("-: ") for c in cells):
                 continue
             if not in_table:
-                parts.append("<table><tbody>")
+                # the first row of a table is its head: no icons and no link,
+                # or "account" would lead to an account by that name
+                parts.append('<table><thead><tr>' + "".join(
+                    f'<th class="{"num" if i else ""}">{esc(c)}</th>'
+                    for i, c in enumerate(cells)) + "</tr></thead><tbody>")
                 in_table = True
+                continue
             # under "By pair" the first column holds symbols, so they get their
             # icons here, the same as everywhere else
             show = H.pair if section == "By pair" else esc
-            parts.append("<tr>" + "".join(
-                f'<td class="{"num" if i else ""}">{(esc if i else show)(c)}</td>'
-                for i, c in enumerate(cells)) + "</tr>")
+            first = show(cells[0])
+            href = link(section, cells[0]) if link else None
+            if href:
+                first = f'<a href="{href}">{first}</a>'
+            parts.append("<tr>" + f"<td>{first}</td>" + "".join(
+                f'<td class="num">{esc(c)}</td>' for c in cells[1:]) + "</tr>")
             continue
         if in_table:
             parts.append("</tbody></table>")
@@ -1119,6 +1194,26 @@ def report_kind(period):
     return "quarter" if "Q" in period else "month"
 
 
+# Which filter of the journal a column of a report belongs to. The heading is
+# the one written into the file, so a report built long ago still links.
+REPORT_LINKS = {"By style": "style", "By pair": "pair", "By account": "account",
+                "Balance change by account": "account"}
+
+
+def report_link(period):
+    """A row of a report leads to the trades it was counted from: the same
+    filter, narrowed to the months of the report."""
+    since, until = reports.period_months(period)
+
+    def link(section, value):
+        field = REPORT_LINKS.get(section)
+        if not field or not value:
+            return None
+        return (f"/?{field}={U(value)}&from={U(since)}&to={U(until)}"
+                f"&group={'month' if 'Q' in period else 'week'}")
+    return link
+
+
 def report_page(period):
     head, body = reports.read(ROOT, period)
     if body is None:
@@ -1129,8 +1224,10 @@ def report_page(period):
 <textarea name="conclusions" placeholder="What you learned this period">{esc(conclusions)}</textarea>
 <p><button class="btn primary">Save conclusions</button>
 <button class="btn" name="rebuild" value="1">Recalculate</button></p></form>"""
-    html = (f'<div class="card">{md_to_html(without)}'
-            f'<p class="caption">updated {esc(head.get("updated", ""))}</p></div>'
+    html = (f'<div class="card">{md_to_html(without, report_link(period))}'
+            f'<p class="caption">A pair, an account or a style in these tables '
+            f'opens the trades behind the row, over the same months. '
+            f'Updated {esc(head.get("updated", ""))}.</p></div>'
             f'<div class="card"><h2>Conclusions</h2>{form}</div>')
     return H.page(period, html, "reports",
                   '<a class="btn" href="/reports">All reports</a>')
@@ -1158,10 +1255,12 @@ def accounts_page(message=""):
             if used == 0 else
             f'<span class="caption">has {trades} trades / {adjustments} '
             f'adjustments, archive instead</span>')
+        out = j.cashed_out(a)
         rows.append(
             f'<tr><td>{esc(account.name or a)}<div class="caption">{esc(a)}</div></td>'
             f'<td class="num">{H.money(account.start_balance)} $</td>'
             f'<td class="num">{H.money(j.balance(a))} $</td>'
+            f'<td class="num">{H.money(out) + " $" if out else "-"}</td>'
             f'<td class="num">{trades}</td>'
             f'<td>{archive[1]}</td>'
             f'<td><form method="post" action="/account/archive" style="display:inline">'
@@ -1183,15 +1282,90 @@ def accounts_page(message=""):
         + '</td></tr>'
         for p in sorted(set(pairs) | from_trades))
 
+    live = [a for a in sorted(j.accounts) if not j.accounts[a].archived]
+    every = sorted(j.accounts)
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    def move_rows(kinds):
+        # newest first: a list of money movements is read from the last one
+        return "".join(
+        f'<tr><td>{c.day:%d.%m.%Y}</td>'
+        f'<td>{esc(j.accounts[c.account].name if c.account in j.accounts else c.account)}</td>'
+        f'<td>{esc(c.kind)}</td>'
+        f'<td class="num {"win" if c.amount > 0 else "lose"}">'
+        f'{H.money(c.amount, signed=True)} $</td>'
+        f'<td>{esc(c.comment) or "<span class=\'muted\'>-</span>"}</td>'
+        f'<td><form method="post" action="/money/delete" style="display:inline" '
+        f'onsubmit="return confirm(\'Delete this record? It moves to .trash.\')">'
+        f'<input type="hidden" name="id" value="{esc(c.id)}">'
+            f'<button class="btn danger">Delete</button></form></td></tr>'
+            for c in reversed(j.adjustments) if c.kind in kinds)
+
+    def move_table(kinds, empty):
+        rows = move_rows(kinds)
+        return (f'<table><thead><tr><th>date</th><th>account</th><th>what</th>'
+                f'<th class="num">amount</th><th>comment</th><th></th></tr></thead>'
+                f'<tbody>{rows}</tbody></table>' if rows else
+                f'<p class="muted">{empty}</p>')
+
+    def count(kinds):
+        n = sum(1 for c in j.adjustments if c.kind in kinds)
+        return f"{n} record" if n == 1 else f"{n} records"
+
+    money = f"""<div class="card"><h2>Money and corrections</h2>
+<details class="fold"><summary>Money in and out
+<span class="caption">{count(MONEY_KINDS)}</span></summary>
+<form method="post" action="/money/new" class="filters">
+<div><label>account</label>{select("account", live)}</div>
+<div><label>what</label>{select("kind", MONEY_KINDS)}</div>
+<div><label>amount, $</label><input type="number" name="amount" step="0.01"
+ min="0.01" placeholder="500" required style="width:120px"></div>
+<div><label>date</label><input type="date" name="day" value="{today}"
+ onclick="this.showPicker && this.showPicker()"></div>
+<div><label>comment</label><input type="text" name="comment"
+ placeholder="payout" style="width:200px"></div>
+<div><button class="btn primary">Record</button></div>
+</form>
+<p class="caption">The amount is always positive: what it does to the balance is
+decided by what you picked. A withdrawal is also counted as a cashout, and the
+total sits in the accounts table above.</p>
+{move_table(MONEY_KINDS, "No money has been moved yet.")}
+<p class="caption">Deleting moves the record to <code>.trash</code>. Balances are
+recomputed from what is left, nothing is stored as a number.</p>
+</details>
+
+<details class="fold"><summary>Correct a balance
+<span class="caption">{count(("reconciliation",))}</span></summary>
+<form method="post" action="/money/correct" class="filters">
+<div><label>account</label>{select("account", every)}</div>
+<div><label>real balance now, $</label><input type="number" name="balance"
+ step="0.01" required style="width:150px"></div>
+<div><label>date</label><input type="date" name="day" value="{today}"
+ onclick="this.showPicker && this.showPicker()"></div>
+<div><label>comment</label><input type="text" name="comment"
+ placeholder="swap, commission, broker says otherwise" style="width:240px"></div>
+<div><button class="btn">Correct</button></div>
+</form>
+<p class="caption">Type what the broker shows. The journal writes down the
+difference as a correction and never touches the start balance or the trades:
+that is what keeps the history honest.</p>
+{move_table(("reconciliation",), "Nothing has been corrected yet.")}
+</details>
+<p class="caption">Both are kept in <code>journal/adjustments/</code>, and both
+move the balance; they are apart here because one is money you moved and the
+other is a difference you found.</p></div>"""
+
     top = (f'<div class="card"><p>{esc(message)}</p></div>' if message else "")
     body = f"""{top}
 <div class="card"><h2>Accounts</h2>
 <table><thead><tr><th>account</th><th class="num">start</th><th class="num">current</th>
-<th class="num">trades</th><th>status</th><th></th></tr></thead>
+<th class="num">cashed out</th><th class="num">trades</th><th>status</th><th></th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table>
 <p class="caption">An account with trades cannot be deleted, archive it instead.
 Archived accounts stay in history and statistics but are not offered when opening
 a trade.</p></div>
+
+{money}
 
 <div class="card"><h2>New account</h2>
 <form method="post" action="/account/new" class="filters">
@@ -1259,6 +1433,76 @@ def delete_account(data):
     store.delete_account(ROOT, account_id)
     drop_cache()
     return f"Account {account_id} deleted."
+
+
+def money_day(text):
+    """The date of a money movement, today when the field came back empty."""
+    if not text:
+        return datetime.now()
+    try:
+        return datetime.strptime(text, "%Y-%m-%d")
+    except ValueError:
+        raise RecordError(f"bad date {text!r}: expected YYYY-MM-DD")
+
+
+def record_money(data):
+    """A deposit, a withdrawal or a fee, written down as an adjustment.
+
+    The form always sends a positive amount; the sign belongs to the kind, so
+    that a withdrawal cannot be typed in as a plus by accident."""
+    j = journal(True)
+    account = one(data, "account")
+    if account not in j.accounts:
+        raise RecordError("no such account")
+    kind = one(data, "kind")
+    if kind not in MONEY_KINDS:
+        raise RecordError(f"bad kind {kind!r}")
+    amount = abs(float(one(data, "amount", "0").replace(",", ".")))
+    if not amount:
+        raise RecordError("amount is zero")
+    day = money_day(one(data, "day"))
+    c = Adjustment(id=store.new_adjustment_id(ROOT, day, kind, account),
+                   account=account, kind=kind,
+                   amount=amount if kind == "deposit" else -amount,
+                   day=day, comment=one(data, "comment"))
+    store.save_adjustment(ROOT, c)
+    drop_cache()
+    word = {"deposit": "added to", "withdrawal": "taken off",
+            "fee": "charged to"}[kind]
+    return f"{H.money(amount)} $ {word} {account}."
+
+
+def correct_balance(data):
+    """The real balance is typed in; the journal stores the difference.
+
+    History is never edited to make a number agree with the broker: the gap is
+    a record of its own, with the day it was noticed and a comment saying why."""
+    j = journal(True)
+    account = one(data, "account")
+    if account not in j.accounts:
+        raise RecordError("no such account")
+    real = float(one(data, "balance", "0").replace(",", "."))
+    day = money_day(one(data, "day"))
+    gap = round(real - j.balance(account), 2)
+    if not gap:
+        return f"{account} already stands at {H.money(real)} $, nothing to correct."
+    c = Adjustment(id=store.new_adjustment_id(ROOT, day, "reconciliation", account),
+                   account=account, kind="reconciliation", amount=gap, day=day,
+                   comment=one(data, "comment"))
+    store.save_adjustment(ROOT, c)
+    drop_cache()
+    return (f"{account}: {H.money(gap, signed=True)} $ written down as a "
+            f"correction, the balance now reads {H.money(real)} $.")
+
+
+def delete_money(data):
+    adjustment_id = one(data, "id")
+    if not store.safe_dir_name(adjustment_id):
+        raise RecordError("bad id")
+    if store.delete_adjustment(ROOT, adjustment_id) is None:
+        raise RecordError("no such record")
+    drop_cache()
+    return f"Record {adjustment_id} moved to .trash."
 
 
 def add_pair(data):
@@ -1432,6 +1676,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for route, action in (("/account/new", create_account),
                                   ("/account/archive", toggle_archive),
                                   ("/account/delete", delete_account),
+                                  ("/money/new", record_money),
+                                  ("/money/correct", correct_balance),
+                                  ("/money/delete", delete_money),
                                   ("/pair/new", add_pair),
                                   ("/pair/delete", remove_pair)):
                 if path == route:
