@@ -174,16 +174,25 @@ def result_class(t):
     return {"Win": "win", "Lose": "lose", "BE": "flat"}.get(t.result, "muted")
 
 
+def link_cell(href, inner, cls=""):
+    """A table cell that is entirely a link, padding included.
+
+    The link fills the cell instead of sitting inside it, so a row is opened by
+    clicking anywhere on it and not only on the few characters of the date."""
+    return f'<td class="{("cell " + cls).strip()}"><a href="{href}">{inner}</a></td>'
+
+
 def trade_row(j, t):
     r = j.r(t.id)
-    return (f'<tr><td><a href="/trade/{U(t.id)}">{t.opened:%d.%m.%Y}</a></td>'
-            f'<td>{esc(t.account)}</td><td>{H.pair(t.pair)}</td>'
-            f'<td>{esc(t.direction)}</td><td>{esc(t.style)}</td>'
-            f'<td>{esc(t.entry_tf)}</td>'
-            f'<td class="num">{t.risk:g}%</td>'
-            f'<td class="{result_class(t)}">{esc(t.result or "open")}</td>'
-            f'<td class="num {result_class(t)}">{H.money(t.pnl, signed=True)}</td>'
-            f'<td class="num">{"-" if r is None else f"{r:+.2f}"}</td></tr>')
+    href = f"/trade/{U(t.id)}"
+    cells = [(f"{t.opened:%d.%m.%Y}", ""), (esc(t.account), ""),
+             (H.pair(t.pair), ""), (esc(t.direction), ""), (esc(t.style), ""),
+             (esc(t.entry_tf), ""), (f"{t.risk:g}%", "num"),
+             (esc(t.result or "open"), result_class(t)),
+             (H.money(t.pnl, signed=True), f"num {result_class(t)}"),
+             ("-" if r is None else f"{r:+.2f}", "num")]
+    return ("<tr>" + "".join(link_cell(href, inner, cls) for inner, cls in cells)
+            + "</tr>")
 
 
 def sum_class(x):
@@ -270,11 +279,13 @@ def open_positions(j):
     if not open_trades:
         return ""
     rows = "".join(
-        f'<tr><td><a href="/trade/{U(t.id)}">{t.opened:%d.%m.%Y %H:%M}</a></td>'
-        f'<td>{esc(t.account)}</td><td>{H.pair(t.pair)}</td><td>{esc(t.direction)}</td>'
-        f'<td>{esc(t.style)}</td><td class="num">{t.risk:g}%</td>'
-        f'<td class="num">{H.money(j.computed[t.id].risk_money)} $</td>'
-        f'<td><a class="btn" href="/close/{U(t.id)}">Close</a></td></tr>'
+        "<tr>" + "".join(
+            link_cell(f"/trade/{U(t.id)}", inner, cls) for inner, cls in
+            [(f"{t.opened:%d.%m.%Y %H:%M}", ""), (esc(t.account), ""),
+             (H.pair(t.pair), ""), (esc(t.direction), ""), (esc(t.style), ""),
+             (f"{t.risk:g}%", "num"),
+             (f"{H.money(j.computed[t.id].risk_money)} $", "num")])
+        + f'<td><a class="btn" href="/close/{U(t.id)}">Close</a></td></tr>'
         for t in open_trades)
     return (f'<div class="card is-open"><h2>Open positions: {len(open_trades)}</h2>'
             f'<table><thead><tr><th>entry</th><th>account</th><th>pair</th>'

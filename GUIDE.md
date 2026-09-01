@@ -79,7 +79,10 @@ that one. The **Cards** tab lists them all.
   winrates and the total R.
 - **The list of trades** is split into periods. The **Weeks / Months /
   Quarters** switch sits above the table on the right. The total row of a period
-  holds the number of trades, WR, Σ PnL and Σ R.
+  holds the number of trades, WR, Σ PnL and Σ R. **A click anywhere on a row
+  opens that trade**: its fields, the idea you wrote before the entry with its
+  screenshots, the exit moment and the conclusions. The same goes for a row in
+  the open positions block.
 - **Filters** sit behind the funnel button to the left of the switch: account, pair,
   style, direction, result, a range of months. They apply both to the list and
   to the summary tiles. While a filter is on, the funnel is lit and shows how

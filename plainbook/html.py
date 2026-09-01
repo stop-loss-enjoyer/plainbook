@@ -133,6 +133,11 @@ td{{padding:6px 10px;border-bottom:1px solid {GRID}}}
 td a{{color:{INK}}}
 td a:hover{{color:{ACCENT}}}
 tbody tr:hover td{{background:rgba(255,255,255,.028)}}
+/* a row of the journal is one big link: the cell keeps the colour it was given
+   and hands its padding to the link, so the whole row answers a click */
+td.cell{{padding:0}}
+td.cell>a{{display:block;padding:6px 10px;color:inherit}}
+td.cell>a:hover{{color:inherit}}
 td.num,th.num{{text-align:right;white-space:nowrap}}
 td.num{{font-family:{MONO};font-size:12px}}
 tr.group td{{background:{RAISED};color:{INK2};

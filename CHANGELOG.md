@@ -2,6 +2,14 @@
 
 What changed and why. Newest first.
 
+## v1.2.1, 01.09.2026
+
+- **A trade opens from anywhere on its row.** In the list of trades and in the
+  open positions block the whole row is now a link to the trade: its fields, the
+  idea written before the entry with its screenshots, the exit moment and the
+  conclusions. Before, only the date carried the link, which did not look like
+  one, so the page that holds the reasoning was hard to reach.
+
 ## v1.2, 31.08.2026
 
 - **Trading pairs carry their flags.** EURUSD is now drawn the way a terminal
