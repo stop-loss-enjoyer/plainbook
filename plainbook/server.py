@@ -19,20 +19,27 @@ from . import html as H
 from . import reports, stats, store
 from .balances import Journal
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, RecordError,
-                    DIRECTIONS, RESULTS, NEW_STYLES, CARD_SECTIONS,
-                    PAIR_NOT_SET)
+                    DIRECTIONS, RESULTS, CARD_SECTIONS, PAIR_NOT_SET)
 
 PORT = int(os.environ.get("PLAINBOOK_PORT") or 8778)
 # the journal root can be overridden; the tests and a split data folder use it
 ROOT = os.path.abspath(os.environ.get("PLAINBOOK_ROOT") or
                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DRAFTS = os.path.join(ROOT, ".drafts")
-TIMEFRAMES = ["M15", "H1", "H4", "D1"]
 # money moved by hand. A correction is not offered here: it has a form of its
 # own, where the real balance is typed in and the difference is worked out.
 MONEY_KINDS = ["deposit", "withdrawal", "fee"]
-EXECUTION = ["Market Entry", "IDM", "SNR", "FVG"]
 esc = H.esc
+
+
+def offered(kind, *own):
+    """A list of the trade form, plus what the trade being edited carries.
+
+    A word the owner took out of a list must not vanish from a trade that has
+    it: the form sends back what it shows, so a checkbox that is not drawn is a
+    deletion."""
+    words = store.all_words(ROOT, kind)
+    return words + [w for w in own if w and w not in words]
 
 _cache = {"journal": None, "time": 0.0}
 
@@ -332,13 +339,19 @@ def home_page(q):
     if group not in dict(GROUPS):
         group = "week"
     s = stats.summary(j, trades)
+    styles = store.all_words(ROOT, "styles")
+    # a style of the list gets a tile once it has trades: a row of empty tiles
+    # says nothing and pushes the ones that count off the screen
+    traded = [name for name in styles if any(t.style == name for t in j.trades)]
     tiles = (f'<div class="tiles">'
              + period_tile(j, trades, group)
              + f'<div class="tile"><div class="name">selection</div>'
              f'<div class="value">{s.trades}</div><div class="sub">trades</div></div>'
-             + winrate_tile("winrate overall", NEW_STYLES, j, trades)
-             + winrate_tile("winrate EMT", ("EMT",), j, trades)
-             + winrate_tile("winrate EMT prop", ("EMT prop",), j, trades)
+             # the styles come from the list on the Accounts tab: one added
+             # or dropped there is added or dropped here as well
+             + winrate_tile("winrate overall", styles, j, trades)
+             + "".join(winrate_tile(f"winrate {name}", (name,), j, trades)
+                       for name in traded)
              # There is deliberately no total in money here: it would add up the
              # dollars of a prop account and of your own, and those are different
              # kinds of money. The total of a selection is honestly said in R.
@@ -671,7 +684,8 @@ def trade_form(t=None, token=""):
     checkboxes = "".join(
         f'<label class="caption" style="display:inline-block;margin-right:10px">'
         f'<input type="checkbox" name="execution" value="{esc(v)}"'
-        f'{" checked" if v in chosen else ""}> {esc(v)}</label>' for v in EXECUTION)
+        f'{" checked" if v in chosen else ""}> {esc(v)}</label>'
+        for v in offered("execution", *chosen))
     # A list of pairs drawn by the browser cannot carry the flags, and it does
     # not close on a second click on the field. This one is ours: the same
     # coins as everywhere else, and it opens and shuts on the field.
@@ -690,6 +704,23 @@ def trade_form(t=None, token=""):
 
     action = f"/edit/{U(t.id)}" if editing else "/new"
     title = "Edit trade" if editing else "New trade"
+    # The same position taken on two accounts is entered once. The copy repeats
+    # the idea and the screenshots and differs only in the account and the risk,
+    # which is the only thing that differs in real life too.
+    duplicate = "" if editing else f"""
+<details class="fold" style="margin-top:14px">
+<summary>Duplicate on another account
+<span class="caption">same idea and screenshots, its own risk</span></summary>
+<div class="fields">
+<div class="field"><label>account</label>
+{select("dup_account", accounts, "", empty="-")}</div>
+<div class="field"><label>risk, %</label>
+<input type="number" name="dup_risk" step="0.05" min="0.05" style="width:90px"
+ value="1"></div>
+</div>
+<p class="caption" style="margin:8px 0 0">Pick an account and the journal writes
+two trades: this one, and a copy on that account with the risk set here.</p>
+</details>"""
     # For a closed trade the exit and the conclusions are edited here too,
     # or editing the idea would wipe their screenshots: the shots folder is
     # rewritten from whatever the form sent.
@@ -719,10 +750,11 @@ def trade_form(t=None, token=""):
 <div class="field"><label>direction</label>
 {select("direction", DIRECTIONS, t.direction if editing else "")}</div>
 <div class="field"><label>style</label>
-{select("style", NEW_STYLES if not editing else sorted({*NEW_STYLES, t.style}),
+{select("style", offered("styles", t.style if editing else ""),
         t.style if editing else "")}</div>
 <div class="field"><label>entry TF</label>
-{select("entry_tf", TIMEFRAMES, t.entry_tf if editing else "", empty="-")}</div>
+{select("entry_tf", offered("timeframes", t.entry_tf if editing else ""),
+        t.entry_tf if editing else "", empty="-")}</div>
 <div class="field"><label>risk, %</label>
 <input type="number" name="risk" step="0.05" min="0.05" style="width:90px"
  value="{t.risk if editing else 1}"></div>
@@ -731,6 +763,7 @@ def trade_form(t=None, token=""):
  onclick="this.showPicker && this.showPicker()"></div>
 </div>
 <p class="caption" style="margin:8px 0 0">execution: {checkboxes}</p>
+{duplicate}
 </div>
 <div id="blocks">{blocks}</div>
 <template id="block-template">{block_inside("__N__")}</template>
@@ -895,12 +928,19 @@ def blocks_from_form(data):
     return blocks
 
 
-def create_trade(data):
-    token = one(data, "token")
+def build_trade(data, token, account="", risk=None):
+    """Writes one trade from the new trade form.
+
+    The duplicate is written through here as well, with an account and a risk
+    of its own; everything else it reads from the same form."""
     entry = datetime.strptime(one(data, "entry"), "%Y-%m-%dT%H:%M")
     pair = one(data, "pair") or PAIR_NOT_SET
     t = Trade(id=store.new_id(ROOT, entry, pair), account="")
     apply_fields(t, data)
+    if account:
+        t.account = account
+    if risk is not None:
+        t.risk = risk
     zones, t.idea = {}, []
     for n, block in blocks_from_form(data):
         paths = [os.path.join(draft_dir(token), name)
@@ -914,6 +954,23 @@ def create_trade(data):
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     store.save_trade(ROOT, t)
+    return t
+
+
+def create_trade(data):
+    """One trade, or two when an account for a duplicate was picked.
+
+    The copy is written before the drafts are swept, so both trades get the
+    screenshots that were pasted into the form."""
+    token = one(data, "token")
+    twin = one(data, "dup_account")
+    if twin and twin == one(data, "account"):
+        raise RecordError("the duplicate needs an account of its own")
+    t = build_trade(data, token)
+    if twin:
+        risk = one(data, "dup_risk")
+        build_trade(data, token, account=twin,
+                    risk=float(risk.replace(",", ".")) if risk else t.risk)
     drop_draft(token)
     drop_cache()
     return t
@@ -1197,6 +1254,7 @@ def report_kind(period):
 # Which filter of the journal a column of a report belongs to. The heading is
 # the one written into the file, so a report built long ago still links.
 REPORT_LINKS = {"By style": "style", "By pair": "pair", "By account": "account",
+                "By direction": "direction",
                 "Balance change by account": "account"}
 
 
@@ -1206,6 +1264,9 @@ def report_link(period):
     since, until = reports.period_months(period)
 
     def link(section, value):
+        # the best and the worst row name a trade, so they lead to it directly
+        if section == "Best and worst trade" and value:
+            return f"/trade/{U(value)}"
         field = REPORT_LINKS.get(section)
         if not field or not value:
             return None
@@ -1218,17 +1279,30 @@ def report_page(period):
     head, body = reports.read(ROOT, period)
     if body is None:
         return None
+    j = journal()
+    trades = reports.trades_of_period(j, period)
     conclusions = reports.previous_conclusions(ROOT, period)
     without = re.split(r"^## Conclusions\s*$", body, maxsplit=1, flags=re.M)[0]
+    # the summary, then the rings, then the tables: the picture stands next to
+    # the few figures it draws, not at the foot of a page of tables
+    top, _, rest = without.partition("\n### ")
+    link = report_link(period)
     form = f"""<form method="post" action="/report/{U(period)}">
 <textarea name="conclusions" placeholder="What you learned this period">{esc(conclusions)}</textarea>
 <p><button class="btn primary">Save conclusions</button>
 <button class="btn" name="rebuild" value="1">Recalculate</button></p></form>"""
-    html = (f'<div class="card">{md_to_html(without, report_link(period))}'
-            f'<p class="caption">A pair, an account or a style in these tables '
-            f'opens the trades behind the row, over the same months. '
-            f'Updated {esc(head.get("updated", ""))}.</p></div>'
-            f'<div class="card"><h2>Conclusions</h2>{form}</div>')
+    caption = (f'<p class="caption">A pair, an account, a style, a direction or '
+               f'one of the two trades named in these tables opens what is behind '
+               f'the row, over the same months. The figures are the ones counted '
+               f'at the last build, {esc(head.get("updated", ""))}; the rings are '
+               f'drawn from the journal as it is now, so press Recalculate if a '
+               f'trade of the period changed since.</p>')
+    html = (f'<div class="card">{md_to_html(top, link)}'
+            f'{"" if rest else caption}</div>'
+            f'{r_rings(j, trades)}'
+            + (f'<div class="card">{md_to_html("### " + rest, link)}{caption}</div>'
+               if rest else "")
+            + f'<div class="card"><h2>Conclusions</h2>{form}</div>')
     return H.page(period, html, "reports",
                   '<a class="btn" href="/reports">All reports</a>')
 
@@ -1281,6 +1355,60 @@ def accounts_page(message=""):
             if p not in from_trades else '<span class="caption">-</span>')
         + '</td></tr>'
         for p in sorted(set(pairs) | from_trades))
+
+    def times(n):
+        return "not used yet" if not n else f"{n} trade" if n == 1 else f"{n} trades"
+
+    def word_button(action, kind, word, label):
+        return (f'<form method="post" action="/list/{action}" style="display:inline">'
+                f'<input type="hidden" name="kind" value="{esc(kind)}">'
+                f'<input type="hidden" name="word" value="{esc(word)}">'
+                f'<button class="btn">{label}</button></form>')
+
+    def word_rows(kind, used):
+        """What the form offers, and below it what the trades carry beyond that.
+
+        A word only the trades have is the way back for a style you retired:
+        it says how many trades hold it, and Add puts it in the form again."""
+        words = store.all_words(ROOT, kind)
+        rows = [f'<tr><td>{esc(w)}</td>'
+                f'<td class="caption">{times(used.get(w, 0))}</td>'
+                f'<td>{word_button("delete", kind, w, "Remove")}</td></tr>'
+                for w in words]
+        rows += [f'<tr><td>{esc(w)}</td>'
+                 f'<td class="caption">{times(used[w])}, not offered</td>'
+                 f'<td>{word_button("new", kind, w, "Add")}</td></tr>'
+                 for w in sorted(set(used) - set(words))]
+        return "".join(rows) or ('<tr><td colspan="3" class="caption">'
+                                 'the list is empty</td></tr>')
+
+    def counted(pick):
+        used = {}
+        for t in j.trades:
+            for word in pick(t):
+                if word:
+                    used[word] = used.get(word, 0) + 1
+        return used
+
+    lists = ""
+    for kind, label, hint in (
+            ("styles", "Trading styles", "scalp"),
+            ("timeframes", "Timeframes", "M5"),
+            ("execution", "Execution formats", "OB retest")):
+        used = counted({"styles": lambda t: [t.style],
+                        "timeframes": lambda t: [t.entry_tf],
+                        "execution": lambda t: t.execution}[kind])
+        lists += f"""<details class="fold"><summary>{label}
+<span class="caption">{len(store.all_words(ROOT, kind))} in the list</span></summary>
+<form method="post" action="/list/new" class="filters">
+<input type="hidden" name="kind" value="{kind}">
+<div><label>add</label><input type="text" name="word" placeholder="{hint}"
+ required style="width:160px"></div>
+<div><button class="btn primary">Add</button></div>
+</form>
+<table><thead><tr><th>{label.lower()}</th><th>trades</th><th></th></tr></thead>
+<tbody>{word_rows(kind, used)}</tbody></table></details>
+"""
 
     live = [a for a in sorted(j.accounts) if not j.accounts[a].archived]
     every = sorted(j.accounts)
@@ -1390,7 +1518,16 @@ a trade.</p></div>
 <table><thead><tr><th>pair</th><th>source</th><th></th></tr></thead>
 <tbody>{pair_rows}</tbody></table>
 <p class="caption">Removing a pair only takes it out of the suggestion list;
-trades already recorded with it are not touched.</p></div>"""
+trades already recorded with it are not touched.</p></div>
+
+<div class="card"><h2>The trade form</h2>
+{lists}
+<p class="caption">These are the words the form offers: the style, the entry
+timeframe and the execution checkboxes. A new one goes to the end of its list,
+which is why the timeframes stay in the order you trade them. Removing a word
+only stops it being offered: the trades that carry it keep it, and it still
+shows in the filters, the statistics and the reports. Every style in the list
+gets a winrate tile of its own on the journal page.</p></div>"""
     return H.page("Accounts", body, "accounts")
 
 
@@ -1517,6 +1654,39 @@ def remove_pair(data):
     pair = one(data, "pair").upper()
     store.save_pairs(ROOT, [p for p in store.all_pairs(ROOT) if p != pair])
     return f"Pair {pair} removed from the suggestion list."
+
+
+# a word of a list: no line breaks, no header trouble, short enough for a select
+_WORD = re.compile(r"^[^\s][^\n\r:]{0,23}$")
+
+
+def _kind(data):
+    kind = one(data, "kind")
+    if kind not in store.VOCABULARY:
+        raise RecordError("no such list")
+    return kind
+
+
+def add_word(data):
+    kind, word = _kind(data), one(data, "word")
+    if not _WORD.match(word):
+        raise RecordError("a word of up to 24 characters, without a colon")
+    words = store.all_words(ROOT, kind)
+    if word.lower() in {w.lower() for w in words}:
+        raise RecordError(f"{word} is already in the list")
+    store.save_words(ROOT, kind, words + [word])
+    return f"{word} is offered in the trade form now."
+
+
+def remove_word(data):
+    kind, word = _kind(data), one(data, "word")
+    words = store.all_words(ROOT, kind)
+    if kind == "styles" and len(words) <= 1:
+        raise RecordError("a trade needs a style: keep at least one in the list")
+    if word not in words:
+        raise RecordError(f"{word} is not in the list")
+    store.save_words(ROOT, kind, [w for w in words if w != word])
+    return f"{word} is no longer offered in the trade form."
 
 
 # --- HTTP ------------------------------------------------------------------
@@ -1680,7 +1850,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   ("/money/correct", correct_balance),
                                   ("/money/delete", delete_money),
                                   ("/pair/new", add_pair),
-                                  ("/pair/delete", remove_pair)):
+                                  ("/pair/delete", remove_pair),
+                                  ("/list/new", add_word),
+                                  ("/list/delete", remove_word)):
                 if path == route:
                     # Accounts and pairs report back on their own page rather
                     # than on a separate error page: you stay where you were.

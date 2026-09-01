@@ -41,7 +41,13 @@ neither won nor lost.
 **Trades, written in two steps.** You open a position (account, pair, direction,
 style, timeframes, risk, screenshots of the idea) and close it later with the
 result, the PnL, the exit screenshot and your conclusions. The idea
-gets written down before the market says who was right.
+gets written down before the market says who was right. The same position taken
+on two accounts is filled in once: a duplicate goes to the second account with a
+risk of its own.
+
+**The words in the form are yours.** The trading styles, the entry timeframes
+and the execution formats are lists you edit on the Accounts tab. A word taken
+out of a list only stops being offered; the trades that carry it keep it.
 
 **A daily card.** The day reviewed on the pattern of a paper Daily Report Card:
 process grade, opportunity quality, focus, what went well, errors, best trade,
@@ -51,8 +57,11 @@ editable.
 **Statistics that answer honest questions.** An equity curve per account, the
 distribution of R as two rings, losses and wins each cut by size, slices by
 style, pair and account, and a monthly or quarterly report built on a button,
-with the figures recomputed and your conclusions kept. Every row of a report is
-a link back to the trades it was counted from.
+with the figures recomputed and your conclusions kept. A report carries the
+period before it beside every figure, the rings of that period, the deepest fall
+from a high, the slices by direction, entry timeframe and execution format, the
+best and the worst trade, and the grades of the daily cards. Every row of a
+report is a link back to the trades it was counted from.
 
 **Pairs you recognise before you read them.** EURUSD carries two round flags,
 GER40 the German one, gold and the coins a lettered face. The flags are drawn in
@@ -83,7 +92,7 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in under a second.** 85 of them, no fixtures, no network.
+- **The tests finish in under a second.** 94 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
@@ -273,8 +282,8 @@ Stated plainly, so nobody waits for it:
 ## FAQ
 
 **Forex only?** No. A pair is free text, so stocks, futures and crypto tickers
-all work. The vocabulary of trade styles is the one place with fixed values, and it
-lives in `plainbook/model.py`.
+all work. The trading styles, the entry timeframes and the execution formats are
+lists you edit on the Accounts tab, so the words in the form are your own.
 
 **Can I edit the files by hand?** Yes, that is the point. Keep the header keys
 intact; everything else is ordinary markdown.

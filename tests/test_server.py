@@ -533,6 +533,158 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/report/2026-07")
         self.assertNotIn("write it in the browser", html)
 
+    def test_35_a_trade_is_duplicated_on_a_second_account(self):
+        """One form, two trades: the same idea, another account, another risk."""
+        self.post("/account/new", {"id": "prop-100k", "name": "FTMO 100k",
+                                   "start": "100000", "currency": "USD"})
+        _, html = self.get("/new")
+        self.assertIn("Duplicate on another account", html)
+        token = self.form_token(html)
+        shot = self.paste_shot(token, "idea-1")
+        before = {t.id for t in store.all_trades(self.root)}
+        code, where = self.post("/new", {
+            "token": token, "blocks": "1", "account": "bybit", "pair": "GBPUSD",
+            "direction": "short", "style": "swing", "entry_tf": "H4",
+            "risk": "2", "entry": "2026-08-30T09:00", "idea_tf_1": "H4",
+            "idea_text_1": "range high, selling the sweep",
+            "file_idea-1": shot["file"],
+            "dup_account": "prop-100k", "dup_risk": "0.5"})
+        self.assertEqual(code, 200)
+        fresh = [t for t in store.all_trades(self.root) if t.id not in before]
+        self.assertEqual(len(fresh), 2)
+        origin = next(t for t in fresh if t.account == "bybit")
+        copy = next(t for t in fresh if t.account == "prop-100k")
+        self.assertEqual(where.rsplit("/", 1)[1],
+                         urllib.parse.quote(origin.id))   # opens the one entered
+        self.assertEqual(origin.risk, 2)
+        self.assertEqual(copy.risk, 0.5)
+        for t in (origin, copy):
+            self.assertEqual(t.pair, "GBPUSD")
+            self.assertEqual(t.direction, "short")
+            self.assertEqual(t.idea[0].text, "range high, selling the sweep")
+            # each has its own copy of the screenshot on the disk
+            self.assertTrue(os.path.exists(os.path.join(
+                store.shots_dir(self.root, t.id), "idea-01-01.png")))
+
+    def test_36_a_duplicate_on_the_same_account_is_refused(self):
+        _, html = self.get("/new")
+        token = self.form_token(html)
+        before = len(store.all_trades(self.root))
+        data = urllib.parse.urlencode({
+            "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+            "direction": "long", "style": "swing", "risk": "1",
+            "entry": "2026-08-30T11:00", "idea_text_1": "no",
+            "dup_account": "bybit", "dup_risk": "1"}).encode()
+        req = urllib.request.Request(self.url("/new"), data=data)
+        try:
+            urllib.request.urlopen(req)
+            self.fail("two trades on one account went through")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 400)
+        self.assertEqual(len(store.all_trades(self.root)), before)
+
+    def test_37_the_trade_form_lists_are_edited_on_the_accounts_tab(self):
+        """Styles, timeframes and execution formats belong to the owner."""
+        _, html = self.get("/new")
+        self.assertIn(">swing<", html)                      # the defaults are there
+        self.assertIn("Market Entry", html)
+
+        self.post("/list/new", {"kind": "styles", "word": "scalp"})
+        self.post("/list/new", {"kind": "timeframes", "word": "M5"})
+        self.post("/list/new", {"kind": "execution", "word": "OB retest"})
+        _, html = self.get("/new")
+        field = re.search(r'<select name="style">(.*?)</select>', html, re.S).group(1)
+        self.assertIn("scalp", field)
+        tf = re.search(r'<select name="entry_tf">(.*?)</select>', html, re.S).group(1)
+        self.assertEqual(tf.index("M5") > tf.index("D1"), True)   # added at the end
+        self.assertIn("OB retest", html)
+        self.assertEqual(store.all_words(self.root, "styles")[-1], "scalp")
+
+        # the same word twice is refused, and the list is left as it was
+        _, where = self.post("/list/new", {"kind": "styles", "word": "SCALP"})
+        self.assertIn("already in the list", urllib.parse.unquote(where))
+        self.assertEqual(store.all_words(self.root, "styles").count("scalp"), 1)
+
+        self.post("/list/delete", {"kind": "timeframes", "word": "M15"})
+        tf = re.search(r'<select name="entry_tf">(.*?)</select>',
+                       self.get("/new")[1], re.S).group(1)
+        self.assertNotIn("M15", tf)
+        self.assertIn("H4", tf)                              # the rest is untouched
+
+    def test_38_a_word_taken_out_stays_in_the_trades_that_carry_it(self):
+        _, html = self.get("/new")
+        token = self.form_token(html)
+        code, where = self.post("/new", {
+            "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+            "direction": "long", "style": "scalp", "entry_tf": "M5",
+            "execution": ["OB retest"], "risk": "1",
+            "entry": "2026-08-31T08:00", "idea_text_1": "quick one"})
+        self.assertEqual(code, 200)
+        trade_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+
+        self.post("/list/delete", {"kind": "styles", "word": "scalp"})
+        self.post("/list/delete", {"kind": "timeframes", "word": "M5"})
+        self.post("/list/delete", {"kind": "execution", "word": "OB retest"})
+        # the trade still reads back whole, and its own words are in its form
+        t = store.load_trade(self.root, trade_id)
+        self.assertEqual((t.style, t.entry_tf, t.execution),
+                         ("scalp", "M5", ["OB retest"]))
+        _, form = self.get(f"/edit/{urllib.parse.quote(trade_id)}")
+        self.assertIn('value="scalp" selected', form)
+        self.assertIn("OB retest", form)
+        self.assertIn("M5", form)
+        # saving the form back does not drop them
+        edit_token = self.form_token(form)
+        self.post(f"/edit/{urllib.parse.quote(trade_id)}", {
+            "token": edit_token, "blocks": "1", "account": "bybit",
+            "pair": "EURUSD", "direction": "long", "style": "scalp",
+            "entry_tf": "M5", "execution": ["OB retest"], "risk": "1",
+            "entry": "2026-08-31T08:00", "idea_text_1": "quick one"})
+        t = store.load_trade(self.root, trade_id)
+        self.assertEqual((t.style, t.entry_tf, t.execution),
+                         ("scalp", "M5", ["OB retest"]))
+        # and the accounts page offers it back, saying how many trades hold it
+        _, page = self.get("/accounts")
+        self.assertIn("not offered", page)
+        store.delete_trade(self.root, trade_id)
+
+    def test_39_the_last_style_is_not_removed(self):
+        for word in store.all_words(self.root, "styles")[1:]:
+            self.post("/list/delete", {"kind": "styles", "word": word})
+        left = store.all_words(self.root, "styles")
+        self.assertEqual(len(left), 1)
+        _, where = self.post("/list/delete", {"kind": "styles", "word": left[0]})
+        self.assertIn("at least one", urllib.parse.unquote(where))
+        self.assertEqual(store.all_words(self.root, "styles"), left)
+        # a style of the list has a winrate tile of its own once it has trades
+        _, home = self.get("/")
+        traded = {t.style for t in store.all_trades(self.root)}
+        self.assertEqual(f"winrate {left[0]}" in home, left[0] in traded)
+        for style in traded & set(left):
+            self.assertIn(f"winrate {style}", home)
+
+    def test_40_a_report_carries_the_slices_the_charts_and_the_period_before(self):
+        self.post("/report/build", {"what": "month", "period_month": "2026-08"})
+        code, html = self.get("/report/2026-08")
+        self.assertEqual(code, 200)
+        for heading in ("By direction", "By entry TF", "By execution",
+                        "Best and worst trade", "Process", "R distribution",
+                        "deepest fall from a high"):
+            self.assertIn(heading, html, heading)
+        self.assertIn("July 2026", html)                 # the period compared with
+        self.assertIn("<svg", html)                      # the rings are drawn
+        # the named trade is a link to the trade itself
+        best = re.search(r'<a href="/trade/([^"]+)">', html)
+        self.assertTrue(best)
+        self.assertEqual(self.get("/trade/" + best.group(1))[0], 200)
+
+    def test_41_a_report_of_an_empty_period_still_opens(self):
+        self.post("/report/build", {"what": "month", "period_month": "2026-05"})
+        code, html = self.get("/report/2026-05")
+        self.assertEqual(code, 200)
+        self.assertIn("April 2026", html)                # nothing to compare with
+        self.assertIn("Nothing to plot yet", html)
+
 
 if __name__ == "__main__":
     unittest.main()

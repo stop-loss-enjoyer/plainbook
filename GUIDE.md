@@ -26,11 +26,13 @@ who was right. In hindsight an idea always looks tidier than it was.
 - **pair**: the list under the field carries the same flags the journal does,
   and it opens and shuts on a click on the field. Typing filters it; a pair
   that is not in the list is simply typed in and saved with the trade.
-- **direction**, **style**, **entry TF**.
+- **direction**, **style**, **entry TF**: the styles and the timeframes come
+  from your own lists, edited on the Accounts tab.
 - **risk, %**: the risk as a percent of the current computed balance of the
   account. What that is in money shows on the trade page once it is saved.
 - **entry**: date and time of entry; clicking the field opens a calendar.
-- **execution**: the checkboxes: Market Entry, IDM, SNR, FVG.
+- **execution**: the checkboxes. They come from your list too, so the formats
+  you actually trade are the ones offered.
 
 Below is the idea block: timeframe, text and screenshots. **+ idea block** adds
 another one when the idea rests on several timeframes.
@@ -38,6 +40,14 @@ another one when the idea rests on several timeframes.
 **Screenshots**: click inside the dashed frame and press **Ctrl+V**. Whatever is
 on the clipboard goes in: a shot from TradingView, a cut of the screen. To take
 a screenshot out, press the cross in its top right corner.
+
+**Duplicate on another account** is for the same position taken twice, for
+example on the exchange and on a prop account. Open the block, pick the second
+account and the risk it carries there, and **Open trade** writes two trades: the
+one you filled in, and a copy of it on that account. They carry the same pair,
+direction, style, entry, idea text and screenshots, and differ only in the
+account and the risk, so each is measured against its own balance. After that
+they are two ordinary trades: each is closed with its own result and PnL.
 
 **Open trade** saves it. The position counts as open until it is closed.
 
@@ -189,6 +199,24 @@ The **Accounts** tab.
   gets a plain coin with its first letters, and is written out in full as
   before, so nothing depends on the icon.
 
+- **The trade form** holds the other three lists: the trading styles, the
+  timeframes of the entry TF field and the execution checkboxes. Each opens on a
+  click, takes a new word in the field and removes one with the button next to
+  it. A new word goes to the end of its list, so the timeframes stay in the
+  order you trade them rather than in the alphabet.
+
+  Removing a word only stops the form offering it. The trades that carry it keep
+  it: it stays in the filters, the statistics and the reports, it is still shown
+  when that trade is edited, and the list on the Accounts tab shows it below the
+  others, saying how many trades hold it, with an **Add** button to offer it
+  again. That is how a style you stopped trading is retired without touching a
+  single record.
+
+  Every style you keep in the list gets a winrate tile of its own on the journal
+  page, as soon as it has trades. **Winrate overall** counts the styles in the
+  list, which is the other reason to take a style out: it stops counting towards
+  what you trade now.
+
 **The balance does not match the real one?** Do not change the start balance and
 do not edit old trades: use **Correct a balance** above. The gap is written down
 as a record of its own in `journal/adjustments/`, with the kind
@@ -202,10 +230,27 @@ an ordinary file in `journal/reports/`. Building it again recomputes the figures
 and **never overwrites your conclusions**, so you can write them right in the
 report.
 
-**Every row leads to its trades.** Click a pair, an account or a style in the
-report tables and the journal opens filtered to it, over the months of that
-report. That is how a row like "XAU, 5 trades, -4.56 R" turns back into the five
-trades it was counted from, with the idea you wrote before each entry.
+**What is in a report.** The summary, with the same figures for the period
+before it in the next column, so every number is read against something. Under
+it the period cut by style, by pair, by account, by direction, by entry
+timeframe and by execution format; the balance of each account before and after;
+the best and the worst trade by R; and the process, meaning how many daily cards
+you wrote for the days you traded and what grades you gave them. In the summary
+there is one figure the tabs do not show: **deepest fall from a high**, how far
+the period went below its own best point, in R. A month can end in plus and
+still have been survived rather than traded.
+
+**The rings** stand right under the summary, before the tables: the R
+distribution, the same as on the Statistics tab but counted on this period
+alone. The tables are the numbers frozen when the report was last built; the
+rings are drawn from the journal as it is now, so if you edited a trade of that
+period, press **Recalculate**.
+
+**Every row leads to its trades.** Click a pair, an account, a style or a
+direction in the report tables and the journal opens filtered to it, over the
+months of that report. That is how a row like "XAU, 5 trades, -4.56 R" turns
+back into the five trades it was counted from, with the idea you wrote before
+each entry. The best and the worst trade lead straight to the trade itself.
 
 ## Where the data lives
 

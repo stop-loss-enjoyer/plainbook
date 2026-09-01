@@ -114,7 +114,10 @@ class TradeRoundTrip(unittest.TestCase):
         with self.assertRaises(RecordError):
             sample_trade(direction="up").check()
         with self.assertRaises(RecordError):
-            sample_trade(style="scalp").check()
+            sample_trade(style="").check()
+        # a style is the owner's word, not a fixed list: one taken out of the
+        # trade form must still load in the trades that carry it
+        sample_trade(style="scalp").check()
         with self.assertRaises(RecordError):
             sample_trade(pnl=None).check()          # closed without PnL
         with self.assertRaises(RecordError):

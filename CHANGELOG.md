@@ -2,6 +2,66 @@
 
 What changed and why. Newest first.
 
+## v1.4, not released yet
+
+A trade written once for two accounts, three lists that belong to you, and
+reports that say more than the numbers of the period.
+
+### Entering a trade
+
+- **A trade can be opened on two accounts at once.** The new trade form has a
+  **Duplicate on another account** block: pick the second account and the risk
+  it takes there, and opening the trade writes two, with the same pair,
+  direction, style, entry, idea and screenshots. The same position taken on the
+  exchange and on a prop account used to mean filling the form twice and pasting
+  every screenshot again.
+
+### Your own words
+
+- **The trading styles, the timeframes and the execution formats are your own
+  lists.** They used to be written into the program: three styles, four
+  timeframes, four formats, and a change meant editing the code. The Accounts
+  tab now has a **The trade form** card where each list takes a new word and
+  gives one back. A new word goes to the end of its list, so the timeframes stay
+  in the order you trade them.
+
+- **Removing a word only stops it being offered.** The trades that carry it keep
+  it: it stays in the filters, the statistics and the reports, it is still drawn
+  in the form of such a trade, and the list shows it below the others with the
+  number of trades holding it and an **Add** button, so a style you retired can
+  come back. That is how a legacy style is put aside without touching a record.
+  The lists live in `journal/vocabulary.md`, next to the pairs.
+
+- **A winrate tile per style.** The journal page used to have a tile for EMT and
+  one for EMT prop, because those were written into the program. Now every style
+  in your list gets one as soon as it has trades, and **winrate overall** counts
+  the styles the list holds.
+
+### Reports
+
+- **The rings are in the report.** A monthly or quarterly report draws the R
+  distribution, the same rings the Statistics tab has, counted on that period
+  alone. They stand right under the summary, where the first figures of the
+  period are, and before the tables.
+
+- **The period before it, in a second column.** A winrate or a Σ R is seen
+  moving rather than standing alone.
+
+- **The deepest fall from a high**, in R: how far the period went below its own
+  best point. A month can end in plus and still have been survived rather than
+  traded.
+
+- **Three more slices**: by direction, by entry timeframe and by execution
+  format, which says which setups paid. A trade counts in every execution format
+  it carries, so that table holds more trades than the period has.
+
+- **The best and the worst trade** of the period by R, each a link to the trade
+  itself.
+
+- **The process**: how many daily cards were written for the days that had
+  trades, and what grades they carry. A report is about the result; the cards
+  are about how it was traded.
+
 ## v1.3, 01.09.2026
 
 Money that moves outside trades, and charts that can be read.

@@ -14,10 +14,15 @@ from datetime import date, datetime
 
 DIRECTIONS = ("long", "short")
 RESULTS = ("Win", "Lose", "BE")
-# only the first three are offered for new trades; intraday is legacy data
-STYLES = ("swing", "EMT", "EMT prop", "intraday")
-NEW_STYLES = ("swing", "EMT", "EMT prop")
 ADJUSTMENT_KINDS = ("deposit", "withdrawal", "fee", "reconciliation")
+
+# The three lists the trade form offers. They belong to the owner: the lists
+# are edited in the interface and kept in journal/vocabulary.md, and these are
+# what a journal starts with. A trade is not checked against them, because a
+# word taken out of a list must still load in the trades that carry it.
+STYLES = ("swing", "EMT", "EMT prop")
+TIMEFRAMES = ("M15", "H1", "H4", "D1")
+EXECUTION = ("Market Entry", "IDM", "SNR", "FVG")
 
 PAIR_NOT_SET = "pair not set"
 
@@ -79,8 +84,8 @@ class Trade:
             raise RecordError(f"{self.id}: account is not set")
         if self.direction not in DIRECTIONS:
             raise RecordError(f"{self.id}: bad direction {self.direction!r}")
-        if self.style not in STYLES:
-            raise RecordError(f"{self.id}: bad style {self.style!r}")
+        if not self.style:
+            raise RecordError(f"{self.id}: style is not set")
         if self.opened is None:
             raise RecordError(f"{self.id}: entry date is missing")
         if not self.risk or self.risk <= 0:

@@ -117,5 +117,43 @@ class RSplitCase(unittest.TestCase):
                           sum(n for _, n, _ in wins), be), (0, 0, 1))
 
 
+class DrawdownAndSlicesCase(unittest.TestCase):
+    """Figures the reports lean on: the deepest fall, and a field held twice."""
+
+    def journal(self, results):
+        accounts = {"bybit": Account(id="bybit", start_balance=10000)}
+        trades = []
+        for i, (pnl, execution) in enumerate(results, 1):
+            trades.append(Trade(
+                id=f"t{i}", account="bybit", pair="EURUSD", direction="long",
+                style="swing", risk=1.0, execution=execution,
+                opened=datetime(2026, 8, i), closed=datetime(2026, 8, i),
+                result="Win" if pnl > 0 else "Lose" if pnl < 0 else "BE",
+                pnl=pnl))
+        return Journal(accounts, trades, [])
+
+    def test_the_drawdown_is_measured_from_the_high_of_the_period(self):
+        # +2R, then two losses, then +1R: the fall from the high is about -2R,
+        # even though the period ends higher than it started. Not exactly -2R,
+        # because the two losses are measured against a balance the first win
+        # had already raised
+        j = self.journal([(200, []), (-100, []), (-100, []), (100, [])])
+        self.assertAlmostEqual(stats.drawdown_r(j, j.trades), -1.97, places=2)
+        # a period that only goes up never fell
+        j = self.journal([(100, []), (100, [])])
+        self.assertEqual(stats.drawdown_r(j, j.trades), 0.0)
+
+    def test_a_trade_counts_in_every_execution_format_it_carries(self):
+        j = self.journal([(100, ["IDM", "SNR"]), (-100, ["SNR"])])
+        rows = dict(stats.by_values(j, j.trades, lambda t: t.execution or ["not set"]))
+        self.assertEqual(rows["SNR"].trades, 2)
+        self.assertEqual(rows["IDM"].trades, 1)
+        self.assertEqual(rows["IDM"].wins, 1)
+        # a trade without the field is not silently dropped
+        j = self.journal([(100, [])])
+        rows = dict(stats.by_values(j, j.trades, lambda t: t.execution or ["not set"]))
+        self.assertEqual(rows["not set"].trades, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

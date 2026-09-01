@@ -54,14 +54,41 @@ def summary(journal, trades):
 
 def by_field(journal, trades, key):
     """[(value, Summary)] ordered by the number of trades, descending."""
+    return by_values(journal, trades, lambda t: [key(t)])
+
+
+def by_values(journal, trades, key):
+    """The same, for a field a trade can hold several of at once.
+
+    Execution is a list on the trade: one entered on IDM and on SNR stands in
+    both rows, so that table counts more trades than the period has. Every
+    other slice puts a trade in exactly one row."""
     groups = {}
     for t in trades:
         if t.is_open:
             continue
-        groups.setdefault(key(t), []).append(t)
+        for value in key(t) or [""]:
+            groups.setdefault(value, []).append(t)
     rows = [(value, summary(journal, xs)) for value, xs in groups.items()]
     rows.sort(key=lambda x: -x[1].trades)
     return rows
+
+
+def drawdown_r(journal, trades):
+    """The deepest fall of the cumulative R curve, zero or negative.
+
+    The trades are taken in the order they closed, because that is the order
+    the account felt them: a trade opened first but closed last moves the curve
+    last. Says how far the equity went below its own high inside the selection,
+    which the total R of the period does not show."""
+    curve = sorted((t.closed, journal.r(t.id) or 0.0) for t in trades
+                   if not t.is_open and t.closed)
+    peak = total = worst = 0.0
+    for _, r in curve:
+        total += r
+        peak = max(peak, total)
+        worst = min(worst, total - peak)
+    return worst
 
 
 # The R buckets of the two rings. Coarse at the tails on purpose: a ring is

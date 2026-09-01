@@ -23,7 +23,7 @@ from datetime import datetime
 from . import mdfile
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card,
                     TRADE_KEYS, ACCOUNT_KEYS, ADJUSTMENT_KEYS, CARD_KEYS,
-                    CARD_SECTIONS, PAIR_NOT_SET)
+                    CARD_SECTIONS, PAIR_NOT_SET, STYLES, TIMEFRAMES, EXECUTION)
 
 JOURNAL = "journal"
 TRASH = ".trash"            # deleted records: outside git, but not gone
@@ -514,6 +514,51 @@ def save_pairs(root, pairs):
     clean = sorted({str(p).strip().upper() for p in pairs if str(p).strip()})
     _write(pairs_file(root), mdfile.dump({"pairs": clean},
            "Pairs suggested in the trade form. Edited in the interface."))
+    return clean
+
+
+# --- the lists the trade form offers ---------------------------------------
+# Styles, timeframes and execution formats, in one file. Order is the owner's:
+# a new word goes to the end of its list, because M15, H1, H4, D1 is a sequence
+# and not an alphabet. A word removed here is only taken out of the form; the
+# trades that carry it keep it.
+VOCABULARY_FILE = "vocabulary.md"
+VOCABULARY = {"styles": list(STYLES), "timeframes": list(TIMEFRAMES),
+              "execution": list(EXECUTION)}
+
+
+def vocabulary_file(root):
+    return os.path.join(root, JOURNAL, VOCABULARY_FILE)
+
+
+def all_words(root, kind):
+    """One of the lists: what the file says, or what the journal starts with.
+
+    A list the owner emptied stays empty; only a key that was never written
+    falls back to the defaults."""
+    head = {}
+    path = vocabulary_file(root)
+    if os.path.isfile(path):
+        head, _ = mdfile.parse(_read(path))
+    if kind not in head:
+        return list(VOCABULARY[kind])
+    return [str(w) for w in _list(head.get(kind))]
+
+
+def save_words(root, kind, words):
+    """Writes one list back, keeping the other two as they are."""
+    if kind not in VOCABULARY:
+        raise KeyError(kind)
+    lists = {k: all_words(root, k) for k in VOCABULARY}
+    clean, seen = [], set()
+    for word in words:
+        word = str(word).strip()
+        if word and word.lower() not in seen:
+            seen.add(word.lower())
+            clean.append(word)
+    lists[kind] = clean
+    _write(vocabulary_file(root), mdfile.dump(
+        lists, "The lists the trade form offers. Edited in the interface."))
     return clean
 
 

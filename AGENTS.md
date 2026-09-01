@@ -58,9 +58,9 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 
 | file | owns |
 |---|---|
-| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`; the vocabularies; the checks |
+| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`; the vocabularies a journal starts with; the checks |
 | `plainbook/mdfile.py` | the markdown header format, and only that |
-| `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash |
+| `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash, the owner's lists of pairs and words |
 | `plainbook/balances.py` | balances and R, computed by replaying history |
 | `plainbook/stats.py` | summaries, the equity curve, the R distribution |
 | `plainbook/reports.py` | monthly and quarterly reports |
@@ -107,6 +107,13 @@ data. Each one is followed by what it prevents.
    check. Styles and scripts are inlined into the page.
 8. **Ids are file names.** Anything arriving from a URL and used as a path goes
    through `store.safe_dir_name` first.
+9. **The lists in `journal/vocabulary.md` are what the form offers, not what a
+   trade is allowed to hold.** Styles, timeframes and execution formats are the
+   owner's, so a word taken out of a list must still load, still show in the
+   statistics, and still be drawn in the form of a trade that carries it
+   (`server.offered`). Nothing validates a trade against these lists.
+   *Prevents:* retiring a style quietly deleting it from the trades that have
+   it, since a form deletes what it does not draw.
 
 ## 5. Recipes
 
