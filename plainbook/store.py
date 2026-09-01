@@ -450,6 +450,34 @@ def delete_trade(root, trade_id):
     return target
 
 
+def new_adjustment_id(root, day, kind, account):
+    """An adjustment id: YYYY-MM-DD-kind-account, with a counter when taken.
+
+    Same shape as a trade id, so the folder sorts by date on its own."""
+    base = os.path.join(root, JOURNAL, ADJUSTMENTS)
+    taken = {name[:-3] for name in (os.listdir(base) if os.path.isdir(base) else [])
+             if name.endswith(".md")}
+    stem = f"{day:%Y-%m-%d}-{kind}-{account}"
+    if stem not in taken:
+        return stem
+    n = 2
+    while f"{stem}-{n:02d}" in taken:
+        n += 1
+    return f"{stem}-{n:02d}"
+
+
+def delete_adjustment(root, adjustment_id):
+    """To the trash, like everything else: money moves are records too."""
+    path = os.path.join(root, JOURNAL, ADJUSTMENTS, adjustment_id + ".md")
+    if not os.path.isfile(path):
+        return None
+    target = os.path.join(root, TRASH,
+                          f"adjustment-{adjustment_id}-{datetime.now():%Y%m%d-%H%M%S}.md")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.move(path, target)
+    return target
+
+
 def new_id(root, day, pair):
     """A trade id: YYYY-MM-DD-NN-pair, where NN counts trades within the day."""
     slug = re.sub(r"[^\w-]+", "-", (pair or PAIR_NOT_SET).lower().replace(" ", "-"))

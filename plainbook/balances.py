@@ -77,8 +77,7 @@ class Journal:
 
     def balance(self, account_id):
         """The current computed balance of an account."""
-        account = self.accounts.get(account_id)
-        b = account.start_balance if account else 0.0
+        b = self._start(account_id)
         b += sum(c.amount for c in self.adjustments if c.account == account_id)
         b += sum(t.pnl or 0.0 for t in self.trades
                  if t.account == account_id and not t.is_open)
@@ -86,6 +85,30 @@ class Journal:
 
     def balances(self):
         return {a: self.balance(a) for a in self.accounts}
+
+    def cashed_out(self, account_id):
+        """How much has been taken off the account, as a positive number.
+
+        Withdrawals are the one movement worth a running total: money that left
+        the account is not a loss, and without this figure the growth of an
+        account that pays out looks worse than it was."""
+        return -sum(c.amount for c in self.adjustments
+                    if c.account == account_id and c.kind == "withdrawal")
+
+    def deposited(self, account_id):
+        return sum(c.amount for c in self.adjustments
+                   if c.account == account_id and c.kind == "deposit")
+
+    def result(self, account_id):
+        """What the account earned by itself: the balance less the money moved
+        in and out. Trading PnL plus fees and reconciliations, so that
+        start + result + deposited - cashed out is exactly the balance."""
+        return (self.balance(account_id) - self._start(account_id)
+                - self.deposited(account_id) + self.cashed_out(account_id))
+
+    def _start(self, account_id):
+        account = self.accounts.get(account_id)
+        return account.start_balance if account else 0.0
 
     def risk_in_money(self, account_id, risk_percent):
         """A hint for the form: how many dollars that is right now."""

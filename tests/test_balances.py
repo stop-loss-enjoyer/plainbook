@@ -107,6 +107,36 @@ class Balances(unittest.TestCase):
         ])
         self.assertEqual(j.balance("bybit"), 11000)
 
+    def test_money_moved_is_kept_apart_from_what_was_earned(self):
+        """A payout is not a loss: the result of the account is the balance
+        with the money moved in and out taken back out of it."""
+        j = Journal(self.accounts, [
+            trade("t1", (2025, 6, 25), pnl=1000, result="Win", closed=(2025, 6, 26)),
+        ], [
+            Adjustment(id="a1", account="bybit", kind="withdrawal", amount=-3000,
+                       day=datetime(2025, 7, 1), comment="payout"),
+            Adjustment(id="a2", account="bybit", kind="deposit", amount=500,
+                       day=datetime(2025, 7, 2)),
+        ])
+        self.assertEqual(j.balance("bybit"), 8500)      # 10000 + 1000 - 3000 + 500
+        self.assertEqual(j.cashed_out("bybit"), 3000)
+        self.assertEqual(j.deposited("bybit"), 500)
+        self.assertEqual(j.result("bybit"), 1000)       # the trade, and only it
+        # the line on the tile adds up
+        self.assertEqual(10000 + j.result("bybit") + j.deposited("bybit")
+                         - j.cashed_out("bybit"), j.balance("bybit"))
+
+    def test_a_withdrawal_lowers_the_balance_a_later_entry_risks_against(self):
+        """Money taken off is gone from the risk of every trade opened after."""
+        j = Journal(self.accounts, [
+            trade("t1", (2025, 7, 5), risk=1.0),
+        ], [
+            Adjustment(id="a1", account="bybit", kind="withdrawal", amount=-2000,
+                       day=datetime(2025, 7, 1)),
+        ])
+        self.assertEqual(j.computed["t1"].balance_at_entry, 8000)
+        self.assertEqual(j.computed["t1"].risk_money, 80)
+
 
 if __name__ == "__main__":
     unittest.main()
