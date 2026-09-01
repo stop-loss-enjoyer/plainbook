@@ -2,10 +2,10 @@
 
 What changed and why. Newest first.
 
-## v1.4, not released yet
+## v1.4, 01.09.2026
 
-A trade written once for two accounts, three lists that belong to you, and
-reports that say more than the numbers of the period.
+The plan a trade came from, a trade written once for two accounts, three lists
+that belong to you, and reports that say more than the numbers of the period.
 
 ### Trading plans
 
