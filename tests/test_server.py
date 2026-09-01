@@ -685,6 +685,93 @@ class ServerCase(unittest.TestCase):
         self.assertIn("April 2026", html)                # nothing to compare with
         self.assertIn("Nothing to plot yet", html)
 
+    def test_42_a_plan_is_written_and_a_trade_is_tied_to_it(self):
+        _, html = self.get("/plans")
+        self.assertIn("No plans yet", html)
+        _, form = self.get("/plan/new")
+        token = self.form_token(form)
+        shot = self.paste_shot(token, "idea-1")
+        code, where = self.post("/plan/new", {
+            "token": token, "blocks": "1", "title": "weekly", "pair": "EURUSD",
+            "narrative": "bullish", "from": "2026-08-31", "until": "2026-09-06",
+            "idea_tf_1": "D1", "idea_text_1": "range formed",
+            "file_idea-1": shot["file"],
+            "plan_text": "long from the nearest SNR, no shorts"})
+        self.assertEqual(code, 200)
+        plan_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        k = store.load_plan(self.root, plan_id)
+        self.assertEqual((k.title, k.pair, k.narrative), ("weekly", "EURUSD", "bullish"))
+        self.assertEqual(k.analysis[0].images, ["shots/idea-01-01.png"])
+        self.assertEqual(
+            self.get(f"/plan-shot/{plan_id}/idea-01-01.png", as_text=False)[0], 200)
+
+        # the plan is offered in the form of a trade, and the trade keeps it
+        _, form = self.get("/new")
+        self.assertIn(plan_id, form)
+        token = self.form_token(form)
+        _, where = self.post("/new", {
+            "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+            "direction": "long", "style": "swing", "risk": "1",
+            "entry": "2026-09-01T10:00", "idea_text_1": "per the plan",
+            "plan": plan_id})
+        trade_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        self.assertEqual(store.load_trade(self.root, trade_id).plan, plan_id)
+        # the plan page counts what came of it, and the trade page names it
+        _, page = self.get(f"/plan/{urllib.parse.quote(plan_id)}")
+        self.assertIn("Trades of this plan", page)
+        self.assertIn(trade_id, page)
+        _, trade = self.get(f"/trade/{urllib.parse.quote(trade_id)}")
+        self.assertIn(f'href="/plan/{plan_id}"', trade)
+        ServerCase.plan_id = plan_id
+
+    def test_43_an_update_is_added_and_the_plan_is_edited(self):
+        plan_id = ServerCase.plan_id
+        self.post(f"/plan/{urllib.parse.quote(plan_id)}/update",
+                  {"update": "gap up on Monday, plan holds"})
+        k = store.load_plan(self.root, plan_id)
+        self.assertIn("gap up on Monday", k.updates)
+        self.assertIn(datetime.now().strftime("%d.%m.%Y"), k.updates)
+
+        _, form = self.get(f"/plan/{urllib.parse.quote(plan_id)}/edit")
+        token = self.form_token(form)
+        self.assertIn("range formed", form)          # the analysis is in the form
+        self.post(f"/plan/{urllib.parse.quote(plan_id)}/edit", {
+            "token": token, "blocks": "1", "title": "weekly", "pair": "EURUSD",
+            "narrative": "bearish", "from": "2026-08-31", "until": "2026-09-06",
+            "idea_tf_1": "D1", "idea_text_1": "range formed",
+            "have_idea-1": "shots/idea-01-01.png",
+            "plan_text": "long from the nearest SNR, no shorts",
+            "updates": k.updates, "review": "the plan held"})
+        k = store.load_plan(self.root, plan_id)
+        self.assertEqual(k.narrative, "bearish")
+        self.assertEqual(k.review, "the plan held")
+        self.assertIn("gap up on Monday", k.updates)
+        # editing an unrelated field keeps the analysis screenshot on the disk
+        self.assertEqual(k.analysis[0].images, ["shots/idea-01-01.png"])
+        self.assertTrue(os.path.exists(os.path.join(
+            store.plan_dir(self.root, plan_id), "shots", "idea-01-01.png")))
+
+    def test_44_the_header_offers_a_plan_and_not_a_report(self):
+        _, html = self.get("/")
+        header = re.findall(r'<header.*?</header>', html, re.S)[0]
+        self.assertIn('href="/plan/new"', header)
+        self.assertNotIn("Build report", header)
+        self.assertIn('href="/reports"', header)      # the tab is still there
+        # and the form that builds a report lives on the Reports tab
+        self.assertIn('action="/report/build"', self.get("/reports")[1])
+
+    def test_45_a_plan_is_deleted_into_the_trash(self):
+        plan_id = ServerCase.plan_id
+        self.post(f"/plan/{urllib.parse.quote(plan_id)}/delete", {})
+        self.assertFalse(os.path.exists(store.plan_dir(self.root, plan_id)))
+        self.assertTrue(any(name.startswith("plan-" + plan_id)
+                            for name in os.listdir(os.path.join(self.root, ".trash"))))
+        # the trade keeps the id of a plan that is gone, and still opens
+        code, html = self.get("/trade/" + urllib.parse.quote(
+            [t.id for t in store.all_trades(self.root) if t.plan == plan_id][0]))
+        self.assertEqual(code, 200)
+        self.assertIn(plan_id, html)
+
 
 if __name__ == "__main__":
     unittest.main()

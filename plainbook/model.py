@@ -15,6 +15,8 @@ from datetime import date, datetime
 DIRECTIONS = ("long", "short")
 RESULTS = ("Win", "Lose", "BE")
 ADJUSTMENT_KINDS = ("deposit", "withdrawal", "fee", "reconciliation")
+# what the plan expects the market to do; "no trade" is a decision as well
+NARRATIVES = ("bullish", "bearish", "neutral", "no trade")
 
 # The three lists the trade form offers. They belong to the owner: the lists
 # are edited in the interface and kept in journal/vocabulary.md, and these are
@@ -47,6 +49,7 @@ TRADE_KEYS = [
     ("pnl", "pnl $"),
     ("closed", "exit"),
     ("note", "note"),
+    ("plan", "plan"),
     ("notion_id", "notion id"),
 ]
 
@@ -67,6 +70,7 @@ class Trade:
     pnl: float = None
     closed: date = None
     note: str = ""
+    plan: str = ""                                  # id of the plan it follows
     notion_id: str = ""
     idea: list = field(default_factory=list)        # list of IdeaBlock
     exit_images: list = field(default_factory=list)
@@ -105,6 +109,58 @@ class IdeaBlock:
     tf: str = ""
     text: str = ""
     images: list = field(default_factory=list)
+
+
+# --- trading plan ----------------------------------------------------------
+# Written before the market opens: the analysis by timeframe, what will be done
+# and what will not, the notes added while it runs, and the review after. A
+# trade points at the plan it followed; the plan does not list its trades,
+# because that list is computable from the trades themselves.
+
+PLAN_KEYS = [
+    ("id", "id"),
+    ("title", "title"),
+    ("pair", "pair"),
+    ("narrative", "narrative"),
+    ("day", "from"),
+    ("until", "until"),
+]
+
+
+@dataclass
+class Plan:
+    id: str
+    title: str = ""                                 # a name of your own
+    pair: str = PAIR_NOT_SET
+    narrative: str = ""                             # bullish, bearish, neutral
+    day: date = None                                # the first day it covers
+    until: date = None                              # the last one, or the same
+    analysis: list = field(default_factory=list)    # IdeaBlock per timeframe
+    plan: str = ""                                  # what will be done, and not
+    updates: str = ""                               # notes added while it runs
+    review: str = ""                                # how it went, with shots
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def last_day(self):
+        return self.until or self.day
+
+    def covers(self, moment):
+        """Is that day inside the plan: an open plan is the one to attach to."""
+        if self.day is None or moment is None:
+            return False
+        return self.day.date() <= moment.date() <= self.last_day.date()
+
+    def check(self):
+        if not self.id:
+            raise RecordError("plan has no id")
+        if self.day is None:
+            raise RecordError(f"{self.id}: the plan has no date")
+        if self.until is not None and self.until < self.day:
+            raise RecordError(f"{self.id}: the plan ends before it starts")
+        if self.narrative and self.narrative not in NARRATIVES:
+            raise RecordError(f"{self.id}: bad narrative {self.narrative!r}")
+        return self
 
 
 # --- daily card ------------------------------------------------------------

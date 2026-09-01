@@ -7,6 +7,23 @@ What changed and why. Newest first.
 A trade written once for two accounts, three lists that belong to you, and
 reports that say more than the numbers of the period.
 
+### Trading plans
+
+- **A plan is a record of its own.** The **Plans** tab and the **+ Plan** button
+  in the header write what stood before the trade: the analysis by timeframe
+  with its screenshots, what you will do and what you will not, the dates the
+  plan covers and the narrative you expect. A plan that covers today is marked
+  current.
+
+- **A trade is tied to its plan** by a menu in the trade form, and the plan page
+  then lists every trade that came out of it with its result, PnL and R, and
+  sums them up. A plan in a document cannot say whether following it was worth
+  anything; this one can.
+
+- **Updates are added from the plan page** in one line, stamped with the date,
+  so the plan stays as it was written and the week is written under it. The
+  review is written later in the form, with screenshots of its own.
+
 ### Entering a trade
 
 - **A trade can be opened on two accounts at once.** The new trade form has a
@@ -38,6 +55,11 @@ reports that say more than the numbers of the period.
   the styles the list holds.
 
 ### Reports
+
+- **Building a report moved to the Reports tab.** The header button is gone; the
+  form that builds one has always been on the tab, and the header is for what is
+  written before the market rather than after it. Its place is taken by
+  **+ Plan**.
 
 - **The rings are in the report.** A monthly or quarterly report draws the R
   distribution, the same rings the Statistics tab has, counted on that period

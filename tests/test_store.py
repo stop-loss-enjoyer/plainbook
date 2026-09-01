@@ -10,8 +10,8 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import mdfile, store
-from plainbook.model import (Trade, Account, Adjustment, IdeaBlock, Card, RecordError,
-                      PAIR_NOT_SET)
+from plainbook.model import (Trade, Account, Adjustment, IdeaBlock, Card, Plan,
+                      RecordError, PAIR_NOT_SET)
 
 
 def sample_trade(**kw):
@@ -123,6 +123,53 @@ class TradeRoundTrip(unittest.TestCase):
         with self.assertRaises(RecordError):
             sample_trade(result=None).check()       # open with PnL
         sample_trade().check()
+
+
+class PlanRoundTrip(unittest.TestCase):
+    def plan(self, **kw):
+        fields = dict(id="2026-09-01-eurusd", title="weekly", pair="EURUSD",
+                      narrative="bullish", day=datetime(2026, 9, 1),
+                      until=datetime(2026, 9, 5),
+                      analysis=[IdeaBlock(tf="D1", text="range formed",
+                                          images=["shots/idea-01-01.png"])],
+                      plan="long from the nearest SNR, no shorts",
+                      updates="**01.09.2026**: gap up",
+                      review="went as written")
+        fields.update(kw)
+        return Plan(**fields)
+
+    def test_a_plan_survives_the_round_trip(self):
+        k = self.plan()
+        again = store.text_to_plan(store.plan_to_text(k))
+        self.assertEqual((again.id, again.title, again.pair, again.narrative),
+                         (k.id, k.title, k.pair, k.narrative))
+        self.assertEqual((again.day, again.until), (k.day, k.until))
+        self.assertEqual(again.analysis[0].tf, "D1")
+        self.assertEqual(again.analysis[0].images, ["shots/idea-01-01.png"])
+        self.assertEqual((again.plan, again.updates, again.review),
+                         (k.plan, k.updates, k.review))
+
+    def test_a_plan_of_one_day_has_no_until(self):
+        k = self.plan(until=None)
+        text = store.plan_to_text(k)
+        self.assertNotIn("until:", text)                  # an empty key is a list
+        self.assertIsNone(store.text_to_plan(text).until)
+
+    def test_a_plan_is_checked(self):
+        with self.assertRaises(RecordError):
+            self.plan(day=None).check()
+        with self.assertRaises(RecordError):
+            self.plan(narrative="sideways").check()
+        with self.assertRaises(RecordError):
+            self.plan(until=datetime(2026, 8, 1)).check()
+        self.plan().check()
+
+    def test_a_plan_knows_the_days_it_covers(self):
+        k = self.plan()
+        self.assertTrue(k.covers(datetime(2026, 9, 3, 14, 30)))
+        self.assertTrue(k.covers(datetime(2026, 9, 5, 23, 0)))
+        self.assertFalse(k.covers(datetime(2026, 9, 6)))
+        self.assertTrue(self.plan(until=None).covers(datetime(2026, 9, 1, 8)))
 
 
 class AccountAndAdjustmentRoundTrip(unittest.TestCase):

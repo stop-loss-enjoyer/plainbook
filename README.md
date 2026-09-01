@@ -49,6 +49,12 @@ risk of its own.
 and the execution formats are lists you edit on the Accounts tab. A word taken
 out of a list only stops being offered; the trades that carry it keep it.
 
+**A plan before the trade.** A trading plan is a record of its own: the analysis
+by timeframe with its screenshots, what you will do and what you will not, the
+updates added while it runs and the review after. A trade points at the plan it
+followed, so the plan page can show every trade that came out of it with its R,
+and answer the only question worth asking of a plan.
+
 **A daily card.** The day reviewed on the pattern of a paper Daily Report Card:
 process grade, opportunity quality, focus, what went well, errors, best trade,
 overview. The day's PnL is filled in from the trades you closed, and stays
@@ -92,7 +98,7 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in under a second.** 94 of them, no fixtures, no network.
+- **The tests finish in under a second.** 102 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
@@ -189,6 +195,7 @@ journal/
   accounts/<id>.md        start balance, currency, archived
   trades/<id>/            one trade = one folder
   cards/YYYY-MM-DD.md     the daily card
+  plans/<id>/             one plan = one folder, screenshots and all
   adjustments/<id>.md     deposit, withdrawal, fee, reconciliation
   reports/2026-08.md      monthly and quarterly reports
 .trash/                   deleted records, kept just in case

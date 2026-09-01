@@ -18,8 +18,9 @@ from datetime import datetime, timedelta
 from . import html as H
 from . import reports, stats, store
 from .balances import Journal
-from .model import (Trade, Account, Adjustment, IdeaBlock, Card, RecordError,
-                    DIRECTIONS, RESULTS, CARD_SECTIONS, PAIR_NOT_SET)
+from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Plan,
+                    RecordError, DIRECTIONS, RESULTS, NARRATIVES,
+                    CARD_SECTIONS, PAIR_NOT_SET)
 
 PORT = int(os.environ.get("PLAINBOOK_PORT") or 8778)
 # the journal root can be overridden; the tests and a split data folder use it
@@ -359,9 +360,11 @@ def home_page(q):
              f'<div class="value">{s.sum_r:+.2f}</div>'
              f'<div class="sub">average {s.average_r:+.2f} R</div></div></div>')
     today = datetime.now().strftime("%Y-%m-%d")
+    # Building a report belongs on the Reports tab, where the form for it is.
+    # The header is for what is written before the market, not after it.
     right = ('<a class="btn primary" href="/new">+ Trade</a>'
-             f'<a class="btn" href="/card/{today}">+ Card</a>'
-             '<a class="btn" href="/reports">Build report</a>')
+             '<a class="btn" href="/plan/new">+ Plan</a>'
+             f'<a class="btn" href="/card/{today}">+ Card</a>')
     head = (f'<div class="card-head"><h2>Trades</h2>'
             f'<span class="right">{filters_box(j, q)}'
             f'{group_switch(q, group)}</span></div>')
@@ -395,6 +398,10 @@ def trade_page(trade_id):
               ("R", f"{r:+.2f}" if r is not None else "-")]
     table = "".join(f'<tr><td class="muted">{esc(k)}</td><td>{esc(v)}</td></tr>'
                     for k, v in fields)
+    if t.plan:
+        table += (f'<tr><td class="muted">plan</td><td>'
+                  f'<a href="/plan/{U(t.plan)}">{esc(plan_title(t.plan))}</a>'
+                  f'</td></tr>')
     if t.note:
         table += f'<tr><td class="muted">note</td><td>{esc(t.note)}</td></tr>'
 
@@ -630,25 +637,36 @@ document.addEventListener('DOMContentLoaded', () => { init_zones(); });
 """
 
 
-def select(name, values, current="", empty=None):
+def select(name, values, current="", empty=None, labels=None, style=""):
+    """A menu. `labels` gives a value a name of its own, as a plan id needs."""
     options = f'<option value="">{esc(empty)}</option>' if empty else ""
     options += "".join(
         f'<option value="{esc(v)}"{" selected" if v == current else ""}>'
-        f'{esc(v)}</option>' for v in values)
-    return f'<select name="{name}">{options}</select>'
+        f'{esc((labels or {}).get(v, v))}</option>' for v in values)
+    where = f' style="{style}"' if style else ""
+    return f'<select name="{name}"{where}>{options}</select>'
 
 
-def shot_in_zone(trade_id, path, field):
+def shot_in_zone(base, path, field):
     """A thumbnail of an already saved screenshot, with a cross.
 
-    The cross simply removes the node from the form, and together with the
-    hidden field that is what keeps the screenshot in the trade."""
+    `base` is where the pictures of this record are served from, `/shot/<id>`
+    for a trade and `/plan-shot/<id>` for a plan. The cross simply removes the
+    node from the form, and together with the hidden field that is what keeps
+    the screenshot in the record."""
     return (f'<span class="shot">'
-            f'<img src="/shot/{U(trade_id)}/{U(os.path.basename(path))}" '
-            f'alt="screenshot">'
+            f'<img src="{base}/{U(os.path.basename(path))}" alt="screenshot">'
             f'<button type="button" class="remove" title="remove screenshot">'
             f'&times;</button>'
             f'<input type="hidden" name="{field}" value="{esc(path)}"></span>')
+
+
+def shots_base(trade_id):
+    return f"/shot/{U(trade_id)}"
+
+
+def plan_shots_base(plan_id):
+    return f"/plan-shot/{U(plan_id)}"
 
 
 def dropzone(name, hint, shots=()):
@@ -656,13 +674,13 @@ def dropzone(name, hint, shots=()):
             f'<div class="hint">{esc(hint)}</div></div>')
 
 
-def idea_form_block(n, tf="", text="", existing=(), trade_id=None):
+def idea_form_block(n, tf="", text="", existing=(), base=None):
     return ('<div class="form-block card">'
-            + block_inside(n, tf, text, existing, trade_id) + "</div>")
+            + block_inside(n, tf, text, existing, base) + "</div>")
 
 
-def block_inside(n, tf="", text="", existing=(), trade_id=None):
-    old = [shot_in_zone(trade_id, s, f"have_idea-{n}") for s in existing]
+def block_inside(n, tf="", text="", existing=(), base=None):
+    old = [shot_in_zone(base, s, f"have_idea-{n}") for s in existing]
     return f"""<div class="fields"><div class="field"><label>timeframe</label>
 <input type="text" name="idea_tf_{n}" value="{esc(tf)}" placeholder="H4" size="8"></div></div>
 <label style="margin-top:8px">idea text</label>
@@ -693,10 +711,18 @@ def trade_form(t=None, token=""):
         f'<button type="button" class="option" data-value="{esc(p)}">'
         f'{H.pair(p)}</button>' for p in pairs)
 
+    # the plans are offered newest first: a trade is nearly always taken under
+    # the plan just written, and an old one is still there to be picked
+    plans = store.all_plans(ROOT)
+    if editing and t.plan and t.plan not in {k.id for k in plans}:
+        plans = plans + [Plan(id=t.plan, day=t.opened)]
+    plan_ids = [k.id for k in plans]
+    plan_names = {k.id: plan_label(k) for k in plans}
+
     if editing and t.idea:
         blocks = ""
         for i, b in enumerate(t.idea, 1):
-            blocks += idea_form_block(i, b.tf, b.text, b.images, t.id)
+            blocks += idea_form_block(i, b.tf, b.text, b.images, shots_base(t.id))
         count = len(t.idea)
     else:
         blocks = idea_form_block(1)
@@ -729,11 +755,11 @@ two trades: this one, and a copy on that account with the risk set here.</p>
         closing = f"""<input type="hidden" name="closed" value="1">
 <div class="card"><h2>Exit moment</h2>
 {dropzone("exit", "click here and press Ctrl+V",
-          [shot_in_zone(t.id, s, "have_exit") for s in t.exit_images])}</div>
+          [shot_in_zone(shots_base(t.id), s, "have_exit") for s in t.exit_images])}</div>
 <div class="card"><h2>Conclusions</h2>
 <textarea name="conclusions">{esc(conclusions_text(t.conclusions))}</textarea>
 {dropzone("concl", "screenshots for conclusions, Ctrl+V here",
-          [shot_in_zone(t.id, s, "have_concl")
+          [shot_in_zone(shots_base(t.id), s, "have_concl")
            for s in conclusion_images(t.conclusions)])}</div>"""
     return f"""<form method="post" action="{action}">
 <input type="hidden" name="token" value="{esc(token)}">
@@ -761,6 +787,9 @@ two trades: this one, and a copy on that account with the risk set here.</p>
 <div class="field"><label>entry</label>
 <input type="datetime-local" name="entry" value="{entry}"
  onclick="this.showPicker && this.showPicker()"></div>
+<div class="field"><label>plan</label>
+{select("plan", plan_ids, t.plan if editing else "", empty="-",
+        labels=plan_names, style="max-width:270px")}</div>
 </div>
 <p class="caption" style="margin:8px 0 0">execution: {checkboxes}</p>
 {duplicate}
@@ -778,8 +807,9 @@ init_zones();</script>"""
 
 
 def close_form(t, token):
-    exit_shots = [shot_in_zone(t.id, s, "have_exit") for s in t.exit_images]
-    concl_shots = [shot_in_zone(t.id, s, "have_concl")
+    exit_shots = [shot_in_zone(shots_base(t.id), s, "have_exit")
+                  for s in t.exit_images]
+    concl_shots = [shot_in_zone(shots_base(t.id), s, "have_concl")
                    for s in conclusion_images(t.conclusions)]
     return f"""<form method="post" action="/close/{U(t.id)}">
 <input type="hidden" name="token" value="{esc(token)}">
@@ -837,30 +867,39 @@ def save_draft(token, zone, data):
     return name
 
 
-def zone_sources(data, zone, t, token):
-    """Image paths for a zone: the old ones kept plus the new ones pasted."""
+def zone_sources(data, zone, folder, token):
+    """Image paths for a zone: the old ones kept plus the new ones pasted.
+
+    `folder` is the record's own directory, a trade's or a plan's."""
     removed = set(data.get("remove", []))
     paths = []
     for s in data.get("have_" + zone, []):
         if s in removed:
             continue
-        paths.append(os.path.join(store.trade_dir(ROOT, t.id), s))
+        paths.append(os.path.join(folder, s))
     for name in data.get("file_" + zone, []):
         if _FILE_NAME.match(name):
             paths.append(os.path.join(draft_dir(token), name))
     return [p for p in paths if os.path.exists(p)]
 
 
-def apply_shots(t, zones):
-    """Rewrites the shots folder whole, so no leftovers from editing stay behind."""
-    folder = store.shots_dir(ROOT, t.id)
+# what a zone of a form is called on the disk
+ZONE_PREFIX = {"exit": "exit", "concl": "conclusions", "review": "review"}
+
+
+def apply_shots(record, zones):
+    """Rewrites the shots folder whole, so no leftovers from editing stay behind.
+
+    `record` is the folder of the trade or of the plan; the pictures live in
+    its `shots` subfolder."""
+    folder = os.path.join(record, store.SHOTS)
     fresh = folder + ".new"
     shutil.rmtree(fresh, ignore_errors=True)
     os.makedirs(fresh, exist_ok=True)
     result = {}
     for zone, sources in zones.items():
-        prefix = ("exit" if zone == "exit" else "conclusions" if zone == "concl"
-                  else f"idea-{int(zone.split('-')[1]):02d}")
+        prefix = (ZONE_PREFIX.get(zone)
+                  or f"idea-{int(zone.split('-')[1]):02d}")
         names = []
         for i, src in enumerate(sources, 1):
             name = f"{prefix}-{i:02d}{os.path.splitext(src)[1] or '.png'}"
@@ -913,6 +952,7 @@ def apply_fields(t, data):
     t.style = one(data, "style")
     t.entry_tf = one(data, "entry_tf")
     t.execution = data.get("execution", [])
+    t.plan = one(data, "plan")
     t.risk = float(one(data, "risk", "1").replace(",", "."))
     t.opened = entry
     t.opened_time = bool(entry.hour or entry.minute) or t.opened_time
@@ -950,7 +990,7 @@ def build_trade(data, token, account="", risk=None):
         zones[f"idea-{len(t.idea)+1}"] = [p for p in paths if os.path.exists(p)]
         t.idea.append(block)
     t.check()
-    names = apply_shots(t, zones)
+    names = apply_shots(store.trade_dir(ROOT, t.id), zones)
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     store.save_trade(ROOT, t)
@@ -979,9 +1019,10 @@ def create_trade(data):
 def edit_trade(t, data):
     token = one(data, "token")
     apply_fields(t, data)
+    folder = store.trade_dir(ROOT, t.id)
     zones, kept = {}, []
     for n, block in blocks_from_form(data):
-        paths = zone_sources(data, f"idea-{n}", t, token)
+        paths = zone_sources(data, f"idea-{n}", folder, token)
         if not (block.text.strip() or paths):
             continue
         zones[f"idea-{len(kept)+1}"] = paths
@@ -991,16 +1032,16 @@ def edit_trade(t, data):
     # wipe the screenshots off the disk.
     editing_close = one(data, "closed") == "1"
     if editing_close:
-        zones["exit"] = zone_sources(data, "exit", t, token)
-        zones["concl"] = zone_sources(data, "concl", t, token)
+        zones["exit"] = zone_sources(data, "exit", folder, token)
+        zones["concl"] = zone_sources(data, "concl", folder, token)
     else:
-        own = os.path.join(store.trade_dir(ROOT, t.id), "{}")
+        own = os.path.join(folder, "{}")
         zones["exit"] = [own.format(s) for s in t.exit_images]
         zones["concl"] = [own.format(s)
                           for s in conclusion_images(t.conclusions)]
     t.idea = kept
     t.check()
-    names = apply_shots(t, zones)
+    names = apply_shots(folder, zones)
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     t.exit_images = names.get("exit", [])
@@ -1044,12 +1085,13 @@ def close_trade(t, data):
     t.pnl = float(one(data, "pnl", "0").replace(",", "."))
     t.closed = datetime.strptime(one(data, "exit"), "%Y-%m-%d")
     conclusions = one(data, "conclusions")
-    zones = {f"idea-{i}": [os.path.join(store.trade_dir(ROOT, t.id), s)
-                           for s in b.images] for i, b in enumerate(t.idea, 1)}
-    zones["exit"] = zone_sources(data, "exit", t, token)
-    zones["concl"] = zone_sources(data, "concl", t, token)
+    folder = store.trade_dir(ROOT, t.id)
+    zones = {f"idea-{i}": [os.path.join(folder, s) for s in b.images]
+             for i, b in enumerate(t.idea, 1)}
+    zones["exit"] = zone_sources(data, "exit", folder, token)
+    zones["concl"] = zone_sources(data, "concl", folder, token)
     t.check()
-    names = apply_shots(t, zones)
+    names = apply_shots(folder, zones)
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     t.exit_images = names.get("exit", [])
@@ -1058,6 +1100,319 @@ def close_trade(t, data):
     drop_draft(token)
     drop_cache()
     return t
+
+
+# --- trading plans ---------------------------------------------------------
+# A plan is written before the market opens and answers what a trade cannot:
+# what was supposed to happen. It holds the analysis by timeframe, what will be
+# done and what will not, the notes added while it runs and the review after. A
+# trade points at the plan it followed, so the plan can be asked the only
+# question that matters about a plan: what came out of it.
+
+
+def plan_label(k):
+    """A plan in one line, for a list and for the menu of the trade form."""
+    span = f"{k.day:%d.%m.%Y}"
+    if k.until and k.until != k.day:
+        span += f" to {k.until:%d.%m.%Y}"
+    bits = [span, "" if k.pair == PAIR_NOT_SET else k.pair, k.title, k.narrative]
+    return " · ".join(b for b in bits if b)
+
+
+_BOLD = re.compile(r"\*\*(.+?)\*\*")
+
+
+def inline(text):
+    """Plain text with line breaks, and **bold** left readable.
+
+    The updates of a plan are written as `**date**: what happened`, which reads
+    as a list in the file and has to read as one on the page too."""
+    return _BOLD.sub(r"<strong>\1</strong>", esc(text)).replace("\n", "<br>")
+
+
+def plan_title(plan_id):
+    """The name of a plan for a link. A plan deleted later leaves its id."""
+    try:
+        return plan_label(store.load_plan(ROOT, plan_id))
+    except (OSError, ValueError):
+        return plan_id
+
+
+def plan_trades(j, plan_id):
+    return [t for t in j.trades if t.plan == plan_id]
+
+
+def plan_result(j, trades):
+    """What the plan came to, in one line."""
+    if not trades:
+        return "no trades yet"
+    s = stats.summary(j, trades)
+    open_now = sum(1 for t in trades if t.is_open)
+    bits = [f"{len(trades)} trades" if len(trades) != 1 else "1 trade"]
+    if open_now:
+        bits.append(f"{open_now} open")
+    if s.trades:
+        bits += ([f"WR {s.wr:.0f}%"] if s.decided else []) + \
+                [f"{s.sum_r:+.2f} R", f"{H.money(s.sum_pnl, signed=True)} $"]
+    return " · ".join(bits)
+
+
+def plans_page():
+    j = journal()
+    plans = store.all_plans(ROOT)
+    right = '<a class="btn primary" href="/plan/new">+ Plan</a>'
+    if not plans:
+        body = ('<div class="card"><h2>Trading plans</h2>'
+                '<p class="muted">No plans yet. The button above writes the '
+                'first one: the analysis, and what you will do with it.</p></div>')
+        return H.page("Plans", body, "plans", right)
+    today = datetime.now()
+    rows = ""
+    for k in plans:
+        trades = plan_trades(j, k.id)
+        s = stats.summary(j, trades)
+        href = f"/plan/{U(k.id)}"
+        span = f"{k.day:%d.%m.%Y}"
+        if k.until and k.until != k.day:
+            span += f" - {k.until:%d.%m.%Y}"
+        cells = [(esc(span), ""), (H.pair(k.pair), ""),
+                 (esc(k.narrative) or "-", ""),
+                 (esc(k.title) or "-", ""),
+                 ("current" if k.covers(today) else "", "muted"),
+                 (str(len(trades)), "num"),
+                 ("-" if not s.trades else f"{s.sum_r:+.2f}",
+                  f"num {sum_class(s.sum_r)}")]
+        rows += ("<tr>" + "".join(link_cell(href, inner, cls)
+                                  for inner, cls in cells) + "</tr>")
+    body = (f'<div class="card"><h2>Trading plans</h2>'
+            f'<table><thead><tr><th>dates</th><th>pair</th><th>narrative</th>'
+            f'<th>title</th><th></th><th class="num">trades</th>'
+            f'<th class="num">Σ R</th></tr></thead><tbody>{rows}</tbody></table>'
+            f'<p class="caption">A plan is written before the market opens; a '
+            f'trade is tied to it in its own form. Σ R counts the trades tied '
+            f'to the plan, which is the only honest answer to whether the plan '
+            f'was any good.</p></div>')
+    return H.page("Plans", body, "plans", right)
+
+
+def plan_page(plan_id):
+    if not store.safe_dir_name(plan_id):
+        return None
+    try:
+        k = store.load_plan(ROOT, plan_id)
+    except (OSError, RecordError):
+        return None
+    j = journal()
+    base = plan_shots_base(k.id)
+    trades = plan_trades(j, k.id)
+    fields = [("from", f"{k.day:%d.%m.%Y}"),
+              ("until", f"{k.until:%d.%m.%Y}" if k.until and k.until != k.day
+               else "the same day"),
+              ("pair", H.pair(k.pair)),
+              ("narrative", k.narrative or "-"),
+              ("trades", plan_result(j, trades))]
+    table = "".join(f'<tr><td class="muted">{esc(name)}</td><td>{esc(value)}</td></tr>'
+                    for name, value in fields)
+
+    analysis = ""
+    for block in k.analysis:
+        images = "".join(f'<img src="{base}/{U(os.path.basename(src))}" '
+                         f'alt="analysis screenshot">' for src in block.images)
+        analysis += (f'<div class="idea-block">'
+                     f'{f"<h3>{esc(block.tf)}</h3>" if block.tf else ""}'
+                     f'<div>{esc(block.text).replace(chr(10), "<br>")}</div>'
+                     f'<div class="shots">{images}</div></div>')
+    review = re.sub(r"!\[\]\(([^)]+)\)",
+                    lambda m: f'<img src="{base}/'
+                              f'{U(os.path.basename(m.group(1)))}" alt="screenshot">',
+                    inline(k.review))
+    updates = (f'<div>{inline(k.updates)}</div>'
+               if k.updates.strip() else
+               '<p class="muted">Nothing has happened to the plan yet.</p>')
+    update_form = (f'<form method="post" action="/plan/{U(k.id)}/update" '
+                   f'class="filters" style="margin-top:12px">'
+                   f'<div style="flex:1"><label>add an update</label>'
+                   f'<input type="text" name="update" style="width:100%"'
+                   f' placeholder="what changed since the plan was written" required>'
+                   f'</div><div><button class="btn">Add</button></div></form>')
+
+    rows = "".join(trade_row(j, t) for t in
+                   sorted(trades, key=lambda t: t.opened, reverse=True))
+    trades_card = (f'<div class="card"><h2>Trades of this plan</h2>'
+                   f'<table><thead><tr><th>date</th><th>account</th><th>pair</th>'
+                   f'<th>direction</th><th>style</th><th>TF</th>'
+                   f'<th class="num">risk</th><th>result</th>'
+                   f'<th class="num">PnL $</th><th class="num">R</th></tr></thead>'
+                   f'<tbody>{rows}</tbody></table>'
+                   f'<p class="caption">{esc(plan_result(j, trades))}</p></div>'
+                   if trades else
+                   '<div class="card"><h2>Trades of this plan</h2>'
+                   '<p class="muted">Nothing has been tied to this plan yet. '
+                   'The plan is picked in the form of a trade.</p></div>')
+
+    buttons = (f'<a class="btn" href="/plan/{U(k.id)}/edit">Edit</a>'
+               f'<form method="post" action="/plan/{U(k.id)}/delete" '
+               f'style="display:inline" onsubmit="return confirm('
+               f'\'Delete plan {esc(k.id)}? The folder moves to .trash.\')">'
+               f'<button class="btn danger">Delete</button></form>')
+    body = (f'<div class="card{" is-open" if k.covers(datetime.now()) else ""}">'
+            f'<h2>{esc(k.title or plan_label(k))}</h2>'
+            f'<table class="props">{table}</table></div>'
+            + (f'<div class="card"><h2>Analysis</h2>{analysis}</div>'
+               if analysis else "")
+            + (f'<div class="card"><h2>Plan</h2>'
+               f'<div>{inline(k.plan)}</div></div>'
+               if k.plan.strip() else "")
+            + f'<div class="card"><h2>Updates</h2>{updates}{update_form}</div>'
+            + (f'<div class="card"><h2>Review</h2><div>{review}</div></div>'
+               if k.review.strip() else "")
+            + trades_card)
+    return H.page(k.title or k.id, body, "plans", buttons)
+
+
+def plan_form(k=None, token=""):
+    """One form for writing a plan and for editing it: the fields are the same."""
+    editing = k is not None
+    pairs = sorted(set(store.all_pairs(ROOT)) |
+                   {x.pair for x in journal().trades if x.pair != PAIR_NOT_SET})
+    pair_options = "".join(
+        f'<button type="button" class="option" data-value="{esc(p)}">'
+        f'{H.pair(p)}</button>' for p in pairs)
+    today = datetime.now().strftime("%Y-%m-%d")
+    base = plan_shots_base(k.id) if editing else None
+    if editing and k.analysis:
+        blocks = ""
+        for i, b in enumerate(k.analysis, 1):
+            blocks += idea_form_block(i, b.tf, b.text, b.images, base)
+        count = len(k.analysis)
+    else:
+        blocks = idea_form_block(1)
+        count = 1
+    action = f"/plan/{U(k.id)}/edit" if editing else "/plan/new"
+    review = ""
+    if editing:
+        review = f"""<div class="card"><h2>Updates</h2>
+<textarea name="updates">{esc(k.updates)}</textarea>
+<p class="caption">Written as the plan runs; the plan page adds a dated line to
+this without opening the form.</p></div>
+<div class="card"><h2>Review</h2>
+<textarea name="review">{esc(conclusions_text(k.review))}</textarea>
+{dropzone("review", "screenshots for the review, Ctrl+V here",
+          [shot_in_zone(base, src, "have_review")
+           for src in conclusion_images(k.review)])}</div>"""
+    return f"""<form method="post" action="{action}">
+<input type="hidden" name="token" value="{esc(token)}">
+<input type="hidden" name="blocks" value="{count}">
+<div class="card"><h2>{"Edit plan" if editing else "New plan"}</h2>
+<div class="fields">
+<div class="field"><label>title</label>
+<input type="text" name="title" value="{esc(k.title) if editing else ""}"
+ placeholder="weekly" style="width:160px"></div>
+<div class="field"><label>pair</label>
+<div class="picker">
+<input type="text" name="pair" value="{esc(k.pair) if editing and k.pair != PAIR_NOT_SET else ""}"
+ placeholder="EURUSD" autocomplete="off">
+<div class="options" hidden>{pair_options}</div></div></div>
+<div class="field"><label>narrative</label>
+{select("narrative", NARRATIVES, k.narrative if editing else "", empty="-")}</div>
+<div class="field"><label>from</label>
+<input type="date" name="from" required
+ value="{f"{k.day:%Y-%m-%d}" if editing else today}"
+ onclick="this.showPicker && this.showPicker()"></div>
+<div class="field"><label>until</label>
+<input type="date" name="until"
+ value="{f"{k.until:%Y-%m-%d}" if editing and k.until and k.until != k.day else ""}"
+ onclick="this.showPicker && this.showPicker()"></div>
+</div>
+<p class="caption">Until is left empty for a plan that lives one day.</p>
+</div>
+<div id="blocks">{blocks}</div>
+<template id="block-template">{block_inside("__N__")}</template>
+<p><button type="button" class="btn" onclick="add_block()">+ analysis block</button></p>
+<div class="card"><h2>Plan</h2>
+<textarea name="plan_text" placeholder="what you will do, and what you will not">{esc(k.plan) if editing else ""}</textarea>
+</div>
+{review}
+<div class="actions"><button class="btn primary">{"Save" if editing else "Write the plan"}</button>
+<a class="btn" href="{f"/plan/{U(k.id)}" if editing else "/plans"}">Cancel</a></div>
+</form>
+<script>{FORM_SCRIPT}</script>
+<script>document.body.dataset.token = {json.dumps(token)};
+init_zones();</script>"""
+
+
+def plan_fields(k, data):
+    k.title = one(data, "title")
+    k.pair = one(data, "pair") or PAIR_NOT_SET
+    k.narrative = one(data, "narrative")
+    k.day = datetime.strptime(one(data, "from"), "%Y-%m-%d")
+    until = one(data, "until")
+    k.until = datetime.strptime(until, "%Y-%m-%d") if until else None
+    k.plan = one(data, "plan_text")
+    return k
+
+
+def plan_blocks(data, folder, token, k=None):
+    """The analysis blocks of the form: the kept pictures plus the pasted ones."""
+    zones, kept = {}, []
+    for n, block in blocks_from_form(data):
+        if k is None:
+            paths = [os.path.join(draft_dir(token), name)
+                     for name in data.get(f"file_idea-{n}", [])
+                     if _FILE_NAME.match(name)]
+            paths = [p for p in paths if os.path.exists(p)]
+        else:
+            paths = zone_sources(data, f"idea-{n}", folder, token)
+        if not (block.text.strip() or paths):
+            continue
+        zones[f"idea-{len(kept) + 1}"] = paths
+        kept.append(block)
+    return zones, kept
+
+
+def create_plan(data):
+    token = one(data, "token")
+    day = datetime.strptime(one(data, "from"), "%Y-%m-%d")
+    pair = one(data, "pair") or PAIR_NOT_SET
+    k = Plan(id=store.new_plan_id(ROOT, day, pair))
+    plan_fields(k, data)
+    folder = store.plan_dir(ROOT, k.id)
+    zones, k.analysis = plan_blocks(data, folder, token)
+    k.check()
+    names = apply_shots(folder, zones)
+    for i, block in enumerate(k.analysis, 1):
+        block.images = names.get(f"idea-{i}", [])
+    store.save_plan(ROOT, k)
+    drop_draft(token)
+    return k
+
+
+def edit_plan(k, data):
+    token = one(data, "token")
+    plan_fields(k, data)
+    folder = store.plan_dir(ROOT, k.id)
+    zones, k.analysis = plan_blocks(data, folder, token, k)
+    zones["review"] = zone_sources(data, "review", folder, token)
+    k.updates = one(data, "updates")
+    k.check()
+    names = apply_shots(folder, zones)
+    for i, block in enumerate(k.analysis, 1):
+        block.images = names.get(f"idea-{i}", [])
+    k.review = build_conclusions(one(data, "review"), names.get("review", []))
+    store.save_plan(ROOT, k)
+    drop_draft(token)
+    return k
+
+
+def add_update(k, data):
+    """A dated line at the end of the updates: the plan meets the week."""
+    text = one(data, "update")
+    if not text:
+        raise RecordError("an update without a word in it")
+    line = f"**{datetime.now():%d.%m.%Y}**: {text}"
+    k.updates = (k.updates + "\n\n" + line) if k.updates.strip() else line
+    store.save_plan(ROOT, k)
+    return k
 
 
 # --- daily card ------------------------------------------------------------
@@ -1758,6 +2113,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(card_page(day))
         if path == "/accounts":
             return self._send(accounts_page((q.get("m") or [""])[0]))
+        if path == "/plans":
+            return self._send(plans_page())
+        if path == "/plan/new":
+            return self._send(H.page("New plan", plan_form(None, new_token()),
+                                     "plans"))
+        if len(parts) == 2 and parts[0] == "plan":
+            page = plan_page(parts[1])
+            return self._send(page or "no such plan", 200 if page else 404)
+        if len(parts) == 3 and parts[0] == "plan" and parts[2] == "edit":
+            if not store.safe_dir_name(parts[1]):
+                return self._send("bad plan id", 400)
+            try:
+                k = store.load_plan(ROOT, parts[1])
+            except OSError:
+                return self._send("no such plan", 404)
+            return self._send(H.page(k.title or k.id,
+                                     plan_form(k, new_token()), "plans"))
+        if len(parts) == 3 and parts[0] == "plan-shot":
+            if not store.safe_dir_name(parts[1]):
+                return self._send("bad plan id", 400, "text/plain; charset=utf-8")
+            return self._file(os.path.join(store.plan_dir(ROOT, parts[1]),
+                                           store.SHOTS,
+                                           os.path.basename(parts[2])))
         if path == "/open-count":
             return self._send(str(len(journal().open_trades())), 200,
                               "text/plain; charset=utf-8")
@@ -1824,6 +2202,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._send("no such trade", 404)
                 edit_trade(t, data)
                 return self._go(f"/trade/{U(t.id)}")
+            if path == "/plan/new":
+                k = create_plan(data)
+                return self._go(f"/plan/{U(k.id)}")
+            if len(parts) == 3 and parts[0] == "plan":
+                if not store.safe_dir_name(parts[1]):
+                    return self._send("bad plan id", 400)
+                if parts[2] == "delete":
+                    if store.delete_plan(ROOT, parts[1]) is None:
+                        return self._send("no such plan", 404)
+                    return self._go("/plans")
+                try:
+                    k = store.load_plan(ROOT, parts[1])
+                except OSError:
+                    return self._send("no such plan", 404)
+                if parts[2] == "edit":
+                    edit_plan(k, data)
+                elif parts[2] == "update":
+                    add_update(k, data)
+                else:
+                    return self._send("no such page", 404)
+                return self._go(f"/plan/{U(k.id)}")
             if path == "/card/save":
                 k = save_card(data)
                 return self._go(f"/card/{U(k.id)}")

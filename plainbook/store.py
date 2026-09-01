@@ -21,15 +21,18 @@ import shutil
 from datetime import datetime
 
 from . import mdfile
-from .model import (Trade, Account, Adjustment, IdeaBlock, Card,
+from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Plan,
                     TRADE_KEYS, ACCOUNT_KEYS, ADJUSTMENT_KEYS, CARD_KEYS,
-                    CARD_SECTIONS, PAIR_NOT_SET, STYLES, TIMEFRAMES, EXECUTION)
+                    PLAN_KEYS, CARD_SECTIONS, PAIR_NOT_SET,
+                    STYLES, TIMEFRAMES, EXECUTION)
 
 JOURNAL = "journal"
 TRASH = ".trash"            # deleted records: outside git, but not gone
 TRADES, ACCOUNTS, ADJUSTMENTS, REPORTS = "trades", "accounts", "adjustments", "reports"
 CARDS = "cards"             # daily reviews, one file per day
+PLANS = "plans"             # trading plans, a folder each, like a trade
 TRADE_FILE = "trade.md"
+PLAN_FILE = "plan.md"
 SHOTS = "shots"
 
 _IMAGE = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)\s*$")
@@ -105,6 +108,8 @@ def trade_to_text(t):
         head["exit"] = _date_to_text(t.closed)
     if t.note:
         head["note"] = t.note
+    if t.plan:
+        head["plan"] = t.plan
     if t.notion_id:
         head["notion id"] = t.notion_id
     head.update(t.extra)
@@ -146,6 +151,7 @@ def text_to_trade(text):
         pnl=_number(head.get("pnl $")),
         closed=closed,
         note=_text(head.get("note")),
+        plan=_text(head.get("plan")),
         notion_id=_text(head.get("notion id")),
         extra={k: v for k, v in head.items() if k not in known},
     )
@@ -251,6 +257,57 @@ def text_to_adjustment(text):
     )
 
 
+# --- trading plan: object <-> text -----------------------------------------
+
+def plan_to_text(k):
+    head = {"id": k.id}
+    if k.title:
+        head["title"] = k.title
+    head["pair"] = k.pair or PAIR_NOT_SET
+    if k.narrative:
+        head["narrative"] = k.narrative
+    head["from"] = _date_to_text(k.day)
+    if k.until and k.until != k.day:
+        head["until"] = _date_to_text(k.until)
+    head.update(k.extra)
+
+    parts = []
+    if k.analysis:
+        parts.append("## Analysis")
+        for block in k.analysis:
+            parts.append(f"### {block.tf}" if block.tf else "###")
+            if block.text.strip():
+                parts.append(block.text.strip())
+            parts.extend(f"![]({src})" for src in block.images)
+    for heading, text in (("Plan", k.plan), ("Updates", k.updates),
+                          ("Review", k.review)):
+        if text.strip():
+            parts += [f"## {heading}", text.strip()]
+    return mdfile.dump(head, "\n\n".join(parts))
+
+
+def text_to_plan(text):
+    head, body = mdfile.parse(text)
+    known = {key for _, key in PLAN_KEYS}
+    day, _ = _date(head.get("from"))
+    until, _ = _date(head.get("until"))
+    k = Plan(
+        id=_text(head.get("id")),
+        title=_text(head.get("title")),
+        pair=_text(head.get("pair")) or PAIR_NOT_SET,
+        narrative=_text(head.get("narrative")),
+        day=day,
+        until=until,
+        extra={kk: v for kk, v in head.items() if kk not in known},
+    )
+    sections = _split_sections(body)
+    k.analysis = _parse_idea(sections.get("Analysis", ""))
+    k.plan = sections.get("Plan", "").strip()
+    k.updates = sections.get("Updates", "").strip()
+    k.review = sections.get("Review", "").strip()
+    return k
+
+
 # --- daily card: object <-> text -------------------------------------------
 
 def card_to_text(k):
@@ -305,7 +362,7 @@ def _read(path):
         return f.read()
 
 
-JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, REPORTS]
+JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, PLANS, REPORTS]
 
 
 def make_layout(root):
@@ -333,6 +390,10 @@ def safe_dir_name(name):
 
 def trade_dir(root, trade_id):
     return os.path.join(root, JOURNAL, TRADES, trade_id)
+
+
+def plan_dir(root, plan_id):
+    return os.path.join(root, JOURNAL, PLANS, plan_id)
 
 
 def shots_dir(root, trade_id):
@@ -372,6 +433,54 @@ def all_trades(root):
             trades.append(text_to_trade(_read(path)))
     trades.sort(key=lambda t: (t.opened or datetime.max, t.id))
     return trades
+
+
+def save_plan(root, k):
+    k.check()
+    _write(os.path.join(plan_dir(root, k.id), PLAN_FILE), plan_to_text(k))
+    return k
+
+
+def load_plan(root, plan_id):
+    return text_to_plan(_read(os.path.join(plan_dir(root, plan_id), PLAN_FILE)))
+
+
+def all_plans(root):
+    """Every plan, newest first: a plan is looked for near the day it was made."""
+    base = os.path.join(root, JOURNAL, PLANS)
+    plans = []
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        path = os.path.join(base, name, PLAN_FILE)
+        if os.path.isfile(path):
+            plans.append(text_to_plan(_read(path)))
+    plans.sort(key=lambda k: (k.day or datetime.min, k.id), reverse=True)
+    return plans
+
+
+def new_plan_id(root, day, pair):
+    """A plan id: YYYY-MM-DD-pair, with a counter when the day already has one."""
+    slug = re.sub(r"[^\w-]+", "-", (pair or PAIR_NOT_SET).lower().replace(" ", "-"))
+    base = os.path.join(root, JOURNAL, PLANS)
+    taken = set(os.listdir(base) if os.path.isdir(base) else [])
+    stem = f"{day:%Y-%m-%d}-{slug}"
+    if stem not in taken:
+        return stem
+    n = 2
+    while f"{stem}-{n:02d}" in taken:
+        n += 1
+    return f"{stem}-{n:02d}"
+
+
+def delete_plan(root, plan_id):
+    """To the trash with its screenshots, like a trade."""
+    path = plan_dir(root, plan_id)
+    if not os.path.isdir(path):
+        return None
+    target = os.path.join(root, TRASH,
+                          f"plan-{plan_id}-{datetime.now():%Y%m%d-%H%M%S}")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.move(path, target)
+    return target
 
 
 def all_accounts(root):

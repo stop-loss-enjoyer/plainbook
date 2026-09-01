@@ -58,7 +58,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 
 | file | owns |
 |---|---|
-| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`; the vocabularies a journal starts with; the checks |
+| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`, `Plan`; the vocabularies a journal starts with; the checks |
 | `plainbook/mdfile.py` | the markdown header format, and only that |
 | `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash, the owner's lists of pairs and words |
 | `plainbook/balances.py` | balances and R, computed by replaying history |
@@ -124,6 +124,13 @@ can be wrong. `store.py`: write it in `trade_to_text`, read it in
 `apply_fields`, a row in `trade_page`. Then a round-trip test in
 `tests/test_store.py`. Old files without the key must still load, which is what
 `extra` and the `.get` defaults are for.
+
+**Touch the screenshots of a record.** A trade and a plan both keep pictures in
+a `shots` folder inside their own directory, and both go through the same three
+functions: `zone_sources` reads a zone of the form, `apply_shots` rewrites the
+folder whole, `shot_in_zone` draws a thumbnail. They take the record's folder
+and the address its pictures are served from, never a trade, so a third kind of
+record with screenshots needs no new code here.
 
 **Add a page.** A function returning `H.page(title, body, tab, header_right)`,
 one `if` in `do_GET`, and a tab in the `links` list in `html.page` if it belongs

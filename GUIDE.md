@@ -9,11 +9,14 @@ its own and survives a reboot; there is nothing to "start" by hand.
 
 ## The daily round
 
-1. **Opened a position?** Write it down at once, with the **+ Trade** button.
-2. **Closed it?** Close the trade too: the **Close** button in the open
+1. **Before the market**, a plan if the week or the day needs one: the
+   **+ Plan** button.
+2. **Opened a position?** Write it down at once, with the **+ Trade** button,
+   and pick the plan it follows.
+3. **Closed it?** Close the trade too: the **Close** button in the open
    positions block or on the trade page.
-3. **At the end of the day**, a card: the **+ Card** button.
-4. **At the end of a month or a quarter**, a report: the **Reports** tab.
+4. **At the end of the day**, a card: the **+ Card** button.
+5. **At the end of a month or a quarter**, a report: the **Reports** tab.
 
 The point of the first step: the idea is written down before the market shows
 who was right. In hindsight an idea always looks tidier than it was.
@@ -31,6 +34,8 @@ who was right. In hindsight an idea always looks tidier than it was.
 - **risk, %**: the risk as a percent of the current computed balance of the
   account. What that is in money shows on the trade page once it is saved.
 - **entry**: date and time of entry; clicking the field opens a calendar.
+- **plan**: the trading plan this trade follows, picked from the plans you have
+  written. Left at "-" if the trade belongs to none.
 - **execution**: the checkboxes. They come from your list too, so the formats
   you actually trade are the ones offered.
 
@@ -50,6 +55,33 @@ account and the risk, so each is measured against its own balance. After that
 they are two ordinary trades: each is closed with its own result and PnL.
 
 **Open trade** saves it. The position counts as open until it is closed.
+
+## Trading plans
+
+**+ Plan** in the header, or the **Plans** tab. A plan is written before the
+market opens and holds what a trade cannot: what was supposed to happen.
+
+- **title, pair, narrative**: a name of your own, the instrument, and what you
+  expect: bullish, bearish, neutral or no trade. A decision not to trade is a
+  plan as well.
+- **from** and **until**: the days the plan covers. Until is left empty for a
+  plan that lives one day; a plan that covers today is marked **current** in the
+  list and its card is outlined on the page.
+- **analysis blocks**: timeframe, text and screenshots, the same blocks as the
+  idea of a trade. **+ analysis block** adds another timeframe.
+- **plan**: what you will do, and what you will not. This is the part you read
+  back when a trade tempts you mid-week.
+
+**Updates** are added from the plan page, not from the form: one line, and the
+journal stamps it with the date. The plan stays as it was written and the week
+is written under it.
+
+**Review** is written later, in the plan form: how it went, with screenshots.
+
+**What came of the plan.** Every trade you tied to it is listed on its page with
+its result, PnL and R, and the line under the table says how many trades, the
+winrate, the Σ R and the money. That is the answer a plan in a document cannot
+give: whether following it was worth anything.
 
 ## Closing a trade
 
@@ -225,7 +257,8 @@ the difference came from. That way the history stays honest.
 
 ## Reports
 
-The **Reports** tab: pick a month or a quarter and press **Build**. A report is
+The **Reports** tab: pick a month or a quarter and press **Build**. The header
+has no button for it; building a report belongs on the tab that shows them. A report is
 an ordinary file in `journal/reports/`. Building it again recomputes the figures
 and **never overwrites your conclusions**, so you can write them right in the
 report.
@@ -259,6 +292,8 @@ Everything is in the `journal/` folder: ordinary text files and pictures.
     journal/trades/2026-08-30-01-eurusd/trade.md
     journal/trades/2026-08-30-01-eurusd/shots/*.png
     journal/cards/2026-08-30.md
+    journal/plans/2026-08-31-eurusd/plan.md
+    journal/plans/2026-08-31-eurusd/shots/*.png
     journal/accounts/*.md
     journal/adjustments/*.md
     journal/reports/2026-08.md

@@ -299,8 +299,8 @@ def money(x, signed=False):
 
 
 def page(title, body, tab="journal", header_right=""):
-    links = [("journal", "/", "Journal"), ("cards", "/cards", "Cards"),
-             ("stats", "/stats", "Statistics"),
+    links = [("journal", "/", "Journal"), ("plans", "/plans", "Plans"),
+             ("cards", "/cards", "Cards"), ("stats", "/stats", "Statistics"),
              ("reports", "/reports", "Reports"), ("accounts", "/accounts", "Accounts")]
     nav = "".join(
         f'<a href="{href}" class="{"current" if code == tab else ""}">{name}</a>'
