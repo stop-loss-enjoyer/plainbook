@@ -318,11 +318,12 @@ class ServerCase(unittest.TestCase):
             "pair": "GBPUSD", "direction": "short", "style": "EMT",
             "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
             "idea_text_1": "idea rewritten", "result": "Lose", "pnl": "-250",
-            "exit": "2026-09-01", "conclusions": "held to target"})
+            "exit": "2026-09-01T14:30", "conclusions": "held to target"})
         t = store.load_trade(self.root, ServerCase.trade_id)
         self.assertEqual(t.result, "Lose")
         self.assertEqual(t.pnl, -250.0)
-        self.assertEqual(f"{t.closed:%Y-%m-%d}", "2026-09-01")
+        self.assertEqual(f"{t.closed:%Y-%m-%d %H:%M}", "2026-09-01 14:30")
+        self.assertTrue(t.closed_time)          # the hour orders the day
         # and back, so the trades the tests below count stay what they were
         self.post(f"/edit/{q}", {
             "token": self.form_token(self.get(f"/edit/{q}")[1]),

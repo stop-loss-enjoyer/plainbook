@@ -220,10 +220,11 @@ private one that is never pushed anywhere.
 never written to a file. Nothing can go stale, because there is no stored copy
 to go stale.
 
-**R** = PnL / (risk% × the account balance **at the moment of entry**). The
-balance is taken as of the entry day: a trade closed today does not change
-today's entry. Measured this way, 1% of risk stops looking like the same amount
-of money forever.
+**R** = PnL / (risk% × the account balance **at the moment of entry**). The exit
+of a trade carries its hour, so a position closed earlier the same day is already
+in that balance; an exit written without an hour counts from the next day, since
+nothing then says which of the two came first. Measured this way, 1% of risk
+stops looking like the same amount of money forever.
 
 **Win rate** = wins / (wins + losses). Break-even trades stay out of the
 denominator: such a trade ended neither way, and diluting the hit rate with it

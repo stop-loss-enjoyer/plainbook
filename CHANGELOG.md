@@ -2,6 +2,16 @@
 
 What changed and why. Newest first.
 
+## v1.4.2, 02.09.2026
+
+- **The exit of a trade carries its hour.** A close only had a date, so a trade
+  closed at noon was not in the balance of a trade opened at three the same
+  afternoon: the balance at entry, the risk in money and R were all measured
+  against yesterday's account. The closing form now asks for the moment, and the
+  balance counts a close that already happened. An exit left at midnight is an
+  exit whose hour is unknown and behaves as before, which is what every trade
+  closed so far keeps doing.
+
 ## v1.4.1, 02.09.2026
 
 - **The result of a trade is picked, not defaulted.** The menu in the closing

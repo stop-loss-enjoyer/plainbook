@@ -10,8 +10,12 @@ same amount of money no matter how the account has grown.
 
 Order of events when replaying the history:
   - an adjustment counts from its own date, inclusive;
-  - a trade's PnL counts from the CLOSING date, and does not affect an entry
-    made the same day (a trade closed today does not change today's entry).
+  - a trade's PnL counts from the moment of the close when the exit carries an
+    hour and the entry does too, so a trade closed at noon is already in the
+    balance of one opened at three and is not in the balance of one opened at
+    nine;
+  - without those hours the PnL counts from the day after the close, because a
+    date alone cannot say which of the two came first.
 
 R = PnL / (risk% x balance at entry). For BE, R is 0.
 """
@@ -47,25 +51,24 @@ class Journal:
     # --- replay ------------------------------------------------------------
 
     def _replay(self):
-        """For every trade: the balance at entry, the risk in money and R."""
-        events = []                             # (date, order, account, amount)
+        """For every trade: the balance at entry, the risk in money and R.
+
+        Every event is weighed against every entry instead of being played once
+        in order. A close that carries the hour belongs to the balance of a
+        trade opened later that day and not to one opened earlier, and a single
+        pass through a list of events cannot give both answers on one day."""
+        events = []            # (moment, kind, account, amount, hour is known)
         for c in self.adjustments:
-            events.append((c.day, 0, c.account, c.amount))
+            events.append((c.day, 0, c.account, c.amount, False))
         for t in self.trades:
             if not t.is_open and t.closed is not None:
-                events.append((t.closed, 1, t.account, t.pnl or 0.0))
-        events.sort(key=lambda e: (e[0], e[1]))
+                events.append((t.closed, 1, t.account, t.pnl or 0.0,
+                               t.closed_time))
 
-        balance = {a: acc.start_balance for a, acc in self.accounts.items()}
-        computed, i = {}, 0
+        computed = {}
         for t in self.trades:
-            # play everything that happened before the entry day
-            # (adjustments including that day)
-            while i < len(events) and _before(events[i], t.opened):
-                _, _, account, amount = events[i]
-                balance[account] = balance.get(account, 0.0) + amount
-                i += 1
-            b = balance.get(t.account, 0.0)
+            b = self._start(t.account) + sum(
+                e[3] for e in events if e[2] == t.account and _before(e, t))
             risk_money = b * (t.risk or 0.0) / 100.0
             r = None
             if not t.is_open:
@@ -137,9 +140,12 @@ class Journal:
         return points
 
 
-def _before(event, entry):
+def _before(event, trade):
     """Does this event affect the balance by the moment of entry?"""
-    day, order = event[0], event[1]
-    if order == 0:                    # an adjustment counts from its date on
+    day, kind, timed = event[0], event[1], event[4]
+    entry = trade.opened
+    if kind == 0:                     # an adjustment counts from its date on
         return day.date() <= entry.date()
+    if timed and trade.opened_time:   # both hours are known: compare moments
+        return day <= entry
     return day.date() < entry.date()  # PnL counts from the day after the close

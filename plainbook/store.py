@@ -105,7 +105,7 @@ def trade_to_text(t):
     if t.result is not None:
         head["result"] = t.result
         head["pnl $"] = _number_to_text(t.pnl)
-        head["exit"] = _date_to_text(t.closed)
+        head["exit"] = _date_to_text(t.closed, t.closed_time)
     if t.note:
         head["note"] = t.note
     if t.plan:
@@ -135,7 +135,7 @@ def text_to_trade(text):
     head, body = mdfile.parse(text)
     known = {key for _, key in TRADE_KEYS}
     opened, with_time = _date(head.get("entry"))
-    closed, _ = _date(head.get("exit"))
+    closed, closed_with_time = _date(head.get("exit"))
     t = Trade(
         id=_text(head.get("id")),
         account=_text(head.get("account")),
@@ -150,6 +150,7 @@ def text_to_trade(text):
         result=(_text(head.get("result")) or None),
         pnl=_number(head.get("pnl $")),
         closed=closed,
+        closed_time=closed_with_time,
         note=_text(head.get("note")),
         plan=_text(head.get("plan")),
         notion_id=_text(head.get("notion id")),

@@ -13,10 +13,15 @@ from plainbook.model import Trade, Account, Adjustment
 
 
 def trade(id, day, pnl=None, result=None, risk=1.0, account="bybit", closed=None):
+    """`day` and `closed` are tuples; give them an hour and a minute and the
+    journal knows the moment, which is what puts two trades of one day in
+    order."""
     return Trade(id=id, account=account, pair="EURUSD", direction="long",
                  style="swing", entry_tf="H4", execution=["M15"], risk=risk,
-                 opened=datetime(*day), result=result, pnl=pnl,
-                 closed=datetime(*closed) if closed else None)
+                 opened=datetime(*day), opened_time=len(day) > 3,
+                 result=result, pnl=pnl,
+                 closed=datetime(*closed) if closed else None,
+                 closed_time=bool(closed) and len(closed) > 3)
 
 
 class Balances(unittest.TestCase):
@@ -65,6 +70,30 @@ class Balances(unittest.TestCase):
         ], [])
         self.assertEqual(j.computed["t2"].balance_at_entry, 10000)
         self.assertEqual(j.computed["t3"].balance_at_entry, 11000)
+
+    def test_an_exit_with_an_hour_counts_from_that_hour(self):
+        """A trade closed at noon is money on the account by three o'clock: an
+        entry later that day is measured against the balance it left behind,
+        and an entry earlier that day is not."""
+        j = Journal(self.accounts, [
+            trade("t1", (2025, 6, 25), pnl=-1000, result="Lose",
+                  closed=(2025, 6, 26, 12, 0)),
+            trade("morning", (2025, 6, 26, 9, 0)),
+            trade("evening", (2025, 6, 26, 15, 8)),
+        ], [])
+        self.assertEqual(j.computed["morning"].balance_at_entry, 10000)
+        self.assertEqual(j.computed["evening"].balance_at_entry, 9000)
+
+    def test_an_exit_without_an_hour_still_waits_for_the_next_day(self):
+        """Nothing says which of the two came first, so the old rule holds."""
+        j = Journal(self.accounts, [
+            trade("t1", (2025, 6, 25), pnl=-1000, result="Lose",
+                  closed=(2025, 6, 26)),
+            trade("evening", (2025, 6, 26, 15, 8)),
+            trade("next", (2025, 6, 27, 9, 0)),
+        ], [])
+        self.assertEqual(j.computed["evening"].balance_at_entry, 10000)
+        self.assertEqual(j.computed["next"].balance_at_entry, 9000)
 
     def test_be_gives_zero_r(self):
         j = Journal(self.accounts, [

@@ -69,6 +69,7 @@ class Trade:
     result: str = None                              # None = position is open
     pnl: float = None
     closed: date = None
+    closed_time: bool = False                       # is the exit time known
     note: str = ""
     plan: str = ""                                  # id of the plan it follows
     notion_id: str = ""

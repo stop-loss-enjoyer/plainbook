@@ -86,11 +86,16 @@ give: whether following it was worth anything.
 ## Closing a trade
 
 The **Close trade** button. You fill in the result (Win / Lose / BE), the PnL in
-dollars and the exit date; below that go the screenshots of the exit and the
-conclusions with their own screenshots.
+dollars and the moment of the exit; below that go the screenshots of the exit and
+the conclusions with their own screenshots.
 
 The result starts on **pick one** and the form will not be sent until you choose,
 so a trade cannot be closed with a result nobody picked.
+
+The exit holds the hour as well as the date, and it matters: a trade opened later
+the same day is measured against the balance this close left behind. Leave the
+time at midnight and the journal takes the hour as unknown, as it does for an
+entry.
 
 R is worked out by itself: `PnL / (risk% × the balance at the moment of entry)`.
 There is nothing to recompute by hand.
@@ -98,8 +103,8 @@ There is nothing to recompute by hand.
 ## Editing and deleting
 
 - **Edit** on the trade page changes any field, screenshots included. For a
-  closed trade the result, the PnL, the exit date, the exit shots and the
-  conclusions are edited there as well, so a result entered wrong is fixed
+  closed trade the result, the PnL, the moment of the exit, the exit shots and
+  the conclusions are edited there as well, so a result entered wrong is fixed
   without touching the file.
 - **Delete** sends the trade to `.trash` next to the `journal` folder. It is not
   shredded: if you deleted the wrong one, move the folder back into
@@ -147,8 +152,9 @@ adjustments (deposits, withdrawals, fees, reconciliations). It is stored
 nowhere: it is worked out afresh every time, so it cannot fall behind reality.
 
 **R** = PnL / (risk in percent × the account balance at the moment of entry).
-The balance is taken as of the entry day: a trade closed today does not affect
-today's entry.
+A trade closed earlier the same day is already in that balance, because the exit
+carries its hour. If the exit was left at midnight, that is an exit whose hour is
+unknown, and its PnL counts from the next day.
 
 **Winrate** = wins / (wins + losses). Break-even trades stay out of the
 denominator: such a trade ended neither way. What they cost (commission, the

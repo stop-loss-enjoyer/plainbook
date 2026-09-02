@@ -68,12 +68,21 @@ class TradeRoundTrip(unittest.TestCase):
                          "the second pass changed the file")
         return again
 
+    def test_the_exit_keeps_its_hour(self):
+        """The hour of the close is what orders two trades of the same day."""
+        t = sample_trade(closed=datetime(2025, 6, 27, 12, 40), closed_time=True)
+        again = self.round_trip(t)
+        self.assertEqual(again.closed, datetime(2025, 6, 27, 12, 40))
+        self.assertTrue(again.closed_time)
+        self.assertIn("exit: 2025-06-27 12:40", store.trade_to_text(t))
+
     def test_closed_trade(self):
         t = sample_trade()
         again = self.round_trip(t)
         for name in ("id", "account", "pair", "direction", "style", "entry_tf",
                      "execution", "risk", "opened", "opened_time", "result",
-                     "pnl", "closed", "exit_images", "conclusions"):
+                     "pnl", "closed", "closed_time", "exit_images",
+                     "conclusions"):
             self.assertEqual(getattr(again, name), getattr(t, name), name)
         self.assertEqual([(b.tf, b.text, b.images) for b in again.idea],
                          [(b.tf, b.text, b.images) for b in t.idea])

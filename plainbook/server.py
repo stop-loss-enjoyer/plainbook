@@ -392,7 +392,9 @@ def trade_page(trade_id):
               ("balance at entry", f"{H.money(computed.balance_at_entry)} $"),
               ("entry", f"{t.opened:%d.%m.%Y %H:%M}" if t.opened_time
                else f"{t.opened:%d.%m.%Y}"),
-              ("exit", f"{t.closed:%d.%m.%Y}" if t.closed else "-"),
+              ("exit", ("-" if not t.closed else
+                        f"{t.closed:%d.%m.%Y %H:%M}" if t.closed_time
+                        else f"{t.closed:%d.%m.%Y}")),
               ("result", t.result or "position open"),
               ("PnL", f"{H.money(t.pnl, signed=True)} $" if t.pnl is not None else "-"),
               ("R", f"{r:+.2f}" if r is not None else "-")]
@@ -819,15 +821,20 @@ init_zones();</script>"""
 
 def outcome_fields(t):
     """What a trade ended with: asked when it is closed and editable afterwards,
-    because a result picked by accident stays wrong otherwise."""
+    because a result picked by accident stays wrong otherwise.
+
+    The exit carries the hour, and the balance of a trade opened later the same
+    day counts the money this close returned. An exit left at midnight is an
+    exit whose hour is not known, the same convention the entry follows."""
+    exit_at = (t.closed or datetime.now()).strftime("%Y-%m-%dT%H:%M")
     return f"""<div class="fields">
 <div class="field"><label>result</label>
 {select("result", RESULTS, t.result or "", empty="pick one", required=True)}</div>
 <div class="field"><label>PnL, $</label>
 <input type="number" name="pnl" step="0.01" style="width:130px"
  value="{t.pnl if t.pnl is not None else ""}" required></div>
-<div class="field"><label>exit date</label>
-<input type="date" name="exit" value="{(t.closed or datetime.now()):%Y-%m-%d}"
+<div class="field"><label>exit</label>
+<input type="datetime-local" name="exit" value="{exit_at}"
  onclick="this.showPicker && this.showPicker()"></div>
 </div>"""
 
@@ -1105,7 +1112,11 @@ def apply_outcome(t, data):
         raise RecordError("pick how the trade ended: " + ", ".join(RESULTS))
     t.result = result
     t.pnl = float(one(data, "pnl", "0").replace(",", "."))
-    t.closed = datetime.strptime(one(data, "exit"), "%Y-%m-%d")
+    closed, _ = store._date(one(data, "exit"))
+    if closed is None:
+        raise RecordError("the exit date is missing")
+    t.closed = closed
+    t.closed_time = bool(closed.hour or closed.minute)
     return t
 
 
