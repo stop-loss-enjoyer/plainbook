@@ -89,13 +89,18 @@ The **Close trade** button. You fill in the result (Win / Lose / BE), the PnL in
 dollars and the exit date; below that go the screenshots of the exit and the
 conclusions with their own screenshots.
 
+The result starts on **pick one** and the form will not be sent until you choose,
+so a trade cannot be closed with a result nobody picked.
+
 R is worked out by itself: `PnL / (risk% × the balance at the moment of entry)`.
 There is nothing to recompute by hand.
 
 ## Editing and deleting
 
 - **Edit** on the trade page changes any field, screenshots included. For a
-  closed trade the exit and the conclusions are edited there as well.
+  closed trade the result, the PnL, the exit date, the exit shots and the
+  conclusions are edited there as well, so a result entered wrong is fixed
+  without touching the file.
 - **Delete** sends the trade to `.trash` next to the `journal` folder. It is not
   shredded: if you deleted the wrong one, move the folder back into
   `journal/trades/` with a file manager.

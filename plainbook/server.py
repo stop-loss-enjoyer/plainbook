@@ -640,14 +640,20 @@ document.addEventListener('DOMContentLoaded', () => { init_zones(); });
 """
 
 
-def select(name, values, current="", empty=None, labels=None, style=""):
-    """A menu. `labels` gives a value a name of its own, as a plan id needs."""
+def select(name, values, current="", empty=None, labels=None, style="",
+           required=False):
+    """A menu. `labels` gives a value a name of its own, as a plan id needs.
+
+    A menu with no empty option arrives with its first value picked whether the
+    person looked at it or not, so a field that has no sensible default asks
+    for `empty` and `required` together."""
     options = f'<option value="">{esc(empty)}</option>' if empty else ""
     options += "".join(
         f'<option value="{esc(v)}"{" selected" if v == current else ""}>'
         f'{esc((labels or {}).get(v, v))}</option>' for v in values)
     where = f' style="{style}"' if style else ""
-    return f'<select name="{name}"{where}>{options}</select>'
+    must = " required" if required else ""
+    return f'<select name="{name}"{where}{must}>{options}</select>'
 
 
 def shot_in_zone(base, path, field):
@@ -756,6 +762,8 @@ two trades: this one, and a copy on that account with the risk set here.</p>
     closing = ""
     if editing and not t.is_open:
         closing = f"""<input type="hidden" name="closed" value="1">
+<div class="card"><h2>Outcome</h2>
+{outcome_fields(t)}</div>
 <div class="card"><h2>Exit moment</h2>
 {dropzone("exit", "click here and press Ctrl+V",
           [shot_in_zone(shots_base(t.id), s, "have_exit") for s in t.exit_images])}</div>
@@ -809,6 +817,21 @@ two trades: this one, and a copy on that account with the risk set here.</p>
 init_zones();</script>"""
 
 
+def outcome_fields(t):
+    """What a trade ended with: asked when it is closed and editable afterwards,
+    because a result picked by accident stays wrong otherwise."""
+    return f"""<div class="fields">
+<div class="field"><label>result</label>
+{select("result", RESULTS, t.result or "", empty="pick one", required=True)}</div>
+<div class="field"><label>PnL, $</label>
+<input type="number" name="pnl" step="0.01" style="width:130px"
+ value="{t.pnl if t.pnl is not None else ""}" required></div>
+<div class="field"><label>exit date</label>
+<input type="date" name="exit" value="{(t.closed or datetime.now()):%Y-%m-%d}"
+ onclick="this.showPicker && this.showPicker()"></div>
+</div>"""
+
+
 def close_form(t, token):
     exit_shots = [shot_in_zone(shots_base(t.id), s, "have_exit")
                   for s in t.exit_images]
@@ -817,16 +840,7 @@ def close_form(t, token):
     return f"""<form method="post" action="/close/{U(t.id)}">
 <input type="hidden" name="token" value="{esc(token)}">
 <div class="card"><h2>Close trade {esc(t.id)}</h2>
-<div class="fields">
-<div class="field"><label>result</label>
-{select("result", RESULTS, t.result or "")}</div>
-<div class="field"><label>PnL, $</label>
-<input type="number" name="pnl" step="0.01" style="width:130px"
- value="{t.pnl if t.pnl is not None else ""}" required></div>
-<div class="field"><label>exit date</label>
-<input type="date" name="exit" value="{(t.closed or datetime.now()):%Y-%m-%d}"
- onclick="this.showPicker && this.showPicker()"></div>
-</div>
+{outcome_fields(t)}
 <p class="caption">Risk was {t.risk:g}% = {H.money(journal().computed[t.id].risk_money)} $.
 R is calculated automatically.</p></div>
 <div class="card"><h2>Exit moment</h2>
@@ -1035,6 +1049,7 @@ def edit_trade(t, data):
     # wipe the screenshots off the disk.
     editing_close = one(data, "closed") == "1"
     if editing_close:
+        apply_outcome(t, data)
         zones["exit"] = zone_sources(data, "exit", folder, token)
         zones["concl"] = zone_sources(data, "concl", folder, token)
     else:
@@ -1082,11 +1097,21 @@ def rewrite_conclusions(text, images):
         lambda m: f"![]({queue.pop(0)})" if queue else "", text).strip()
 
 
-def close_trade(t, data):
-    token = one(data, "token")
-    t.result = one(data, "result")
+def apply_outcome(t, data):
+    """The three fields of `outcome_fields`, read back the same way by the
+    closing form and by the form of a closed trade."""
+    result = one(data, "result")
+    if result not in RESULTS:
+        raise RecordError("pick how the trade ended: " + ", ".join(RESULTS))
+    t.result = result
     t.pnl = float(one(data, "pnl", "0").replace(",", "."))
     t.closed = datetime.strptime(one(data, "exit"), "%Y-%m-%d")
+    return t
+
+
+def close_trade(t, data):
+    token = one(data, "token")
+    apply_outcome(t, data)
     conclusions = one(data, "conclusions")
     folder = store.trade_dir(ROOT, t.id)
     zones = {f"idea-{i}": [os.path.join(folder, s) for s in b.images]

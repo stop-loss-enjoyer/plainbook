@@ -2,6 +2,19 @@
 
 What changed and why. Newest first.
 
+## v1.4.1, 02.09.2026
+
+- **The result of a trade is picked, not defaulted.** The menu in the closing
+  form had no empty option, so the browser kept Win selected on its own and a
+  trade closed without a glance at the field was recorded as a win whatever the
+  PnL said. The menu now starts on "pick one" and the trade does not close until
+  Win, Lose or BE is chosen.
+
+- **The result, the PnL and the exit date are edited like any other field.** They
+  sit in the Edit form of a closed trade, above the exit screenshots and the
+  conclusions. Before, a result entered wrong stayed wrong: the only form that
+  asked for it was the one that closed the trade.
+
 ## v1.4, 01.09.2026
 
 The plan a trade came from, a trade written once for two accounts, three lists

@@ -266,7 +266,8 @@ class ServerCase(unittest.TestCase):
             "token": token, "closed": "1", "blocks": "1", "account": "bybit",
             "pair": "GBPUSD", "direction": "short", "style": "EMT",
             "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
-            "idea_text_1": "idea rewritten",
+            "idea_text_1": "idea rewritten", "result": "Win", "pnl": "250",
+            "exit": "2026-08-31",
             "have_exit": "shots/exit-01.png", "conclusions": "held to target"})
         t = store.load_trade(self.root, ServerCase.trade_id)
         self.assertEqual(t.exit_images, ["shots/exit-01.png"])
@@ -282,10 +283,56 @@ class ServerCase(unittest.TestCase):
             "token": token, "closed": "1", "blocks": "1", "account": "bybit",
             "pair": "GBPUSD", "direction": "short", "style": "EMT",
             "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
-            "idea_text_1": "idea rewritten", "conclusions": "held to target"})
+            "idea_text_1": "idea rewritten", "result": "Win", "pnl": "250",
+            "exit": "2026-08-31", "conclusions": "held to target"})
         t = store.load_trade(self.root, ServerCase.trade_id)
         self.assertEqual(t.exit_images, [])
         self.assertEqual(os.listdir(store.shots_dir(self.root, t.id)), [])
+
+    def test_18a_the_result_is_picked_and_not_defaulted(self):
+        """A menu with no empty option arrives with its first value picked, so a
+        trade closed without a glance at the field came out a Win."""
+        q = urllib.parse.quote(ServerCase.trade_id)
+        _, html = self.get(f"/close/{q}")
+        self.assertIn("pick one", html)
+        self.assertIn("required", html.split('name="result"')[1][:40])
+        token = self.form_token(html)
+        data = urllib.parse.urlencode({
+            "token": token, "result": "", "pnl": "-250",
+            "exit": "2026-08-31"}).encode()
+        try:
+            urllib.request.urlopen(urllib.request.Request(self.url(f"/close/{q}"),
+                                                          data=data))
+            self.fail("the server closed a trade with no result")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 400)
+
+    def test_18b_a_wrong_result_is_fixed_by_editing(self):
+        """The result was Win on a losing trade and there was no way back."""
+        q = urllib.parse.quote(ServerCase.trade_id)
+        _, html = self.get(f"/edit/{q}")
+        self.assertIn('name="result"', html)
+        token = self.form_token(html)
+        self.post(f"/edit/{q}", {
+            "token": token, "closed": "1", "blocks": "1", "account": "bybit",
+            "pair": "GBPUSD", "direction": "short", "style": "EMT",
+            "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
+            "idea_text_1": "idea rewritten", "result": "Lose", "pnl": "-250",
+            "exit": "2026-09-01", "conclusions": "held to target"})
+        t = store.load_trade(self.root, ServerCase.trade_id)
+        self.assertEqual(t.result, "Lose")
+        self.assertEqual(t.pnl, -250.0)
+        self.assertEqual(f"{t.closed:%Y-%m-%d}", "2026-09-01")
+        # and back, so the trades the tests below count stay what they were
+        self.post(f"/edit/{q}", {
+            "token": self.form_token(self.get(f"/edit/{q}")[1]),
+            "closed": "1", "blocks": "1", "account": "bybit",
+            "pair": "GBPUSD", "direction": "short", "style": "EMT",
+            "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
+            "idea_text_1": "idea rewritten", "result": "Win", "pnl": "250",
+            "exit": "2026-08-31", "conclusions": "held to target"})
+        self.assertEqual(store.load_trade(self.root, ServerCase.trade_id).result,
+                         "Win")
 
     def test_19_the_list_groups_by_weeks_months_and_quarters(self):
         _, html = self.get("/")
