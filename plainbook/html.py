@@ -115,6 +115,18 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 .tile .value{{font:600 22px/1.15 {MONO};margin-top:5px;
  font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
 .tile .sub{{color:{INK2};font-size:11px;margin-top:4px}}
+/* a tile that asks for attention: the daily limit of a prop account is close */
+.tile.warn{{box-shadow:inset 3px 0 0 {WARN}}}
+.tile.warn .value{{color:{WARN}}}
+.tile.over{{box-shadow:inset 3px 0 0 {BAD}}}
+.tile.over .value{{color:{BAD}}}
+
+/* records that could not be read: said once, at the top of every page */
+.notice{{background:rgba(217,164,65,.08);border:1px solid rgba(217,164,65,.4);
+ border-radius:5px;padding:10px 14px;margin-bottom:16px;font-size:12px}}
+.notice b{{color:{WARN}}}
+.notice ul{{margin:6px 0 0;padding-left:18px}}
+.notice code{{font-family:{MONO};font-size:11px;color:{INK2}}}
 
 /* cards */
 .card{{background:{SURFACE};border:1px solid {EDGE};border-radius:5px;
@@ -207,6 +219,7 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .props{{max-width:660px}}
 .props td:first-child{{width:190px;color:{DIM}}}
 .caption{{color:{DIM};font-size:11px}}
+mark{{background:rgba(111,157,255,.28);color:inherit;border-radius:2px}}
 .caption a{{color:{INK2}}}
 
 /* trading pairs: two round flags before the name, as a terminal draws them */
@@ -291,6 +304,15 @@ def pair(name):
     return Safe(f'<span class="pair">{icon}{esc(name)}</span>')
 
 
+# the currencies that have a sign of their own; any other is written by its code
+SIGNS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "CHF": "₣", "RUB": "₽",
+         "USDT": "$", "USDC": "$"}
+
+
+def sign(currency):
+    return SIGNS.get((currency or "").upper(), currency or "")
+
+
 def money(x, signed=False):
     if x is None:
         return "-"
@@ -298,10 +320,11 @@ def money(x, signed=False):
     return text.replace(",", " ")
 
 
-def page(title, body, tab="journal", header_right=""):
+def page(title, body, tab="journal", header_right="", notice=""):
     links = [("journal", "/", "Journal"), ("plans", "/plans", "Plans"),
              ("cards", "/cards", "Cards"), ("stats", "/stats", "Statistics"),
-             ("reports", "/reports", "Reports"), ("accounts", "/accounts", "Accounts")]
+             ("reports", "/reports", "Reports"), ("accounts", "/accounts", "Accounts"),
+             ("search", "/search", "Search")]
     nav = "".join(
         f'<a href="{href}" class="{"current" if code == tab else ""}">{name}</a>'
         for code, href, name in links)
@@ -313,7 +336,7 @@ def page(title, body, tab="journal", header_right=""):
 <div class="wrap">
 <header><span class="logo">Plainbook</span><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
-{body}
+{notice}{body}
 </div>
 <div class="tip" id="tip"></div>
 </body></html>"""

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import store
-from plainbook.model import Account, Card, IdeaBlock, Trade
+from plainbook.model import Account, Card, IdeaBlock, Plan, Trade
 
 ACCOUNTS = [Account(id="broker", name="broker", start_balance=10000),
             Account(id="prop-100k", name="prop 100k", start_balance=100000)]
@@ -55,6 +55,24 @@ def build(root, days=40):
     while today.weekday() >= 5:                     # finish the run on a weekday
         today -= timedelta(days=1)
     start = today - timedelta(days=days)
+
+    # a plan for the current week, so that the Plans tab and the plan page
+    # have something to show, and a few trades are tied to it below
+    monday = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0)
+    plan = Plan(id=store.new_plan_id(root, monday, "EURUSD"), title="weekly",
+                pair="EURUSD", narrative="bullish", day=monday,
+                until=monday + timedelta(days=4),
+                analysis=[IdeaBlock(tf="D1", text="Higher lows since the last "
+                                    "sweep of the yearly level; the weekly close "
+                                    "held above it."),
+                          IdeaBlock(tf="H4", text="An imbalance left on Friday's "
+                                    "rally is the place to buy from.")],
+                plan="Buy from the H4 imbalance only. No shorts this week, and "
+                     "no entry in the hour before the Thursday news.",
+                updates=f"**{monday + timedelta(days=1):%d.%m.%Y}**: the "
+                        f"imbalance was filled overnight, waiting for the retest.")
+    store.save_plan(root, plan)
+
     for i in range(26):
         day = start + timedelta(days=int(i * days / 26), hours=random.randint(-5, 4))
         if day.weekday() >= 5:                      # the market is closed
@@ -75,7 +93,9 @@ def build(root, days=40):
             execution=random.sample(["Market Entry", "IDM", "SNR", "FVG"], 2),
             risk=risk, opened=day, opened_time=True,
             result=result, pnl=float(pnl),
-            closed=(day + timedelta(days=random.randint(0, 3))).date(),
+            closed=(day + timedelta(days=random.randint(0, 3))).replace(
+                hour=0, minute=0),
+            plan=plan.id if plan.covers(day) and pair == "EURUSD" else "",
             idea=[IdeaBlock(tf="H4", text=random.choice(IDEAS))],
             conclusions=random.choice(CONCLUSIONS))
         store.save_trade(root, trade)
@@ -85,11 +105,11 @@ def build(root, days=40):
     store.save_trade(root, Trade(
         id=store.new_id(root, open_day, "EURUSD"), account="broker", pair="EURUSD",
         direction="short", style="EMT", entry_tf="H1", risk=1.0,
-        opened=open_day, opened_time=True,
+        opened=open_day, opened_time=True, plan=plan.id,
         idea=[IdeaBlock(tf="H1", text=IDEAS[0])]))
 
     store.save_card(root, Card(
-        day=today.date(), grade="B", quality="B", pnl=174.0,
+        day=today, grade="B", quality="B", pnl=174.0,
         focus="Stop taking the second entry after a loss.",
         process="Two setups planned in the morning, one taken, one skipped for "
                 "the right reason, it never came back to the level.",

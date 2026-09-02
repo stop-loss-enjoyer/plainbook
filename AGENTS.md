@@ -35,8 +35,9 @@ records.
 ## 2. Running it
 
 ```bash
-python3 -m unittest discover -s tests    # the whole suite, ~0.7 s
+python3 -m unittest discover -s tests    # the whole suite, ~1 s
 python3 tools/check_public.py            # nothing private in the tree
+python3 tools/check_journal.py [root]    # does every record read
 python3 -m plainbook.server              # http://localhost:8778
 ```
 
@@ -68,6 +69,8 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/flags.py` | the round flag icons of a trading symbol, and what a symbol is taken apart into |
 | `plainbook/server.py` | routes, pages, forms: everything HTTP |
 | `tools/check_public.py` | the guard that keeps records out of the repository |
+| `tools/check_journal.py` | loads every record the way the server does and names the ones that do not read |
+| `tools/demo_journal.py` | an invented journal for screenshots and for looking at a change |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
 reports, balances, store → model → mdfile`. Nothing points back up. If you find
@@ -114,6 +117,13 @@ data. Each one is followed by what it prevents.
    (`server.offered`). Nothing validates a trade against these lists.
    *Prevents:* retiring a style quietly deleting it from the trades that have
    it, since a form deletes what it does not draw.
+10. **A record that does not read is named, not fatal.** Every reader in
+    `store.py` takes a `problems` list (`store._load`): a file that fails is
+    written there as (path, reason) and skipped, `Journal.load` collects the
+    list, and `server.page` shows it on every page. Without the list the error
+    is raised, which is what the tests and the checking tool want.
+    *Prevents:* one mistyped date leaving every page blank with the reason only
+    in the log, which is what happened before 1.4.3.
 
 ## 5. Recipes
 
@@ -205,3 +215,11 @@ and none of them was obvious from the code.
 - **Drafts that never expired.** Screenshots pasted into a form that was never
   submitted stayed forever. *Lesson:* anything written outside a record needs an
   owner and an expiry.
+- **A test that looked for prose found it in the CSS.** A test asserted that a
+  warning phrase was absent from a page, and the phrase sat in a stylesheet
+  comment that every page carries. *Lesson:* assert on markup (`class="notice"`),
+  not on words.
+- **Two names for one thing.** A local variable named `page` shadowed the
+  `page()` function in the same routine, and every route that had both died
+  with an UnboundLocalError. *Lesson:* a wrapper takes the name of what it
+  wraps only when nothing else in the file has it.

@@ -101,7 +101,9 @@ def drawdown_r(journal, trades):
 # -1.2 was not the stop but too much size, and it is kept apart to be seen.
 # Every bucket holds its lower edge and not its upper one, so exactly -1R is a
 # stop and not a loss that stayed short of it.
-LOSS_BUCKETS = [("-0.5…0", 0.5), ("-1…-0.5", 1.0), ("-1…-1.2", 1.2),
+# A label reads from zero outwards, like the wins, and the far edge of a bucket
+# belongs to the next one: exactly -1R is in "-1…-1.2", the stop.
+LOSS_BUCKETS = [("0…-0.5", 0.5), ("-0.5…-1", 1.0), ("-1…-1.2", 1.2),
                 ("-1.2R and worse", None)]
 WIN_BUCKETS = [("0…+0.5", 0.5), ("+0.5…+1", 1.0), ("+1…+2", 2.0),
                ("+2…+3", 3.0), ("+3R and more", None)]
@@ -141,24 +143,59 @@ def r_split(journal, trades):
             [tuple(row) for row in piles["Win"]], be)
 
 
-def equity(journal, account_id=None, trades=None):
-    """Points of (date, balance), as in balances, but honouring the filter."""
-    if trades is None:
+def equity(journal, account_id=None, trades=None, since=None):
+    """Points of (date, balance), as in balances, but honouring the filter.
+
+    Everything that happened before `since` is folded into the first point,
+    whatever the selection says: a curve that starts in August starts at the
+    balance the account had in August, not at the day it was opened. From
+    `since` on only the chosen trades move the line, so a selection by style
+    or by pair draws what those trades alone did to the account."""
+    if trades is None and since is None:
         return journal.equity(account_id)
-    chosen = {t.id for t in trades}
+    chosen = None if trades is None else {t.id for t in trades}
     start = sum(acc.start_balance for a, acc in journal.accounts.items()
                 if account_id in (None, a))
     events = [(c.day, c.amount) for c in journal.adjustments
               if account_id in (None, c.account)]
     events += [(t.closed, t.pnl or 0.0) for t in journal.trades
-               if not t.is_open and t.closed and t.id in chosen
+               if not t.is_open and t.closed
+               and (chosen is None or t.id in chosen
+                    or (since is not None and t.closed < since))
                and account_id in (None, t.account)]
     events.sort(key=lambda e: e[0])
     points, b = [], start
     for day, amount in events:
+        if since is not None and day >= since and not points:
+            points.append((since, b))    # what the period was entered with
         b += amount
-        points.append((day, b))
+        if since is None or day >= since:
+            points.append((day, b))
     return points
+
+
+def streaks(journal, trades):
+    """Runs of wins and of losses, in the order the trades closed.
+
+    Returns (longest run of wins, longest run of losses, the run going on now)
+    where the last is (result, length). Break-evens neither extend a run nor
+    break it: a trade that ended at zero says nothing about the streak."""
+    closed = sorted((t for t in trades if not t.is_open and t.closed),
+                    key=lambda t: (t.closed, t.id))
+    best_win = best_loss = 0
+    current, length = None, 0
+    for t in closed:
+        if t.result not in ("Win", "Lose"):
+            continue
+        if t.result == current:
+            length += 1
+        else:
+            current, length = t.result, 1
+        if current == "Win":
+            best_win = max(best_win, length)
+        else:
+            best_loss = max(best_loss, length)
+    return best_win, best_loss, (current, length)
 
 
 def months(trades):

@@ -53,7 +53,8 @@ out of a list only stops being offered; the trades that carry it keep it.
 by timeframe with its screenshots, what you will do and what you will not, the
 updates added while it runs and the review after. A trade points at the plan it
 followed, so the plan page can show every trade that came out of it with its R,
-and answer the only question worth asking of a plan.
+say how many went with the narrative and how many against it, and answer the
+only question worth asking of a plan.
 
 **A daily card.** The day reviewed on the pattern of a paper Daily Report Card:
 process grade, opportunity quality, focus, what went well, errors, best trade,
@@ -87,8 +88,33 @@ out should not look worse than it was. When the broker shows a different
 balance, you type the real number and the journal records the difference as a
 correction: history is never edited to make a figure agree.
 
-**Nothing is shredded.** Deleting a trade, a card or a money record moves it to
-`.trash`. A mis-click should not cost a record.
+**Nothing is shredded.** Deleting a trade, a plan, a card, an account or a money
+record moves it to `.trash`, and the Accounts tab lists what is there with a
+Restore button. A mis-click should not cost a record.
+
+**Nothing is fatal.** A file that does not read, a date typed the wrong way
+round, a letter in a number, is named at the top of every page with the reason,
+and everything else loads and counts without it. `tools/check_journal.py` runs
+the same check from the terminal.
+
+**Search across everything written.** A word or a phrase is looked for in every
+idea, conclusion, note, plan, update, review and card, and every hit is a link
+to the record with the matching words shown around it.
+
+**A limit for the day on a prop account.** Set it once, and the tile of the
+account adds up what today has already cost and what the open trades still put
+at risk, turns amber at four fifths of the limit and red when it is reached.
+
+**Streaks.** The run the selection is on now, on the front page; the longest
+runs of wins and of losses on the Statistics tab, counted in the order the
+trades closed.
+
+**The selection as CSV.** One button next to the filters writes the filtered
+list into a file for a spreadsheet, with every stored field and the computed
+ones: R, the balance at entry, the risk in money.
+
+**Every account in its own currency.** The sign follows the account; a figure
+that spans accounts carries the currency they share, or none when they differ.
 
 ## Built to be kept by an agent
 
@@ -98,16 +124,16 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in under a second.** 103 of them, no fixtures, no network.
+- **The tests finish in about a second.** 127 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
   usual tasks, and the traps that have already bitten this project, each one
   with the reason it exists.
 - **A guard stands between an agent and your records.** `tools/check_public.py`
-  refuses a commit that would carry trade records, private paths or anything
+  refuses a push that would carry trade records, private paths or anything
   else it recognises as yours; it runs as a pre-push hook and in CI.
-- **The whole program is ~4 000 lines** of straightforward Python, and the
+- **The whole program is ~5 500 lines** of straightforward Python, and the
   routing table fits on one screen. It fits in a context window, so an agent
   reasons about the real thing rather than about a summary of it.
 - **One language throughout:** code, comments, documents and commit messages.
@@ -260,7 +286,7 @@ Measured on a journal of 159 trades with 363 screenshots:
 | a trade page | **2 ms**, 14 KB |
 | statistics with charts | **7 ms**, 37 KB |
 | server memory | **25 MB** |
-| the whole program | **~4 000 lines of Python** |
+| the whole program | **~5 500 lines of Python** |
 
 Pages are plain HTML rendered by one Python process: no framework, no bundler,
 no build step. The charts are SVG generated on the server. There is nothing to

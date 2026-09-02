@@ -57,11 +57,14 @@ If you want those, forking is a perfectly friendly thing to do.
     plainbook/stats.py      summaries, the equity curve, the R distribution
     plainbook/reports.py    monthly and quarterly reports
     plainbook/html.py       the palette, the CSS and the SVG charts
+    plainbook/flags.py      the round flag icons of a trading symbol
     plainbook/server.py     the routes, the pages and the forms
+    tools/check_public.py   the guard that keeps records out of the repository
+    tools/check_journal.py  does every record in a journal read
 
 Two traps worth knowing before you touch a form: a trade's `shots/` folder is
 rewritten whole from what the form sent, so a form that edits a trade must send
 back every screenshot zone it did not show; and a header key with no value parses
 into an empty list, not an empty string. Both are spelled out in
-[CLAUDE.md](CLAUDE.md), which is written for coding agents but reads fine for
+[AGENTS.md](AGENTS.md), which is written for coding agents but reads fine for
 people.

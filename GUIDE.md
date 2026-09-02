@@ -28,7 +28,8 @@ who was right. In hindsight an idea always looks tidier than it was.
 - **account**: archived accounts are not offered.
 - **pair**: the list under the field carries the same flags the journal does,
   and it opens and shuts on a click on the field. Typing filters it; a pair
-  that is not in the list is simply typed in and saved with the trade.
+  that is not in the list is simply typed in and saved with the trade, in
+  capitals whatever way it was typed, so `eurusd` and `EURUSD` are one pair.
 - **direction**, **style**, **entry TF**: the styles and the timeframes come
   from your own lists, edited on the Accounts tab.
 - **risk, %**: the risk as a percent of the current computed balance of the
@@ -83,6 +84,11 @@ its result, PnL and R, and the line under the table says how many trades, the
 winrate, the Σ R and the money. That is the answer a plan in a document cannot
 give: whether following it was worth anything.
 
+**Plan against fact.** For a bullish or a bearish plan the page also says how
+many of its trades went with the narrative (a long under a bullish plan) and
+how many against it, with the R of each pile. A plan that said "no trade"
+counts every trade taken under it as against it.
+
 ## Closing a trade
 
 The **Close trade** button. You fill in the result (Win / Lose / BE), the PnL in
@@ -95,7 +101,7 @@ so a trade cannot be closed with a result nobody picked.
 The exit holds the hour as well as the date, and it matters: a trade opened later
 the same day is measured against the balance this close left behind. Leave the
 time at midnight and the journal takes the hour as unknown, as it does for an
-entry.
+entry. An exit dated before the entry is refused.
 
 R is worked out by itself: `PnL / (risk% × the balance at the moment of entry)`.
 There is nothing to recompute by hand.
@@ -105,10 +111,14 @@ There is nothing to recompute by hand.
 - **Edit** on the trade page changes any field, screenshots included. For a
   closed trade the result, the PnL, the moment of the exit, the exit shots and
   the conclusions are edited there as well, so a result entered wrong is fixed
-  without touching the file.
+  without touching the file. The folder of the trade is named after its day and
+  its pair, so changing either moves the folder under a new name; a link to
+  the old one stops working, the record itself is untouched.
 - **Delete** sends the trade to `.trash` next to the `journal` folder. It is not
-  shredded: if you deleted the wrong one, move the folder back into
-  `journal/trades/` with a file manager.
+  shredded: the **Trash** card on the Accounts tab lists everything deleted,
+  and **Restore** puts it back, screenshots and all. A record written again
+  under the same id in the meantime is never overwritten: the one in the trash
+  stays there until you sort it out by hand.
 
 ## The daily card
 
@@ -116,7 +126,8 @@ There is nothing to recompute by hand.
 that one. The **Cards** tab lists them all.
 
 - **date**: you can change it when reviewing yesterday. Changing the date moves
-  the card, it does not create a second one.
+  the card, it does not create a second one; if the new day already has a card,
+  the journal refuses rather than overwrite it, and says so.
 - **process grade** and **opportunity quality**: the suggestion offers
   A / B / C / D / F, but the field is free, so write in whatever scale you use.
 - **P&L** is filled in from the trades closed that day. The field is editable:
@@ -126,13 +137,18 @@ that one. The **Cards** tab lists them all.
 ## The front page
 
 - **Account tiles**: the computed balance, the start balance and the difference
-  in colour. The difference is what the account earned, so money you put in or
-  took out is named separately and is never mistaken for a win or a loss.
-  Archived accounts do not appear here.
+  in colour, in the currency of the account. The difference is what the account
+  earned, so money you put in or took out is named separately and is never
+  mistaken for a win or a loss. Archived accounts do not appear here. An
+  account with a **daily loss limit** (see Accounts) carries one more line:
+  what today has already cost, what the open trades still put at risk, and the
+  limit; the tile turns amber at four fifths of it and red when it is reached.
 - **Open positions**: what is in the market right now, with the risk in money
   and a Close button.
 - **Summary tiles**: the current period, the size of the selection, the
-  winrates and the total R.
+  winrates, the total R and the **streak**: the run the selection is on now,
+  with the longest runs of wins and of losses under it. Runs are counted in
+  the order the trades closed; a break-even neither extends one nor breaks it.
 - **The list of trades** is split into periods. The **Weeks / Months /
   Quarters** switch sits above the table on the right. The total row of a period
   holds the number of trades, WR, Σ PnL and Σ R. **A click anywhere on a row
@@ -144,6 +160,9 @@ that one. The **Cards** tab lists them all.
   to the summary tiles. While a filter is on, the funnel is lit and shows how
   many fields are set; **Reset** clears them. To close the form: click away or
   press Escape.
+- **CSV** next to the switch writes the list as it is filtered into a file for
+  a spreadsheet: every stored field and the computed ones, R, the balance at
+  entry, the risk in money, one trade per line.
 
 ## How the figures are worked out
 
@@ -166,6 +185,11 @@ wins in green, losses in red, break-evens in yellow.
 account: a dollar on a prop account and a dollar on your own are different kinds
 of money, which is why the front page carries no grand total in dollars.
 
+**Money is shown in the currency of its account.** A sum that spans accounts,
+the PnL column of the list, the total of a week, carries the currency they all
+share; when they do not share one, the number stands without a sign, because a
+sum of two currencies has no name.
+
 ## The Statistics tab
 
 **Equity by account.** One picture per account, each on its own scale, because
@@ -181,6 +205,14 @@ order they were closed, because a journal records the date of a close and not
 the hour, and stacking them on one x would make a vertical wall out of an
 ordinary day.
 
+With a **from month** filter on, the curve starts at the balance the account
+entered that month with: everything before it is folded into the first point.
+With a filter by style, pair or direction, only the chosen trades move the line
+from there, so the picture says what those trades alone did to the account.
+
+**Streaks.** Under the rings: the longest run of wins, the longest run of
+losses and the run the selection is on now, all in the order the trades closed.
+
 **R distribution.** Two rings: the losses on the left, the wins on the right,
 each cut by the size of R. Pointing at a slice, or at its line in the list
 beside the ring, lights up both and dims the rest: five steps of one colour
@@ -194,8 +226,9 @@ a little worse than -1R, because commission and swap are paid on top of it, so
 the bucket **-1…-1.2** means the stop as designed. Anything past -1.2R is a
 bucket of its own: that loss was not the stop but too much size, and it is the
 one number that says the risk was overrun. The two buckets above them are losses
-that never reached the stop: **-0.5…0** and **-1…-0.5**. Exactly -1R belongs to
-the stop, not to the bucket that stops short of it.
+that never reached the stop: **0…-0.5** and **-0.5…-1**. A bucket reads from
+zero outwards and its far edge belongs to the next one, so exactly -1R is the
+stop, not the bucket that stops short of it.
 
 Read together the two rings answer the question a trader actually asks: are the
 losses one size, and do the wins reach far enough to pay for them. The rings in
@@ -241,9 +274,18 @@ The **Accounts** tab.
 
 - **Start balance** is not "what it once was" but the point the journal counts
   from. Opening an account today, put in today's real balance.
+- **Currency** is shown next to every sum of the account: a sign for the usual
+  ones ($, €, £, ¥), the code for the rest.
+- **Daily loss limit** is the prop rule: the most a day may lose before the firm
+  closes the account. Type it in the row of the account and press **Set**;
+  empty means the account has no such rule. With one set, the tile on the front
+  page adds up what today has already cost in closed trades and what the open
+  ones still put at risk at their stops, and changes colour as the limit comes
+  near.
 - **Archive** keeps the account in the history and the statistics but stops
   offering it when a trade is opened. An account with trades cannot be deleted,
-  only archived.
+  only archived; one without them is deleted into `.trash` like everything else.
+- **Trash** lists everything deleted, newest first, with a **Restore** button.
 - **Pairs** are the suggestions for the form. Taking a pair out of the list does
   not touch the trades already recorded with it. Every pair is shown with its
   flags: two round ones for a currency pair, one for an index, a lettered coin
@@ -265,9 +307,8 @@ The **Accounts** tab.
   single record.
 
   Every style you keep in the list gets a winrate tile of its own on the journal
-  page, as soon as it has trades. **Winrate overall** counts the styles in the
-  list, which is the other reason to take a style out: it stops counting towards
-  what you trade now.
+  page, as soon as it has trades. **Winrate overall** counts every trade of the
+  selection, whatever its style, retired or not.
 
 **The balance does not match the real one?** Do not change the start balance and
 do not edit old trades: use **Correct a balance** above. The gap is written down
@@ -305,6 +346,15 @@ months of that report. That is how a row like "XAU, 5 trades, -4.56 R" turns
 back into the five trades it was counted from, with the idea you wrote before
 each entry. The best and the worst trade lead straight to the trade itself.
 
+## Search
+
+The **Search** tab. A word or a phrase is looked for in everything you have
+written: the ideas and conclusions of trades, their notes, the analysis, plan,
+updates and review of every plan, and every field of every card. Case does not
+matter. Every hit is a link to the record, with the matching words shown in
+the text around them. It is the way to find the trade where you wrote "moved
+the stop too early" three months ago.
+
 ## Where the data lives
 
 Everything is in the `journal/` folder: ordinary text files and pictures.
@@ -337,5 +387,12 @@ is already kept; a copy on an external drive is still not a waste.
   in the program folder.
 - **A screenshot did not paste.** The journal says so outright. Check that the
   clipboard holds a picture and not a file or a link.
-- **Deleted the wrong thing.** Look in `.trash`.
+- **A yellow box at the top of every page says a record could not be read.**
+  A file was edited by hand and something in it does not parse: a date written
+  the wrong way round, a letter in a number, a header without its closing
+  line. The box names the file and the reason; everything else keeps working
+  and the figures simply leave that record out until it is fixed. From the
+  terminal, `python3 tools/check_journal.py` (with the data folder as an
+  argument if it is not `./journal`) prints the same list.
+- **Deleted the wrong thing.** The Trash card on the Accounts tab, **Restore**.
 - **Port 8778 is taken.** Set another one through `PLAINBOOK_PORT`.

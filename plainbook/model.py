@@ -33,6 +33,12 @@ class RecordError(ValueError):
     """A record fails its check: a broken file or junk from a form."""
 
 
+def _day(moment):
+    """The calendar day of a datetime, or the date itself when that is all
+    there is: a record built by hand may carry either."""
+    return moment.date() if isinstance(moment, datetime) else moment
+
+
 # --- trade -----------------------------------------------------------------
 
 TRADE_KEYS = [
@@ -101,6 +107,15 @@ class Trade:
             raise RecordError(f"{self.id}: closed trade without PnL")
         if self.result is None and self.pnl is not None:
             raise RecordError(f"{self.id}: open trade must not have PnL")
+        if self.closed is not None and self.opened is not None:
+            # a close with no hour is a date, and a date is not earlier than
+            # the entry of the same day, whatever hour that entry carries
+            early = (self.closed < self.opened
+                     if self.closed_time and self.opened_time
+                     and isinstance(self.closed, datetime)
+                     else _day(self.closed) < _day(self.opened))
+            if early:
+                raise RecordError(f"{self.id}: the exit is before the entry")
         return self
 
 
@@ -223,6 +238,7 @@ ACCOUNT_KEYS = [
     ("start_balance", "start balance"),
     ("currency", "currency"),
     ("archived", "archived"),
+    ("daily_loss_limit", "daily loss limit"),
     ("notion_id", "notion id"),
 ]
 
@@ -234,6 +250,7 @@ class Account:
     start_balance: float = 0.0
     currency: str = "USD"
     archived: bool = False        # archived ones stay in statistics, not in forms
+    daily_loss_limit: float = None  # a prop rule: how much a day may lose
     notion_id: str = ""
     note: str = ""
     extra: dict = field(default_factory=dict)
@@ -241,6 +258,8 @@ class Account:
     def check(self):
         if not self.id:
             raise RecordError("account has no id")
+        if self.daily_loss_limit is not None and self.daily_loss_limit <= 0:
+            raise RecordError(f"{self.id}: the daily loss limit must be above zero")
         return self
 
 

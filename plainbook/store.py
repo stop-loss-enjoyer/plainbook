@@ -215,6 +215,8 @@ def account_to_text(a):
     head = {"id": a.id, "name": a.name,
             "start balance": _number_to_text(a.start_balance),
             "currency": a.currency, "archived": "yes" if a.archived else "no"}
+    if a.daily_loss_limit is not None:
+        head["daily loss limit"] = _number_to_text(a.daily_loss_limit)
     if a.notion_id:
         head["notion id"] = a.notion_id
     head.update(a.extra)
@@ -230,6 +232,7 @@ def text_to_account(text):
         start_balance=_number(head.get("start balance")) or 0.0,
         currency=_text(head.get("currency")) or "USD",
         archived=_text(head.get("archived")).strip().lower() in ("yes", "true", "1"),
+        daily_loss_limit=_number(head.get("daily loss limit")),
         notion_id=_text(head.get("notion id")),
         note=body.strip(),
         extra={k: v for k, v in head.items() if k not in known},
@@ -363,6 +366,28 @@ def _read(path):
         return f.read()
 
 
+# Reading a record can fail: a date typed the wrong way round, a number with a
+# letter in it, a header without its closing line. The files are edited by
+# hand, so that is not a rare event, and one such file must not take the whole
+# journal down with it. Every reader below takes a `problems` list: a record
+# that does not load is written there as (path, reason) and skipped, and the
+# interface shows the list. Without the list the error is raised, which is what
+# the tests and the checking tool want.
+BROKEN = (ValueError, TypeError, KeyError, AttributeError, OSError)
+
+
+def _load(problems, path, convert, root=None):
+    try:
+        record = convert(_read(path))
+        return record.check()
+    except BROKEN as e:
+        if problems is None:
+            raise
+        shown = os.path.relpath(path, root) if root else path
+        problems.append((shown, str(e) or type(e).__name__))
+        return None
+
+
 JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, PLANS, REPORTS]
 
 
@@ -424,16 +449,52 @@ def save_adjustment(root, c):
     return c
 
 
-def all_trades(root):
+def all_trades(root, problems=None):
     """Every trade, sorted by entry date (then by id)."""
     base = os.path.join(root, JOURNAL, TRADES)
     trades = []
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         path = os.path.join(base, name, TRADE_FILE)
         if os.path.isfile(path):
-            trades.append(text_to_trade(_read(path)))
+            t = _load(problems, path, text_to_trade, root)
+            if t is not None:
+                trades.append(t)
     trades.sort(key=lambda t: (t.opened or datetime.max, t.id))
     return trades
+
+
+_TRADE_ID = re.compile(r"^(\d{4}-\d{2}-\d{2})-\d{2}-(.+)$")
+
+
+def pair_slug(pair):
+    return re.sub(r"[^\w-]+", "-", (pair or PAIR_NOT_SET).lower().replace(" ", "-"))
+
+
+def id_fits(trade):
+    """Does the id still say the day and the pair of the trade?
+
+    The id is the folder name, and the folder is what a person opens to find a
+    trade; an id built from one day and pair while the record carries another
+    is a folder that lies. An id of another shape, from a journal migrated in,
+    is left alone: nothing about it can be checked."""
+    m = _TRADE_ID.match(trade.id or "")
+    if not m or trade.opened is None:
+        return True
+    return (m.group(1) == f"{trade.opened:%Y-%m-%d}"
+            and m.group(2) == pair_slug(trade.pair))
+
+
+def rename_trade(root, t, new_id):
+    """Moves the folder of a trade under a new id. The pictures inside it are
+    written as paths relative to the folder, so they need no touching."""
+    if new_id == t.id:
+        return t
+    src, dst = trade_dir(root, t.id), trade_dir(root, new_id)
+    if os.path.exists(dst):
+        raise FileExistsError(f"a trade {new_id} already exists")
+    os.rename(src, dst)
+    t.id = new_id
+    return t
 
 
 def save_plan(root, k):
@@ -446,21 +507,23 @@ def load_plan(root, plan_id):
     return text_to_plan(_read(os.path.join(plan_dir(root, plan_id), PLAN_FILE)))
 
 
-def all_plans(root):
+def all_plans(root, problems=None):
     """Every plan, newest first: a plan is looked for near the day it was made."""
     base = os.path.join(root, JOURNAL, PLANS)
     plans = []
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         path = os.path.join(base, name, PLAN_FILE)
         if os.path.isfile(path):
-            plans.append(text_to_plan(_read(path)))
+            k = _load(problems, path, text_to_plan, root)
+            if k is not None:
+                plans.append(k)
     plans.sort(key=lambda k: (k.day or datetime.min, k.id), reverse=True)
     return plans
 
 
 def new_plan_id(root, day, pair):
     """A plan id: YYYY-MM-DD-pair, with a counter when the day already has one."""
-    slug = re.sub(r"[^\w-]+", "-", (pair or PAIR_NOT_SET).lower().replace(" ", "-"))
+    slug = pair_slug(pair)
     base = os.path.join(root, JOURNAL, PLANS)
     taken = set(os.listdir(base) if os.path.isdir(base) else [])
     stem = f"{day:%Y-%m-%d}-{slug}"
@@ -484,22 +547,25 @@ def delete_plan(root, plan_id):
     return target
 
 
-def all_accounts(root):
+def all_accounts(root, problems=None):
     base = os.path.join(root, JOURNAL, ACCOUNTS)
     accounts = {}
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         if name.endswith(".md"):
-            a = text_to_account(_read(os.path.join(base, name)))
-            accounts[a.id] = a
+            a = _load(problems, os.path.join(base, name), text_to_account, root)
+            if a is not None:
+                accounts[a.id] = a
     return accounts
 
 
-def all_adjustments(root):
+def all_adjustments(root, problems=None):
     base = os.path.join(root, JOURNAL, ADJUSTMENTS)
     items = []
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         if name.endswith(".md"):
-            items.append(text_to_adjustment(_read(os.path.join(base, name))))
+            c = _load(problems, os.path.join(base, name), text_to_adjustment, root)
+            if c is not None:
+                items.append(c)
     items.sort(key=lambda c: (c.day or datetime.max, c.id))
     return items
 
@@ -522,13 +588,15 @@ def load_card(root, day):
     return text_to_card(_read(path))
 
 
-def all_cards(root):
+def all_cards(root, problems=None):
     """Every card, newest first."""
     base = os.path.join(root, JOURNAL, CARDS)
     items = []
     for name in sorted(os.listdir(base), reverse=True) if os.path.isdir(base) else []:
         if name.endswith(".md"):
-            items.append(text_to_card(_read(os.path.join(base, name))))
+            k = _load(problems, os.path.join(base, name), text_to_card, root)
+            if k is not None:
+                items.append(k)
     return items
 
 
@@ -588,13 +656,20 @@ def delete_adjustment(root, adjustment_id):
     return target
 
 
-def new_id(root, day, pair):
-    """A trade id: YYYY-MM-DD-NN-pair, where NN counts trades within the day."""
-    slug = re.sub(r"[^\w-]+", "-", (pair or PAIR_NOT_SET).lower().replace(" ", "-"))
+def new_id(root, day, pair, keep=None):
+    """A trade id: YYYY-MM-DD-NN-pair, where NN counts trades within the day.
+
+    `keep` is the id a trade has now: when only its pair changed, the number
+    stays and the folder keeps its place in the day."""
+    slug = pair_slug(pair)
     prefix = day.strftime("%Y-%m-%d")
     base = os.path.join(root, JOURNAL, TRADES)
     taken = [name for name in (os.listdir(base) if os.path.isdir(base) else [])
-             if name.startswith(prefix + "-")]
+             if name.startswith(prefix + "-") and name != keep]
+    if keep and keep.startswith(prefix + "-") and len(keep) > 13:
+        same_number = f"{prefix}-{keep[11:13]}-{slug}"
+        if not any(name.startswith(f"{prefix}-{keep[11:13]}-") for name in taken):
+            return same_number
     n = len(taken) + 1
     while f"{prefix}-{n:02d}-{slug}" in taken or any(
             name.startswith(f"{prefix}-{n:02d}-") for name in taken):
@@ -673,9 +748,68 @@ def save_words(root, kind, words):
 
 
 def delete_account(root, account_id):
-    """Removes the account file. Checking for trades is the caller's job."""
+    """To the trash, like every other record. Checking for trades is the
+    caller's job."""
     path = os.path.join(root, JOURNAL, ACCOUNTS, account_id + ".md")
-    if os.path.isfile(path):
-        os.remove(path)
-        return True
-    return False
+    if not os.path.isfile(path):
+        return None
+    target = os.path.join(root, TRASH,
+                          f"account-{account_id}-{datetime.now():%Y%m%d-%H%M%S}.md")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.move(path, target)
+    return target
+
+
+# --- the trash --------------------------------------------------------------
+# What was deleted, named by what it was and when it went: a trade keeps its
+# id, the others carry their kind in front. The stamp at the end is what lets
+# the same record be deleted twice.
+
+_TRASHED = re.compile(r"^(?:(plan|card|adjustment|account)-)?(.+)-"
+                      r"(\d{8}-\d{6})(\.md)?$")
+
+
+def trash_list(root):
+    """[(name in the trash, kind, id, deleted at)], newest first."""
+    base = os.path.join(root, TRASH)
+    items = []
+    for name in os.listdir(base) if os.path.isdir(base) else []:
+        m = _TRASHED.match(name)
+        if not m:
+            continue
+        kind = m.group(1) or "trade"
+        if (kind in ("trade", "plan")) == bool(m.group(4)):
+            continue                     # a folder record with .md, or the reverse
+        when = datetime.strptime(m.group(3), "%Y%m%d-%H%M%S")
+        items.append((name, kind, m.group(2), when))
+    items.sort(key=lambda x: x[3], reverse=True)
+    return items
+
+
+def _trash_home(root, kind, record_id):
+    """Where a record of that kind lives when it is not in the trash."""
+    if kind == "trade":
+        return trade_dir(root, record_id)
+    if kind == "plan":
+        return plan_dir(root, record_id)
+    folder = {"card": CARDS, "adjustment": ADJUSTMENTS, "account": ACCOUNTS}[kind]
+    return os.path.join(root, JOURNAL, folder, record_id + ".md")
+
+
+def restore(root, name):
+    """Puts a record back where it came from. Returns (kind, id).
+
+    A record that has been written again since, under the same id, stays in
+    the trash: nothing is overwritten to bring something back."""
+    if not safe_dir_name(name):
+        raise ValueError("bad name")
+    entry = next((x for x in trash_list(root) if x[0] == name), None)
+    if entry is None:
+        raise FileNotFoundError(f"nothing named {name} in the trash")
+    _, kind, record_id, _ = entry
+    home = _trash_home(root, kind, record_id)
+    if os.path.exists(home):
+        raise FileExistsError(f"{kind} {record_id} exists in the journal already")
+    os.makedirs(os.path.dirname(home), exist_ok=True)
+    shutil.move(os.path.join(root, TRASH, name), home)
+    return kind, record_id

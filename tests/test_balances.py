@@ -169,3 +169,63 @@ class Balances(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StreaksAndPeriods(unittest.TestCase):
+    def setUp(self):
+        self.accounts = {"bybit": Account(id="bybit", start_balance=10000)}
+
+    def test_streaks_follow_the_order_of_closing(self):
+        from plainbook import stats
+        j = Journal(self.accounts, [
+            trade("t1", (2026, 8, 1), pnl=100, result="Win", closed=(2026, 8, 2)),
+            trade("t2", (2026, 8, 2), pnl=100, result="Win", closed=(2026, 8, 3)),
+            trade("t3", (2026, 8, 3), pnl=0, result="BE", closed=(2026, 8, 4)),
+            trade("t4", (2026, 8, 4), pnl=100, result="Win", closed=(2026, 8, 5)),
+            trade("t5", (2026, 8, 5), pnl=-100, result="Lose", closed=(2026, 8, 6)),
+            trade("t6", (2026, 8, 6), pnl=-100, result="Lose", closed=(2026, 8, 7)),
+            trade("t7", (2026, 8, 7)),                       # open: not a run
+        ], [])
+        # the break-even in the middle neither breaks the run nor extends it
+        self.assertEqual(stats.streaks(j, j.trades), (3, 2, ("Lose", 2)))
+        self.assertEqual(stats.streaks(j, []), (0, 0, (None, 0)))
+
+    def test_the_curve_of_a_period_starts_at_its_own_balance(self):
+        from plainbook import stats
+        j = Journal(self.accounts, [
+            trade("t1", (2026, 7, 1), pnl=500, result="Win", closed=(2026, 7, 2)),
+            trade("t2", (2026, 8, 1), pnl=-200, result="Lose", closed=(2026, 8, 2)),
+            trade("t3", (2026, 8, 3), pnl=300, result="Win", closed=(2026, 8, 4)),
+        ], [Adjustment(id="a", account="bybit", kind="deposit", amount=1000,
+                       day=datetime(2026, 7, 15))])
+        since = datetime(2026, 8, 1)
+        august = [t for t in j.trades if t.opened >= since]
+        points = stats.equity(j, "bybit", august, since)
+        # July's trade and the deposit are in the first point, not on the line
+        self.assertEqual(points[0], (since, 11500))
+        self.assertEqual([b for _, b in points[1:]], [11300, 11600])
+        # a filter by trade leaves the others out of the line, still from 11500
+        points = stats.equity(j, "bybit", [j.trades[2]], since)
+        self.assertEqual([b for _, b in points], [11500, 11800])
+
+    def test_the_currency_is_the_accounts_own_or_the_shared_one(self):
+        accounts = {"a": Account(id="a", currency="USD"),
+                    "b": Account(id="b", currency="EUR"),
+                    "c": Account(id="c", currency="EUR", archived=True)}
+        j = Journal(accounts, [], [])
+        self.assertEqual(j.currency("b"), "EUR")
+        self.assertEqual(j.currency("nobody"), "USD")
+        self.assertEqual(j.currency(), "")             # USD and EUR: no shared one
+        accounts["a"].currency = "EUR"
+        self.assertEqual(Journal(accounts, [], []).currency(), "EUR")
+
+    def test_the_exit_is_not_before_the_entry(self):
+        from plainbook.model import RecordError
+        with self.assertRaises(RecordError):
+            trade("t", (2026, 8, 5, 14, 0), pnl=1, result="Win",
+                  closed=(2026, 8, 5, 13, 0)).check()
+        # an exit with no hour on the day of the entry is that day, not earlier
+        trade("t", (2026, 8, 5, 14, 0), pnl=1, result="Win",
+              closed=(2026, 8, 5)).check()
+        with self.assertRaises(RecordError):
+            trade("t", (2026, 8, 5), pnl=1, result="Win", closed=(2026, 8, 4)).check()

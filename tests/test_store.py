@@ -240,7 +240,8 @@ class Cards(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             k = Card(day=datetime(2026, 8, 30), grade="A", focus="pennies")
             store.save_card(root, k)
-            text = open(store.card_path(root, k.day), encoding="utf-8").read()
+            with open(store.card_path(root, k.day), encoding="utf-8") as f:
+                text = f.read()
             self.assertNotIn("pnl $:", text)          # no empty key in the file
             again = store.load_card(root, datetime(2026, 8, 30))
             self.assertEqual(again.grade, "A")
@@ -279,3 +280,65 @@ class Layout(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Trash(unittest.TestCase):
+    def test_a_record_is_listed_and_restored(self):
+        with tempfile.TemporaryDirectory() as root:
+            t = Trade(id="2026-08-29-01-eurusd", account="bybit", pair="EURUSD",
+                      direction="long", style="swing", opened=datetime(2026, 8, 29))
+            store.save_trade(root, t)
+            store.save_account(root, Account(id="bybit", start_balance=1))
+            store.delete_trade(root, t.id)
+            store.delete_account(root, "bybit")
+            kinds = {kind: record_id for _, kind, record_id, _ in store.trash_list(root)}
+            self.assertEqual(kinds, {"trade": t.id, "account": "bybit"})
+            name = next(x[0] for x in store.trash_list(root) if x[1] == "trade")
+            self.assertEqual(store.restore(root, name), ("trade", t.id))
+            self.assertEqual(store.load_trade(root, t.id).pair, "EURUSD")
+            # deleted again, it is a second entry with its own stamp, and it
+            # will not come back over the one that is in the journal now
+            store.delete_trade(root, t.id)
+            store.save_trade(root, t)
+            name = next(x[0] for x in store.trash_list(root) if x[1] == "trade")
+            with self.assertRaises(FileExistsError):
+                store.restore(root, name)
+
+    def test_the_id_follows_the_day_and_the_pair(self):
+        with tempfile.TemporaryDirectory() as root:
+            t = Trade(id="2026-08-29-01-eurusd", account="bybit", pair="EURUSD",
+                      direction="long", style="swing", opened=datetime(2026, 8, 29))
+            store.save_trade(root, t)
+            self.assertTrue(store.id_fits(t))
+            t.pair = "GBPUSD"
+            self.assertFalse(store.id_fits(t))
+            # the pair changed on the same day: the number is kept
+            self.assertEqual(store.new_id(root, t.opened, t.pair, keep=t.id),
+                             "2026-08-29-01-gbpusd")
+            store.rename_trade(root, t, "2026-08-29-01-gbpusd")
+            store.save_trade(root, t)
+            self.assertEqual(store.load_trade(root, "2026-08-29-01-gbpusd").pair, "GBPUSD")
+            self.assertFalse(os.path.isdir(store.trade_dir(root, "2026-08-29-01-eurusd")))
+            # an id of another shape is never judged
+            t.id = "notion-import-7"
+            self.assertTrue(store.id_fits(t))
+
+    def test_a_broken_file_is_reported_and_skipped(self):
+        with tempfile.TemporaryDirectory() as root:
+            good = Trade(id="2026-08-29-01-eurusd", account="bybit", pair="EURUSD",
+                         direction="long", style="swing", opened=datetime(2026, 8, 29))
+            store.save_trade(root, good)
+            bad = store.trade_dir(root, "2026-08-30-01-eurusd")
+            os.makedirs(bad)
+            with open(os.path.join(bad, "trade.md"), "w") as f:
+                f.write("---\nid: 2026-08-30-01-eurusd\naccount: bybit\n"
+                        "direction: long\nstyle: swing\nrisk %: one\n"
+                        "entry: 2026-08-30\n---\n")
+            with self.assertRaises(ValueError):
+                store.all_trades(root)
+            problems = []
+            trades = store.all_trades(root, problems)
+            self.assertEqual([t.id for t in trades], [good.id])
+            self.assertEqual(len(problems), 1)
+            self.assertIn("2026-08-30-01-eurusd/trade.md", problems[0][0])
+            self.assertIn("one", problems[0][1])

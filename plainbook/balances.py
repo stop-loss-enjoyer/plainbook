@@ -36,17 +36,22 @@ class Computed:
 class Journal:
     """The whole journal: accounts, trades, adjustments and everything derived."""
 
-    def __init__(self, accounts, trades, adjustments):
+    def __init__(self, accounts, trades, adjustments, problems=None):
         self.accounts = accounts                # {id: Account}
         self.trades = sorted(trades, key=lambda t: (t.opened or datetime.max, t.id))
         self.adjustments = sorted(adjustments,
                                   key=lambda c: (c.day or datetime.max, c.id))
+        self.problems = list(problems or [])    # (path, reason) of files skipped
         self.computed = self._replay()
 
     @classmethod
     def load(cls, root="."):
-        return cls(store.all_accounts(root), store.all_trades(root),
-                   store.all_adjustments(root))
+        """Reads the journal. A file that does not load is left out and named
+        in `problems`, so that one broken record does not take the rest down."""
+        problems = []
+        return cls(store.all_accounts(root, problems),
+                   store.all_trades(root, problems),
+                   store.all_adjustments(root, problems), problems)
 
     # --- replay ------------------------------------------------------------
 
@@ -112,6 +117,28 @@ class Journal:
     def _start(self, account_id):
         account = self.accounts.get(account_id)
         return account.start_balance if account else 0.0
+
+    def currency(self, account_id=None):
+        """The currency an amount is in. For one account, its own; for a
+        figure that spans accounts, the one they all share, or nothing when
+        they differ, because such a sum has no currency to be named in."""
+        if account_id is not None:
+            account = self.accounts.get(account_id)
+            return account.currency if account else "USD"
+        names = {a.currency for a in self.accounts.values() if not a.archived} \
+            or {a.currency for a in self.accounts.values()}
+        return names.pop() if len(names) == 1 else ""
+
+    def closed_on(self, account_id, day):
+        """The PnL of the trades of an account closed on that day."""
+        return sum(t.pnl or 0.0 for t in self.trades
+                   if t.account == account_id and not t.is_open and t.closed
+                   and t.closed.date() == day.date())
+
+    def open_risk(self, account_id):
+        """The money at stake in the open trades of an account."""
+        return sum(self.computed[t.id].risk_money for t in self.trades
+                   if t.account == account_id and t.is_open)
 
     def risk_in_money(self, account_id, risk_percent):
         """A hint for the form: how many dollars that is right now."""

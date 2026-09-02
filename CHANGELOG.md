@@ -2,6 +2,78 @@
 
 What changed and why. Newest first.
 
+## v1.4.3, 02.09.2026
+
+A journal that survives a broken file, a search across everything written, the
+selection as a spreadsheet, and a limit for the day on a prop account.
+
+### Fixed
+
+- **One broken file no longer takes the whole journal down.** A date typed the
+  wrong way round or a letter in a number used to leave every page blank, with
+  the reason only in the server log. The record that does not read is now named
+  at the top of every page with the file and the reason, and everything else
+  loads and counts without it. `tools/check_journal.py` runs the same check
+  from the terminal.
+- **Winrate overall counts every trade.** It used to count only the styles
+  still in the list, so a retired style quietly left the overall figure while
+  the selection tile next to it still counted its trades.
+- **A pair is one pair whatever the case.** `eurusd` typed into the form used
+  to become a second pair next to `EURUSD` in the filters, the tables and the
+  reports. The form now writes the pair in capitals.
+- **The exit cannot be before the entry.** A close dated earlier than the entry
+  was accepted and counted into the balances of trades opened in between.
+- **The money of an account is shown in its currency.** The currency field of
+  an account was stored and never shown; every sum wore a dollar sign. The sign
+  now follows the account ($, €, £ and the like, the code for the rest), and a
+  figure that spans accounts carries the currency they share, or none when
+  they differ.
+- **Deleting an account moves it to the trash**, like every other record. It
+  used to be the one thing that was removed outright.
+- **The equity curve of a period starts at the balance of that period.** With a
+  month filter on, the line used to start at the day the account was opened and
+  add up only the chosen trades, so the axis said nothing true. It now begins at
+  the balance the account entered the month with; with a filter by style or by
+  pair, only the chosen trades move the line from there.
+- **The folder of a trade follows its day and its pair.** Editing the entry
+  date or the pair used to leave the folder named after the old ones. The trade
+  is moved under an id that says what the record says, and the number in the
+  day is kept when only the pair changed.
+- **A card is not moved onto another.** Changing the date of a card to a day
+  that already has one used to overwrite that card without a word. The journal
+  now refuses and says which card is in the way.
+- **Open positions show the hour only when it is known.** An entry without an
+  hour used to read `00:00` in the open positions block.
+- **The loss buckets read from zero outwards**, `0…-0.5`, `-0.5…-1`, `-1…-1.2`,
+  the way the wins do. The old `-1…-0.5` promised a -1R that in fact belonged
+  to the stop bucket next to it.
+- Two small things a person would not notice: a screenshot path sent back by a
+  form is checked to stay inside the record's own folder, and the origin check
+  compares the host and the port exactly instead of by prefix.
+
+### New
+
+- **Search.** A tab of its own: a word or a phrase is looked for in every idea,
+  conclusion, note, plan, update, review and card, and every hit is a link to
+  the record with the matching words shown around it.
+- **The selection as CSV.** A button next to the filters on the front page
+  writes the filtered list into a file for a spreadsheet, with every stored
+  field and the computed ones: R, the balance at entry, the risk in money.
+- **Streaks.** The front page has a tile with the run the selection is on now,
+  and the Statistics tab a card with the longest runs of wins and of losses,
+  counted in the order the trades closed. A break-even neither extends a run
+  nor breaks it.
+- **A daily loss limit on an account.** Set on the Accounts tab, it is the prop
+  rule of how much a day may lose. The tile of the account on the front page
+  then adds up what today has already cost and what the open trades still put
+  at risk, turns amber at four fifths of the limit and red when it is reached.
+- **The trash is on the Accounts tab.** What was deleted is listed there with a
+  Restore button, so a mis-click is undone without a file manager. A record
+  written again under the same id is never overwritten by the restored one.
+- **A plan against the fact.** The page of a plan says how many of its trades
+  went with the narrative and how many against it, with the R of each pile; a
+  plan that said "no trade" counts every trade taken under it as against it.
+
 ## v1.4.2, 02.09.2026
 
 - **The exit of a trade carries its hour.** A close only had a date, so a trade

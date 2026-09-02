@@ -45,6 +45,7 @@ class ServerCase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
+        cls.server.server_close()
         cls.tmp.cleanup()
         os.environ.pop("PLAINBOOK_ROOT", None)
 
@@ -166,6 +167,9 @@ class ServerCase(unittest.TestCase):
             "have_idea-1": "shots/idea-01-01.png",
             "remove": "shots/idea-01-01.png",       # this screenshot goes away
             "have_exit": "shots/exit-01.png"})
+        # the pair changed, so the folder follows it and keeps its number
+        self.assertFalse(os.path.isdir(store.trade_dir(self.root, ServerCase.trade_id)))
+        ServerCase.trade_id = "2026-08-29-01-gbpusd"
         t = store.load_trade(self.root, ServerCase.trade_id)
         self.assertEqual(t.pair, "GBPUSD")
         self.assertEqual(t.style, "EMT")
@@ -187,6 +191,7 @@ class ServerCase(unittest.TestCase):
             self.fail("the server swallowed junk")
         except urllib.error.HTTPError as e:
             self.assertEqual(e.code, 400)
+            e.close()
         self.assertEqual(len(store.all_trades(self.root)), before)
 
     def test_10_a_report_builds_and_keeps_its_conclusions(self):
@@ -220,6 +225,7 @@ class ServerCase(unittest.TestCase):
             self.fail("a foreign origin was accepted")
         except urllib.error.HTTPError as e:
             self.assertEqual(e.code, 403)
+            e.close()
 
     def test_14_accounts_are_created_archived_and_deleted(self):
         code, where = self.post("/account/new", {
@@ -306,6 +312,7 @@ class ServerCase(unittest.TestCase):
             self.fail("the server closed a trade with no result")
         except urllib.error.HTTPError as e:
             self.assertEqual(e.code, 400)
+            e.close()
 
     def test_18b_a_wrong_result_is_fixed_by_editing(self):
         """The result was Win on a losing trade and there was no way back."""
@@ -360,6 +367,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.get(f"/trade/{q}")
         self.assertEqual(e.exception.code, 404)
+        e.exception.close()
 
     def test_21_a_card_is_written_and_read_back(self):
         _, html = self.get("/card/2026-08-29")
@@ -418,6 +426,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.get("/card/2026-13-99")
         self.assertEqual(e.exception.code, 404)
+        e.exception.close()
 
     def test_25_money_goes_in_and_out_and_cashouts_are_counted(self):
         self.post("/account/new", {"id": "money-acc", "name": "Money",
@@ -629,6 +638,7 @@ class ServerCase(unittest.TestCase):
             self.fail("two trades on one account went through")
         except urllib.error.HTTPError as e:
             self.assertEqual(e.code, 400)
+            e.close()
         self.assertEqual(len(store.all_trades(self.root)), before)
 
     def test_37_the_trade_form_lists_are_edited_on_the_accounts_tab(self):
@@ -819,6 +829,172 @@ class ServerCase(unittest.TestCase):
             [t.id for t in store.all_trades(self.root) if t.plan == plan_id][0]))
         self.assertEqual(code, 200)
         self.assertIn(plan_id, html)
+
+    # --- v1.4.3 ---
+    def open_trade(self, **over):
+        _, html = self.get("/new")
+        fields = {"token": self.form_token(html), "blocks": "1", "account": "bybit",
+                  "pair": "EURUSD", "direction": "long", "style": "swing",
+                  "entry_tf": "H4", "risk": "1", "entry": "2026-08-29T14:30",
+                  "idea_tf_1": "H4", "idea_text_1": "a plain idea"}
+        fields.update(over)
+        _, where = self.post("/new", fields)
+        return urllib.parse.unquote(where.rsplit("/", 1)[1])
+
+    def refused(self, path, fields, code=400):
+        data = urllib.parse.urlencode(fields, doseq=True).encode("utf-8")
+        try:
+            urllib.request.urlopen(urllib.request.Request(self.url(path), data=data))
+            self.fail(f"{path} went through")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, code)
+            e.close()
+
+    def test_50_a_broken_record_is_named_and_the_rest_still_load(self):
+        folder = store.trade_dir(self.root, "2026-01-05-01-eurusd")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "trade.md"), "w") as f:
+            f.write("---\nid: 2026-01-05-01-eurusd\naccount: bybit\npair: EURUSD\n"
+                    "direction: long\nstyle: swing\nrisk %: 1\nentry: 05.01.2026\n---\n")
+        self.S.drop_cache()
+        try:
+            for path in ("/", "/stats", "/accounts", "/cards", "/plans"):
+                code, html = self.get(path)
+                self.assertEqual(code, 200, path)
+                self.assertIn('<div class="notice">', html, path)
+                self.assertIn("2026-01-05-01-eurusd/trade.md", html, path)
+            self.assertIn("does not match format", self.get("/")[1])
+        finally:
+            import shutil
+            shutil.rmtree(folder)
+            self.S.drop_cache()
+        self.assertNotIn('<div class="notice">', self.get("/")[1])
+
+    def test_51_a_pair_is_one_pair_whatever_the_case(self):
+        trade_id = self.open_trade(pair="eurusd")
+        self.assertEqual(store.load_trade(self.root, trade_id).pair, "EURUSD")
+        self.assertTrue(trade_id.endswith("-eurusd"))
+
+    def test_52_the_exit_is_not_before_the_entry(self):
+        trade_id = self.open_trade(entry="2026-08-29T14:30")
+        q = urllib.parse.quote(trade_id)
+        token = self.form_token(self.get(f"/close/{q}")[1])
+        self.refused(f"/close/{q}", {"token": token, "result": "Win", "pnl": "10",
+                                     "exit": "2026-08-28T10:00"})
+        self.assertTrue(store.load_trade(self.root, trade_id).is_open)
+        # the same day without an hour is not "before", whatever hour the entry has
+        self.post(f"/close/{q}", {"token": token, "result": "Win", "pnl": "10",
+                                  "exit": "2026-08-29T00:00"})
+        self.assertFalse(store.load_trade(self.root, trade_id).is_open)
+
+    def test_53_a_card_is_not_moved_onto_another(self):
+        self.post("/card/save", {"date": "2026-07-01", "previous": "2026-07-01",
+                                 "focus": "the first"})
+        self.post("/card/save", {"date": "2026-07-02", "previous": "2026-07-02",
+                                 "focus": "the second"})
+        self.refused("/card/save", {"date": "2026-07-01", "previous": "2026-07-02",
+                                    "focus": "the second, moved"})
+        self.assertEqual(store.load_card(self.root, datetime(2026, 7, 1)).focus,
+                         "the first")
+        self.assertIsNotNone(store.load_card(self.root, datetime(2026, 7, 2)))
+
+    def test_54_search_finds_a_word_in_an_idea(self):
+        trade_id = self.open_trade(idea_text_1="liquidity swept above the range")
+        code, html = self.get("/search?q=SWEPT+above")
+        self.assertEqual(code, 200)
+        self.assertIn(f'href="/trade/{urllib.parse.quote(trade_id, safe="")}"', html)
+        self.assertIn("<mark>swept above</mark>", html)
+        self.assertIn("Nothing carries that word", self.get("/search?q=zzzz")[1])
+
+    def test_55_the_selection_is_exported_as_csv(self):
+        trade_id = self.open_trade(pair="USDJPY", style="EMT")
+        with urllib.request.urlopen(self.url("/export.csv?pair=USDJPY")) as r:
+            self.assertIn("text/csv", r.headers["Content-Type"])
+            self.assertIn("attachment", r.headers["Content-Disposition"])
+            text = r.read().decode("utf-8")
+        lines = text.strip().split("\n")
+        self.assertTrue(lines[0].startswith("id,account,pair"))
+        self.assertIn("balance at entry", lines[0])
+        self.assertTrue(any(line.startswith(trade_id) for line in lines[1:]))
+        self.assertTrue(all("USDJPY" in line for line in lines[1:]))
+
+    def test_56_the_daily_limit_warns_on_the_front_page(self):
+        self.post("/account/limit", {"id": "bybit", "limit": "50"})
+        self.assertEqual(store.all_accounts(self.root)["bybit"].daily_loss_limit, 50)
+        now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+        trade_id = self.open_trade(entry=now, risk="1")     # 1% of ~10 000 at risk
+        _, html = self.get("/")
+        tile = re.search(r'<div class="tile([^"]*)"><div class="name">Bybit', html)
+        self.assertIn("over", tile.group(1))
+        self.assertIn("daily loss limit reached", html)
+        self.assertIn("limit 50 $", html)
+        self.post("/account/limit", {"id": "bybit", "limit": ""})
+        self.assertIsNone(store.all_accounts(self.root)["bybit"].daily_loss_limit)
+        self.assertNotIn("daily loss limit reached", self.get("/")[1])
+        self.post(f"/trade/{urllib.parse.quote(trade_id)}/delete", {})
+
+    def test_57_a_deleted_trade_is_restored_from_the_trash(self):
+        trade_id = self.open_trade(idea_text_1="to be deleted and brought back")
+        q = urllib.parse.quote(trade_id)
+        self.post(f"/trade/{q}/delete", {})
+        self.assertFalse(os.path.isdir(store.trade_dir(self.root, trade_id)))
+        _, html = self.get("/accounts")
+        name = re.search(r'name="name" value="(' + re.escape(trade_id) + r'-[0-9-]+)"',
+                         html).group(1)
+        self.post("/trash/restore", {"name": name})
+        self.assertTrue(os.path.isdir(store.trade_dir(self.root, trade_id)))
+        self.assertEqual(self.get(f"/trade/{q}")[0], 200)
+        self.assertNotIn(name, self.get("/accounts")[1])
+
+    def test_58_a_deleted_account_goes_to_the_trash_and_comes_back(self):
+        self.post("/account/new", {"id": "spare", "name": "Spare", "start": "1",
+                                   "currency": "eur"})
+        self.assertIn("1 €", self.get("/accounts")[1])
+        self.post("/account/delete", {"id": "spare"})
+        self.assertNotIn("spare", store.all_accounts(self.root))
+        entries = [x for x in store.trash_list(self.root) if x[1] == "account"]
+        self.assertEqual(entries[0][2], "spare")
+        self.post("/trash/restore", {"name": entries[0][0]})
+        self.assertEqual(store.all_accounts(self.root)["spare"].currency, "EUR")
+        self.post("/account/delete", {"id": "spare"})
+
+    def test_59_the_plan_page_says_whether_the_trades_followed_it(self):
+        token = self.form_token(self.get("/plan/new")[1])
+        _, where = self.post("/plan/new", {
+            "token": token, "blocks": "1", "title": "bull week", "pair": "EURUSD",
+            "narrative": "bullish", "from": "2026-08-24", "until": "2026-08-28",
+            "plan_text": "buy the dips"})
+        plan_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        self.open_trade(plan=plan_id, direction="long", entry="2026-08-25T10:00")
+        self.open_trade(plan=plan_id, direction="short", entry="2026-08-26T10:00")
+        _, html = self.get(f"/plan/{urllib.parse.quote(plan_id)}")
+        self.assertIn("with the narrative: 1 trade", html)
+        self.assertIn("against it: 1 trade", html)
+
+    def test_60_the_folder_follows_the_day_of_the_trade(self):
+        trade_id = self.open_trade(entry="2026-06-10T09:00", pair="AUDUSD")
+        self.assertTrue(trade_id.startswith("2026-06-10-"))
+        q = urllib.parse.quote(trade_id)
+        token = self.form_token(self.get(f"/edit/{q}")[1])
+        _, where = self.post(f"/edit/{q}", {
+            "token": token, "blocks": "1", "account": "bybit", "pair": "AUDUSD",
+            "direction": "long", "style": "swing", "entry_tf": "H4", "risk": "1",
+            "entry": "2026-06-11T09:00", "idea_tf_1": "H4", "idea_text_1": "moved"})
+        moved = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        self.assertEqual(moved, "2026-06-11-01-audusd")
+        self.assertFalse(os.path.isdir(store.trade_dir(self.root, trade_id)))
+        self.assertEqual(store.load_trade(self.root, moved).id, moved)
+        # a link with the old id in it says the trade is gone, not that it broke
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.get(f"/trade/{q}")
+        self.assertEqual(e.exception.code, 404)
+        e.exception.close()
+
+    def test_61_the_streak_is_on_the_front_page_and_the_statistics(self):
+        _, html = self.get("/")
+        self.assertIn('<div class="name">streak</div>', html)
+        _, html = self.get("/stats")
+        self.assertIn("longest run of wins", html)
 
 
 if __name__ == "__main__":

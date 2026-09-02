@@ -11,6 +11,7 @@ import os
 import re
 from datetime import datetime, timedelta
 
+from . import html as H
 from . import mdfile, stats, store
 
 DIR = "reports"
@@ -97,6 +98,7 @@ def build(root, journal, period, conclusions=None):
     was_trades = trades_of_period(journal, earlier)
     was = stats.summary(journal, was_trades)
 
+    cur = H.sign(journal.currency())
     lines = [f"# {name}", "", "## Summary", ""]
     lines += [f"| metric | {name} | {before_name} |", "|---|---|---|",
               f"| trades | {total.trades} | {was.trades or '-'} |",
@@ -108,8 +110,8 @@ def build(root, journal, period, conclusions=None):
               f"| {f'{was.sum_r:+.2f}' if was.trades else '-'} |",
               f"| average R | {total.average_r:+.2f} "
               f"| {f'{was.average_r:+.2f}' if was.trades else '-'} |",
-              f"| result in money | {total.sum_pnl:+,.2f} $ "
-              f"| {f'{was.sum_pnl:+,.2f} $' if was.trades else '-'} |".replace(",", " "),
+              f"| result in money | {total.sum_pnl:+,.2f} {cur} "
+              f"| {f'{was.sum_pnl:+,.2f} {cur}' if was.trades else '-'} |".replace(",", " "),
               f"| deepest fall from a high | {stats.drawdown_r(journal, trades):+.2f} R "
               f"| {f'{stats.drawdown_r(journal, was_trades):+.2f} R' if was.trades else '-'} |",
               ""]
@@ -121,7 +123,7 @@ def build(root, journal, period, conclusions=None):
                          ("By entry TF", lambda t: [t.entry_tf or "not set"]),
                          ("By execution", lambda t: t.execution or ["not set"])):
         lines += [f"### {heading}", "",
-                  "| | trades | WR | Σ R | average R | Σ $ |", "|---|---|---|---|---|---|"]
+                  f"| | trades | WR | Σ R | average R | Σ {cur} |", "|---|---|---|---|---|---|"]
         for value, s in stats.by_values(journal, trades, key):
             lines.append(f"| {value} | {s.trades} | {s.wr:.1f}% | {s.sum_r:+.2f} "
                          f"| {s.average_r:+.2f} | {s.sum_pnl:+,.0f} |".replace(",", " "))
@@ -161,7 +163,7 @@ def extremes(journal, trades):
     best = max(closed, key=lambda t: journal.r(t.id))
     worst = min(closed, key=lambda t: journal.r(t.id))
     lines = ["### Best and worst trade", "",
-             "| trade | pair | style | R | Σ $ |", "|---|---|---|---|---|"]
+             f"| trade | pair | style | R | {H.sign(journal.currency())} |", "|---|---|---|---|---|"]
     for label, t in (("best", best), ("worst", worst)):
         if label == "worst" and worst.id == best.id:
             continue

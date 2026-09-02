@@ -100,7 +100,7 @@ class RSplitCase(unittest.TestCase):
         losses, wins, be = stats.r_split(j, j.trades)
         self.assertEqual(be, 1)
         self.assertEqual([(label, n) for label, n, _ in losses],
-                         [("-0.5…0", 1), ("-1…-0.5", 0), ("-1…-1.2", 1),
+                         [("0…-0.5", 1), ("-0.5…-1", 0), ("-1…-1.2", 1),
                           ("-1.2R and worse", 0)])
         self.assertEqual([(label, n) for label, n, _ in wins],
                          [("0…+0.5", 1), ("+0.5…+1", 0), ("+1…+2", 0),
@@ -126,7 +126,7 @@ class RSplitCase(unittest.TestCase):
         ], [])
         losses, _, _ = stats.r_split(j, j.trades)
         self.assertEqual([(label, n) for label, n, _ in losses],
-                         [("-0.5…0", 0), ("-1…-0.5", 1), ("-1…-1.2", 2),
+                         [("0…-0.5", 0), ("-0.5…-1", 1), ("-1…-1.2", 2),
                           ("-1.2R and worse", 2)])
 
     def test_a_break_even_stays_out_of_both_rings(self):
