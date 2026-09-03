@@ -4,6 +4,15 @@ What changed and why. Newest first.
 
 ## v1.4.4, 03.09.2026
 
+### Fixed
+
+- **A trade suggested on one card no longer follows you to another.** The
+  trade and grade fields of the assessment table share one name across five
+  rows and both cards, and without a word against it a browser kept its own
+  memory of what had been typed there and offered it back anywhere the field
+  reappeared, a trade from last week turning up as a suggestion on today's
+  card. The field now says not to remember, the way the pair field already did.
+
 ### New
 
 - **The daily card carries a trades assessment too.** The same numbered table
