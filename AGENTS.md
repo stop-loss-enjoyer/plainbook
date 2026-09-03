@@ -154,6 +154,12 @@ and `with_shots` draws them on the page.
 one `if` in `do_GET`, and a tab in the `links` list in `html.page` if it belongs
 in the navigation. Anything user-supplied goes through `esc()`.
 
+**Answer a form.** A form that writes something ends in `self._go(where, "What
+happened")`, and the word rides in `?said=` to the page the redirect lands on:
+`do_GET` takes it out of the query before any page sees it, `server.page` draws
+it in the middle of the screen, and it fades out on its own. Keep it short and
+in the past tense, because it is gone in a second.
+
 **Change the look.** Everything visual is in `html.py`: the palette constants at
 the top, then one `CSS` string. The one exception is `flags.py`, which draws the
 coins of a trading symbol; `html.pair()` is what a page calls, and anything that

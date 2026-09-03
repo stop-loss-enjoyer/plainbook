@@ -58,6 +58,7 @@ header{{display:flex;align-items:center;gap:22px;flex-wrap:wrap;
  border-bottom:1px solid {EDGE};padding:12px 0 10px;margin-bottom:18px}}
 header .logo{{font-weight:600;letter-spacing:.04em;font-size:13px;
  text-transform:uppercase;color:{INK}}}
+header .logo:hover{{color:{ACCENT}}}
 header nav{{display:flex;gap:2px}}
 header nav a{{color:{DIM};padding:4px 9px;border-radius:4px;
  font-size:12px;letter-spacing:.02em}}
@@ -195,6 +196,26 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .actions{{display:flex;gap:8px;align-items:center;margin:16px 0 0}}
 .actions .right{{margin-left:auto}}
 
+/* what the journal answers after a form: in the middle, and gone by itself.
+   Pure CSS, because a message that needs a script is a message that can fail */
+.toast{{position:fixed;left:50%;top:50%;z-index:40;pointer-events:none;
+ background:{RAISED};border:1px solid {AXIS};border-left:2px solid {ACCENT};
+ border-radius:6px;padding:13px 22px;color:{INK};font-size:14px;
+ letter-spacing:.02em;white-space:nowrap;
+ box-shadow:0 18px 46px rgba(0,0,0,.66);
+ animation:said 1.15s cubic-bezier(.2,.8,.2,1) forwards}}
+@keyframes said{{
+ 0%{{opacity:0;transform:translate(-50%,calc(-50% + 8px)) scale(.94)}}
+ 14%{{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+ 68%{{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+ 100%{{opacity:0;transform:translate(-50%,calc(-50% - 12px)) scale(.98)}}}}
+/* a message that flies is still a message: with motion turned off it simply
+   stands and goes */
+@media (prefers-reduced-motion: reduce){{
+ .toast{{animation:said-plain 1.15s steps(1) forwards;
+  transform:translate(-50%,-50%)}}
+ @keyframes said-plain{{0%{{opacity:1}} 92%{{opacity:1}} 100%{{opacity:0}}}}}}
+
 /* screenshot drop zones */
 .dropzone{{border:1px dashed {AXIS};border-radius:5px;padding:10px;min-height:62px;
  color:{DIM};font-size:11px;margin-top:8px;
@@ -320,7 +341,7 @@ def money(x, signed=False):
     return text.replace(",", " ")
 
 
-def page(title, body, tab="journal", header_right="", notice=""):
+def page(title, body, tab="journal", header_right="", notice="", said=""):
     links = [("journal", "/", "Journal"), ("plans", "/plans", "Plans"),
              ("cards", "/cards", "Cards"), ("stats", "/stats", "Statistics"),
              ("reports", "/reports", "Reports"), ("accounts", "/accounts", "Accounts"),
@@ -332,9 +353,9 @@ def page(title, body, tab="journal", header_right="", notice=""):
 <title>{"Plainbook" if title == "Journal"
           else "Plainbook: " + esc(title)}</title><style>{CSS}</style>
 <script>{HOVER}{PAGE_SCRIPT}</script></head><body>
-{flags.SPRITE}
+{flags.SPRITE}{said}
 <div class="wrap">
-<header><span class="logo">Plainbook</span><nav>{nav}</nav>
+<header><a href="/" class="logo" title="the journal">Plainbook</a><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
 {notice}{body}
 </div>

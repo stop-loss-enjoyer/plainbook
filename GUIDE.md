@@ -159,6 +159,14 @@ and both kinds are stored side by side in `journal/cards`.
 - Then, as on paper: the weekly process, what went well, errors, the best trade,
   what you missed, and the key lesson of the week.
 
+## Two small things everywhere
+
+- **The name in the top left corner is a link home**, to the journal with its
+  trades, from wherever you are.
+- **Every form answers.** Save a trade, a card, a plan or an update, and the
+  journal says what it did in the middle of the screen for a second, then takes
+  the message away. Nothing has to be clicked.
+
 ## The front page
 
 - **Account tiles**: the computed balance, the start balance and the difference

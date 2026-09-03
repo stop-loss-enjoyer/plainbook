@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import time
 import urllib.parse
 from datetime import datetime, timedelta
@@ -70,6 +71,27 @@ def drop_cache():
     _cache["journal"] = None
 
 
+# What the journal answers after a form: the word travels in the address of the
+# redirect (`?said=`), the handler takes it out of the query before any page
+# sees it, and every page draws it the same way. A thread of its own per
+# request, which is what the server gives us.
+SAID = threading.local()
+
+
+def said_box():
+    """The message, and the address cleaned of it.
+
+    The word travels in the query, so a page reloaded an hour later would say
+    "Trade opened" again. It is taken out of the address as the page appears,
+    which is what history.replaceState is for."""
+    text = getattr(SAID, "text", "")
+    if not text:
+        return ""
+    return (f'<div class="toast" role="status">{esc(text)}</div>'
+            f'<script>history.replaceState({{}}, "", '
+            f'{json.dumps(getattr(SAID, "url", "/"))})</script>')
+
+
 def page(title, body, tab="journal", header_right="", problems=()):
     """A page with the journal's warnings on top of it.
 
@@ -86,7 +108,7 @@ def page(title, body, tab="journal", header_right="", problems=()):
                   f'out of every figure until the file is fixed. '
                   f'<span class="caption">python3 tools/check_journal.py checks '
                   f'the whole journal the same way.</span><ul>{rows}</ul></div>')
-    return H.page(title, body, tab, header_right, notice)
+    return H.page(title, body, tab, header_right, notice, said_box())
 
 
 # --- filters ---------------------------------------------------------------
@@ -2675,7 +2697,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-    def _go(self, where):
+    def _go(self, where, said=""):
+        """A redirect, and the word the next page says in the middle of itself."""
+        if said:
+            where += ("&" if "?" in where else "?") + "said=" + U(said)
         self.send_response(303)
         self.send_header("Location", where)
         self.send_header("Content-Length", "0")
@@ -2704,6 +2729,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.unquote(parsed.path)
         q = urllib.parse.parse_qs(parsed.query)
         parts = [c for c in path.split("/") if c]
+        # the word a form left in the address is taken out of the query here,
+        # so that no page counts it as a filter of its own
+        SAID.text = (q.pop("said", [""]) or [""])[0][:60]
+        SAID.url = parsed.path + ("?" + urllib.parse.urlencode(q, doseq=True)
+                                  if q else "")
 
         if path == "/":
             return self._send(home_page(q))
@@ -2820,59 +2850,61 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             if path == "/new":
                 t = create_trade(data)
-                return self._go(f"/trade/{U(t.id)}")
+                return self._go(f"/trade/{U(t.id)}", "Trade opened")
             if len(parts) == 2 and parts[0] == "edit":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:
                     return self._send("no such trade", 404)
                 edit_trade(t, data)
-                return self._go(f"/trade/{U(t.id)}")
+                return self._go(f"/trade/{U(t.id)}", "Trade saved")
             if path == "/plan/new":
                 k = create_plan(data)
-                return self._go(f"/plan/{U(k.id)}")
+                return self._go(f"/plan/{U(k.id)}", "Plan written")
             if len(parts) == 3 and parts[0] == "plan":
                 if not store.safe_dir_name(parts[1]):
                     return self._send("bad plan id", 400)
                 if parts[2] == "delete":
                     if store.delete_plan(ROOT, parts[1]) is None:
                         return self._send("no such plan", 404)
-                    return self._go("/plans")
+                    return self._go("/plans", "Plan moved to the trash")
                 try:
                     k = store.load_plan(ROOT, parts[1])
                 except OSError:
                     return self._send("no such plan", 404)
                 if parts[2] == "edit":
                     edit_plan(k, data)
+                    said = "Plan saved"
                 elif parts[2] == "update":
                     add_update(k, data)
+                    said = "Update added"
                 else:
                     return self._send("no such page", 404)
-                return self._go(f"/plan/{U(k.id)}")
+                return self._go(f"/plan/{U(k.id)}", said)
             if path == "/card/save":
                 k = save_card(data)
-                return self._go(f"/card/{U(k.id)}")
+                return self._go(f"/card/{U(k.id)}", "DRC saved")
             if len(parts) == 3 and parts[0] == "card" and parts[2] == "delete":
                 store.delete_card(ROOT, day_from_url(parts[1]))
-                return self._go("/cards")
+                return self._go("/cards", "DRC moved to the trash")
             if path == "/week/save":
                 k = save_week(data)
-                return self._go(f"/week/{U(k.id)}")
+                return self._go(f"/week/{U(k.id)}", "WRC saved")
             if len(parts) == 3 and parts[0] == "week" and parts[2] == "delete":
                 store.delete_week(ROOT, week_from_url(parts[1]))
-                return self._go("/cards")
+                return self._go("/cards", "WRC moved to the trash")
             if len(parts) == 3 and parts[0] == "trade" and parts[2] == "delete":
                 if next((x for x in journal(True).trades if x.id == parts[1]),
                         None) is None:
                     return self._send("no such trade", 404)
                 store.delete_trade(ROOT, parts[1])
                 drop_cache()
-                return self._go("/")
+                return self._go("/", "Trade moved to the trash")
             if len(parts) == 2 and parts[0] == "close":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:
                     return self._send("no such trade", 404)
                 close_trade(t, data)
-                return self._go(f"/trade/{U(t.id)}")
+                return self._go(f"/trade/{U(t.id)}", "Trade closed")
             for route, action in (("/account/new", create_account),
                                   ("/account/archive", toggle_archive),
                                   ("/account/delete", delete_account),
@@ -2892,18 +2924,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         message = action(data)
                     except (RecordError, ValueError) as e:
                         message = str(e)
-                    return self._go("/accounts?m=" + U(message))
+                    return self._go("/accounts?m=" + U(message), message)
             if path == "/report/build":
                 what = one(data, "what", "month")
                 period = one(data, f"period_{what}")
                 if not period:
                     return self._go("/reports")
                 reports.build(ROOT, journal(True), period)
-                return self._go(f"/report/{U(period)}")
+                return self._go(f"/report/{U(period)}", "Report built")
             if len(parts) == 2 and parts[0] == "report":
                 conclusions = one(data, "conclusions")
                 reports.build(ROOT, journal(True), parts[1], conclusions=conclusions)
-                return self._go(f"/report/{U(parts[1])}")
+                return self._go(f"/report/{U(parts[1])}",
+                                "Conclusions saved" if conclusions
+                                else "Report rebuilt")
         except (RecordError, ValueError) as e:
             return self._send(page("Error", f'<div class="card">'
                                      f'<h2>Not saved</h2><p>{esc(e)}</p>'

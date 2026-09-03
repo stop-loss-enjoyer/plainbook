@@ -58,6 +58,12 @@ class ServerCase(unittest.TestCase):
             data = r.read()
             return r.status, data.decode("utf-8") if as_text else data
 
+    def landed(self, where):
+        """The record a form landed on: the last part of the path, the word the
+        journal said left out of it."""
+        return urllib.parse.unquote(
+            urllib.parse.urlparse(where).path.rsplit("/", 1)[1])
+
     def post(self, path, fields):
         data = urllib.parse.urlencode(fields, doseq=True).encode("utf-8")
         req = urllib.request.Request(self.url(path), data=data)
@@ -112,7 +118,7 @@ class ServerCase(unittest.TestCase):
             "idea_text_1": "breakout, waiting for a retest",
             "file_idea-1": shot["file"]})
         self.assertEqual(code, 200)
-        ServerCase.trade_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        ServerCase.trade_id = self.landed(where)
         t = store.load_trade(self.root, ServerCase.trade_id)
         self.assertEqual(t.pair, "EURUSD")
         self.assertEqual(t.execution, ["Market Entry", "SNR"])
@@ -505,7 +511,7 @@ class ServerCase(unittest.TestCase):
                 "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
                 "direction": "long", "style": "swing", "entry_tf": "H4",
                 "risk": "1", "entry": "2026-08-20T10:00"})
-            tid = urllib.parse.unquote(where.rsplit("/", 1)[1])
+            tid = self.landed(where)
             _, html = self.get(f"/close/{urllib.parse.quote(tid)}")
             self.post(f"/close/{urllib.parse.quote(tid)}", {
                 "token": self.form_token(html), "result": result, "pnl": pnl,
@@ -537,7 +543,7 @@ class ServerCase(unittest.TestCase):
             "token": token, "blocks": "1", "account": "bybit", "pair": "WHATEVER",
             "direction": "long", "style": "swing", "entry_tf": "H4",
             "risk": "1", "entry": "2026-08-19T10:00"})
-        tid = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        tid = self.landed(where)
         self.assertEqual(store.load_trade(self.root, tid).pair, "WHATEVER")
 
     def test_32_money_and_corrections_are_folded_and_kept_apart(self):
@@ -611,8 +617,7 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(len(fresh), 2)
         origin = next(t for t in fresh if t.account == "bybit")
         copy = next(t for t in fresh if t.account == "prop-100k")
-        self.assertEqual(where.rsplit("/", 1)[1],
-                         urllib.parse.quote(origin.id))   # opens the one entered
+        self.assertEqual(self.landed(where), origin.id)  # opens the one entered
         self.assertEqual(origin.risk, 2)
         self.assertEqual(copy.risk, 0.5)
         for t in (origin, copy):
@@ -678,7 +683,7 @@ class ServerCase(unittest.TestCase):
             "execution": ["OB retest"], "risk": "1",
             "entry": "2026-08-31T08:00", "idea_text_1": "quick one"})
         self.assertEqual(code, 200)
-        trade_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        trade_id = self.landed(where)
 
         self.post("/list/delete", {"kind": "styles", "word": "scalp"})
         self.post("/list/delete", {"kind": "timeframes", "word": "M5"})
@@ -756,7 +761,7 @@ class ServerCase(unittest.TestCase):
             "file_idea-1": shot["file"],
             "plan_text": "long from the nearest SNR, no shorts"})
         self.assertEqual(code, 200)
-        plan_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        plan_id = self.landed(where)
         k = store.load_plan(self.root, plan_id)
         self.assertEqual((k.title, k.pair, k.narrative), ("weekly", "EURUSD", "bullish"))
         self.assertEqual(k.analysis[0].images, ["shots/idea-01-01.png"])
@@ -772,7 +777,7 @@ class ServerCase(unittest.TestCase):
             "direction": "long", "style": "swing", "risk": "1",
             "entry": "2026-09-01T10:00", "idea_text_1": "per the plan",
             "plan": plan_id})
-        trade_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        trade_id = self.landed(where)
         self.assertEqual(store.load_trade(self.root, trade_id).plan, plan_id)
         # the plan page counts what came of it, and the trade page names it
         _, page = self.get(f"/plan/{urllib.parse.quote(plan_id)}")
@@ -839,7 +844,7 @@ class ServerCase(unittest.TestCase):
                   "idea_tf_1": "H4", "idea_text_1": "a plain idea"}
         fields.update(over)
         _, where = self.post("/new", fields)
-        return urllib.parse.unquote(where.rsplit("/", 1)[1])
+        return self.landed(where)
 
     def refused(self, path, fields, code=400):
         data = urllib.parse.urlencode(fields, doseq=True).encode("utf-8")
@@ -964,7 +969,7 @@ class ServerCase(unittest.TestCase):
             "token": token, "blocks": "1", "title": "bull week", "pair": "EURUSD",
             "narrative": "bullish", "from": "2026-08-24", "until": "2026-08-28",
             "plan_text": "buy the dips"})
-        plan_id = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        plan_id = self.landed(where)
         self.open_trade(plan=plan_id, direction="long", entry="2026-08-25T10:00")
         self.open_trade(plan=plan_id, direction="short", entry="2026-08-26T10:00")
         _, html = self.get(f"/plan/{urllib.parse.quote(plan_id)}")
@@ -980,7 +985,7 @@ class ServerCase(unittest.TestCase):
             "token": token, "blocks": "1", "account": "bybit", "pair": "AUDUSD",
             "direction": "long", "style": "swing", "entry_tf": "H4", "risk": "1",
             "entry": "2026-06-11T09:00", "idea_tf_1": "H4", "idea_text_1": "moved"})
-        moved = urllib.parse.unquote(where.rsplit("/", 1)[1])
+        moved = self.landed(where)
         self.assertEqual(moved, "2026-06-11-01-audusd")
         self.assertFalse(os.path.isdir(store.trade_dir(self.root, trade_id)))
         self.assertEqual(store.load_trade(self.root, moved).id, moved)
@@ -1024,6 +1029,33 @@ class ServerCase(unittest.TestCase):
         self.assertIn("24.08 - 30.08.2026", html)
         self.assertIn("the plan is written before the open", html)
 
+    # --- the word the journal says after a form ---
+    def test_72_a_saved_form_is_answered_in_the_middle_of_the_page(self):
+        trade_id = self.open_trade(idea_text_1="a trade that says so")
+        q = urllib.parse.quote(trade_id)
+        _, where = self.post(f"/close/{q}", {
+            "token": self.form_token(self.get(f"/close/{q}")[1]),
+            "result": "Win", "pnl": "10", "exit": "2026-08-30T10:00"})
+        self.assertIn("said=Trade%20closed", where)
+        _, html = self.get(urllib.parse.urlparse(where).path + "?said=Trade+closed")
+        self.assertIn('<div class="toast" role="status">Trade closed</div>', html)
+        # and the address is left without it, so a reload says nothing
+        self.assertIn('history.replaceState', html)
+        self.assertNotIn("said", urllib.parse.urlparse(
+            re.search(r'replaceState\(\{\}, "", "([^"]+)"', html).group(1)).query)
+        self.assertNotIn('class="toast"', self.get(f"/trade/{q}")[1])
+
+    def test_73_the_word_is_not_taken_for_a_filter(self):
+        _, html = self.get("/?pair=EURUSD&said=Trade+opened")
+        self.assertIn('class="toast"', html)
+        # the filters and the links they build know nothing about it
+        self.assertNotIn("said", re.search(r'<header.*?</header>', html, re.S).group(0))
+        self.assertNotIn("said=", html.split('class="toast"')[1])
+
+    def test_74_the_logo_leads_home(self):
+        _, html = self.get("/stats")
+        self.assertIn('<a href="/" class="logo"', html)
+
     # --- screenshots in the plan and in its updates ---
     def new_plan(self, **over):
         _, form = self.get("/plan/new")
@@ -1033,7 +1065,7 @@ class ServerCase(unittest.TestCase):
                   "idea_text_1": "range formed", "plan_text": "long from the SNR"}
         fields.update(over)
         _, where = self.post("/plan/new", fields)
-        return urllib.parse.unquote(where.rsplit("/", 1)[1])
+        return self.landed(where)
 
     def test_69_the_plan_text_carries_screenshots(self):
         _, form = self.get("/plan/new")

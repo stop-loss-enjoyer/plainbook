@@ -23,6 +23,12 @@ What changed and why. Newest first.
   for a week.
 - **The buttons say which card they open.** **+ Card** in the header is now
   **+ DRC**, and **+ WRC** stands next to it.
+- **The journal answers a form.** A trade opened or closed, a card saved, a
+  plan written, an update added: the journal says so in the middle of the
+  screen for about a second and takes the message away itself. Until now a form
+  simply landed you on a page and left you to work out whether it had saved.
+- **The name in the corner leads home.** Plainbook in the top left is a link to
+  the journal.
 - **Screenshots in the plan and in its updates.** The **plan** field has a drop
   zone under it, so the position you set up stands with the plan you wrote, and
   the update form on the plan page has one as well: paste before pressing Add
