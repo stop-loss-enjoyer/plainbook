@@ -1843,9 +1843,9 @@ def assessment_rows(k, closed):
     body = "".join(
         f'<tr><td class="muted">{n}.</td>'
         f'<td><input type="text" name="assess_trade" list="assesstrades" '
-        f'style="width:100%" value="{esc(row.trade)}"></td>'
+        f'autocomplete="off" style="width:100%" value="{esc(row.trade)}"></td>'
         f'<td><input type="text" name="assess_grade" list="grades" '
-        f'style="width:90px" value="{esc(row.grade)}"></td></tr>'
+        f'autocomplete="off" style="width:90px" value="{esc(row.grade)}"></td></tr>'
         for n, row in enumerate(listed[:max(ASSESSMENT_ROWS, len(k.assessment))], 1))
     return (f'<h3>trades assessment</h3>'
             f'<datalist id="assesstrades">{options}</datalist>'
