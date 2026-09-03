@@ -9,7 +9,7 @@ Layout (the source of truth, all under git):
     journal/trades/2025-06-25-01-eurusd/trade.md
     journal/trades/2025-06-25-01-eurusd/shots/*.png
     journal/cards/2026-08-30.md
-    journal/weeks/2026-W36.md
+    journal/cards/2026-W36.md
     journal/adjustments/2026-08-29-reconciliation-bybit.md
     journal/reports/2026-08.md
 
@@ -30,14 +30,16 @@ from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
 JOURNAL = "journal"
 TRASH = ".trash"            # deleted records: outside git, but not gone
 TRADES, ACCOUNTS, ADJUSTMENTS, REPORTS = "trades", "accounts", "adjustments", "reports"
-CARDS = "cards"             # daily reviews, one file per day
-WEEKS = "weeks"             # weekly reviews, one file per ISO week
+CARDS = "cards"             # the reviews: a file per day, a file per week
 PLANS = "plans"             # trading plans, a folder each, like a trade
 TRADE_FILE = "trade.md"
 PLAN_FILE = "plan.md"
 SHOTS = "shots"
 
 _IMAGE = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)\s*$")
+# a day and a week share the cards folder, and the name of the file says which
+# one a file is: 2026-08-30.md against 2026-W36.md
+_WEEK_FILE = re.compile(r"^\d{4}-W\d{2}\.md$")
 
 
 # --- small conversions -----------------------------------------------------
@@ -457,7 +459,7 @@ def _load(problems, path, convert, root=None):
         return None
 
 
-JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, WEEKS, PLANS, REPORTS]
+JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, PLANS, REPORTS]
 
 
 def make_layout(root):
@@ -658,11 +660,11 @@ def load_card(root, day):
 
 
 def all_cards(root, problems=None):
-    """Every card, newest first."""
+    """Every daily card, newest first. The weekly ones are read by all_weeks."""
     base = os.path.join(root, JOURNAL, CARDS)
     items = []
     for name in sorted(os.listdir(base), reverse=True) if os.path.isdir(base) else []:
-        if name.endswith(".md"):
+        if name.endswith(".md") and not _WEEK_FILE.match(name):
             k = _load(problems, os.path.join(base, name), text_to_card, root)
             if k is not None:
                 items.append(k)
@@ -682,7 +684,7 @@ def delete_card(root, day):
 
 
 def week_path(root, key):
-    return os.path.join(root, JOURNAL, WEEKS, f"{key}.md")
+    return os.path.join(root, JOURNAL, CARDS, f"{key}.md")
 
 
 def save_week(root, k):
@@ -700,11 +702,11 @@ def load_week(root, key):
 
 
 def all_weeks(root, problems=None):
-    """Every weekly card, newest first."""
-    base = os.path.join(root, JOURNAL, WEEKS)
+    """Every weekly card, newest first: the week files of the cards folder."""
+    base = os.path.join(root, JOURNAL, CARDS)
     items = []
     for name in sorted(os.listdir(base), reverse=True) if os.path.isdir(base) else []:
-        if name.endswith(".md"):
+        if _WEEK_FILE.match(name):
             k = _load(problems, os.path.join(base, name), text_to_week, root)
             if k is not None:
                 items.append(k)
@@ -903,7 +905,7 @@ def _trash_home(root, kind, record_id):
         return trade_dir(root, record_id)
     if kind == "plan":
         return plan_dir(root, record_id)
-    folder = {"card": CARDS, "week": WEEKS,
+    folder = {"card": CARDS, "week": CARDS,
               "adjustment": ADJUSTMENTS, "account": ACCOUNTS}[kind]
     return os.path.join(root, JOURNAL, folder, record_id + ".md")
 

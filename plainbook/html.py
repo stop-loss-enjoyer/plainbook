@@ -322,8 +322,7 @@ def money(x, signed=False):
 
 def page(title, body, tab="journal", header_right="", notice=""):
     links = [("journal", "/", "Journal"), ("plans", "/plans", "Plans"),
-             ("cards", "/cards", "Cards"), ("weeks", "/weeks", "Weeks"),
-             ("stats", "/stats", "Statistics"),
+             ("cards", "/cards", "Cards"), ("stats", "/stats", "Statistics"),
              ("reports", "/reports", "Reports"), ("accounts", "/accounts", "Accounts"),
              ("search", "/search", "Search")]
     nav = "".join(

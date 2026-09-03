@@ -289,6 +289,22 @@ class Weeks(unittest.TestCase):
             with self.assertRaises(RecordError):
                 Week(week=bad).check()
 
+    def test_the_two_cards_share_a_folder_and_do_not_mix(self):
+        """A day and a week are both cards and live in journal/cards, told
+        apart by the name of the file."""
+        with tempfile.TemporaryDirectory() as root:
+            store.save_card(root, Card(day=datetime(2026, 8, 31), focus="a day"))
+            store.save_week(root, self.sample(focus="a week"))
+            self.assertEqual(os.path.dirname(store.week_path(root, "2026-W36")),
+                             os.path.dirname(store.card_path(
+                                 root, datetime(2026, 8, 31))))
+            problems = []
+            days = store.all_cards(root, problems)
+            weeks = store.all_weeks(root, problems)
+            self.assertEqual([k.focus for k in days], ["a day"])
+            self.assertEqual([k.focus for k in weeks], ["a week"])
+            self.assertEqual(problems, [])
+
     def test_empty_week_fields_survive_a_write(self):
         with tempfile.TemporaryDirectory() as root:
             k = Week(week="2026-W36", grade="A", focus="pennies")
@@ -316,7 +332,6 @@ class Layout(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             created = store.make_layout(root)
             self.assertIn(store.CARDS, created)
-            self.assertIn(store.WEEKS, created)
             for name in store.JOURNAL_DIRS:
                 path = os.path.join(root, store.JOURNAL, name)
                 self.assertTrue(os.path.isdir(path), name)

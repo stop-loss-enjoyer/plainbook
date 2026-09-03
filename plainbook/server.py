@@ -461,7 +461,8 @@ def home_page(q):
     # The header is for what is written before the market, not after it.
     right = ('<a class="btn primary" href="/new">+ Trade</a>'
              '<a class="btn" href="/plan/new">+ Plan</a>'
-             f'<a class="btn" href="/card/{today}">+ Card</a>')
+             f'<a class="btn" href="/card/{today}">+ DRC</a>'
+             f'<a class="btn" href="/week/{stats.week(datetime.now())}">+ WRC</a>')
     # the same selection as a file: a spreadsheet gets the filtered list
     export = "/export.csv" + ("?" + urllib.parse.urlencode(
         {k: v for k, v in q.items() if k != "group"}, doseq=True)
@@ -1729,27 +1730,54 @@ def day_pnl(j, day):
 
 
 def cards_page():
+    """Both report cards, the days over the weeks: two tables on one tab.
+
+    They are one kind of record kept in two rhythms, and they sit in one folder,
+    so the tab that lists them shows them one under the other."""
     problems = []
     cards = store.all_cards(ROOT, problems)
+    weeks = store.all_weeks(ROOT, problems)
     today = datetime.now().strftime("%Y-%m-%d")
-    right = f'<a class="btn primary" href="/card/{today}">+ Card</a>'
-    if not cards:
-        body = ('<div class="card"><h2>Daily report cards</h2>'
-                '<p class="muted">No cards yet. The button above opens '
-                'today&rsquo;s card.</p></div>')
-        return page("Cards", body, "cards", right, problems)
-    rows = "".join(
-        f'<tr><td><a href="/card/{U(k.id)}">{k.day:%d.%m.%Y}</a></td>'
-        f'<td>{esc(k.grade) or "-"}</td>'
-        f'<td class="num {sum_class(k.pnl or 0)}">'
-        f'{H.money(k.pnl, signed=True) if k.pnl is not None else "-"}</td>'
-        f'<td>{esc(k.quality) or "-"}</td>'
-        f'<td class="muted">{esc(first_line(k.overview or k.focus))}</td></tr>'
-        for k in cards)
-    body = (f'<div class="card"><h2>Daily report cards</h2>'
-            f'<table><thead><tr><th>date</th><th>process</th>'
-            f'<th class="num">P&amp;L {H.sign(journal().currency())}</th><th>opportunity</th><th>overview</th>'
-            f'</tr></thead><tbody>{rows}</tbody></table></div>')
+    right = (f'<a class="btn primary" href="/card/{today}">+ DRC</a>'
+             f'<a class="btn" href="/week/{stats.week(datetime.now())}">+ WRC</a>')
+    sign = H.sign(journal().currency())
+    if cards:
+        rows = "".join(
+            "<tr>" + "".join(link_cell(f"/card/{U(k.id)}", inner, cls) for inner, cls in
+                             [(f"{k.day:%d.%m.%Y}", ""),
+                              (esc(k.grade) or "-", ""),
+                              (H.money(k.pnl, signed=True) if k.pnl is not None
+                               else "-", f"num {sum_class(k.pnl or 0)}"),
+                              (esc(k.quality) or "-", ""),
+                              (esc(first_line(k.overview or k.focus)), "muted")])
+            + "</tr>" for k in cards)
+        daily = (f'<table><thead><tr><th>date</th><th>process</th>'
+                 f'<th class="num">P&amp;L {sign}</th><th>opportunity</th>'
+                 f'<th>overview</th></tr></thead><tbody>{rows}</tbody></table>')
+    else:
+        daily = ('<p class="muted">No daily cards yet. <b>+ DRC</b> opens '
+                 'today&rsquo;s.</p>')
+    if weeks:
+        rows = "".join(
+            "<tr>" + "".join(link_cell(f"/week/{U(k.id)}", inner, cls) for inner, cls in
+                             [(f'{k.number}<span class="muted" '
+                               f'style="margin-left:8px">{week_dates(k)}</span>', ""),
+                              (esc(k.grade) or "-", ""),
+                              (H.money(k.pnl, signed=True) if k.pnl is not None
+                               else "-", f"num {sum_class(k.pnl or 0)}"),
+                              ("-" if k.trades is None else str(k.trades), "num"),
+                              (esc(k.quality) or "-", ""),
+                              (esc(first_line(k.lesson or k.focus)), "muted")])
+            + "</tr>" for k in weeks)
+        weekly = (f'<table><thead><tr><th>week</th><th>process</th>'
+                  f'<th class="num">P&amp;L {sign}</th><th class="num">trades</th>'
+                  f'<th>opportunity</th><th>key lesson</th>'
+                  f'</tr></thead><tbody>{rows}</tbody></table>')
+    else:
+        weekly = ('<p class="muted">No weekly cards yet. <b>+ WRC</b> opens '
+                  'the week that is running.</p>')
+    body = (f'<div class="card"><h2>Daily report cards</h2>{daily}</div>'
+            f'<div class="card"><h2>Weekly report cards</h2>{weekly}</div>')
     return page("Cards", body, "cards", right, problems)
 
 
@@ -1825,8 +1853,9 @@ def save_card(data):
 
 # --- weekly card -----------------------------------------------------------
 # The paper Weekly Report Card, next to the daily one: the same fields in the
-# same order, plus the assessment of the week's trades. One file per ISO week
-# in journal/weeks, keyed the way the journal groups its trades by week.
+# same order, plus the assessment of the week's trades. One file per ISO week,
+# in journal/cards with the daily ones, keyed the way the journal groups its
+# trades by week.
 
 def week_from_url(text):
     key = (text or "").strip().upper()
@@ -1842,34 +1871,6 @@ def week_trades(j, key):
 
 def week_dates(k):
     return f"{k.monday:%d.%m} - {k.monday + timedelta(days=6):%d.%m.%Y}"
-
-
-def weeks_page():
-    problems = []
-    weeks = store.all_weeks(ROOT, problems)
-    now = stats.week(datetime.now())
-    right = f'<a class="btn primary" href="/week/{now}">+ Week</a>'
-    if not weeks:
-        body = ('<div class="card"><h2>Weekly report cards</h2>'
-                '<p class="muted">No cards yet. The button above opens '
-                'this week&rsquo;s card.</p></div>')
-        return page("Weeks", body, "weeks", right, problems)
-    rows = "".join(
-        f'<tr><td><a href="/week/{U(k.id)}">{k.number}</a>'
-        f'<span class="muted" style="margin-left:8px">{week_dates(k)}</span></td>'
-        f'<td>{esc(k.grade) or "-"}</td>'
-        f'<td class="num {sum_class(k.pnl or 0)}">'
-        f'{H.money(k.pnl, signed=True) if k.pnl is not None else "-"}</td>'
-        f'<td class="num">{"-" if k.trades is None else k.trades}</td>'
-        f'<td>{esc(k.quality) or "-"}</td>'
-        f'<td class="muted">{esc(first_line(k.lesson or k.focus))}</td></tr>'
-        for k in weeks)
-    body = (f'<div class="card"><h2>Weekly report cards</h2>'
-            f'<table><thead><tr><th>week</th><th>process</th>'
-            f'<th class="num">P&amp;L {H.sign(journal().currency())}</th>'
-            f'<th class="num">trades</th><th>opportunity</th><th>key lesson</th>'
-            f'</tr></thead><tbody>{rows}</tbody></table></div>')
-    return page("Weeks", body, "weeks", right, problems)
 
 
 def assessment_rows(k, closed):
@@ -1950,9 +1951,9 @@ yours to override.</p>
 <div class="card">{sections}</div>
 <div class="card">{assessment_rows(k, closed)}</div>
 <div class="actions"><button class="btn primary">Save card</button>
-<a class="btn" href="/weeks">Cancel</a>{delete}</div>
+<a class="btn" href="/cards">Cancel</a>{delete}</div>
 </form>"""
-    return page(f"Week {k.number}", body, "weeks")
+    return page(f"Week {k.number}", body, "cards")
 
 
 def read_assessment(data):
@@ -2653,7 +2654,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(str(e), 404, "text/plain; charset=utf-8")
             return self._send(card_page(day))
         if path == "/weeks":
-            return self._send(weeks_page())
+            return self._go("/cards")       # the weekly cards live on that tab
         if len(parts) == 2 and parts[0] == "week":
             try:
                 key = week_from_url(parts[1])
@@ -2783,7 +2784,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._go(f"/week/{U(k.id)}")
             if len(parts) == 3 and parts[0] == "week" and parts[2] == "delete":
                 store.delete_week(ROOT, week_from_url(parts[1]))
-                return self._go("/weeks")
+                return self._go("/cards")
             if len(parts) == 3 and parts[0] == "trade" and parts[2] == "delete":
                 if next((x for x in journal(True).trades if x.id == parts[1]),
                         None) is None:

@@ -15,8 +15,8 @@ its own and survives a reboot; there is nothing to "start" by hand.
    and pick the plan it follows.
 3. **Closed it?** Close the trade too: the **Close** button in the open
    positions block or on the trade page.
-4. **At the end of the day**, a card: the **+ Card** button.
-5. **At the end of the week**, a card for the week: the **Weeks** tab.
+4. **At the end of the day**, a card: the **+ DRC** button.
+5. **At the end of the week**, a card for the week: the **+ WRC** button.
 6. **At the end of a month or a quarter**, a report: the **Reports** tab.
 
 The point of the first step: the idea is written down before the market shows
@@ -123,8 +123,8 @@ There is nothing to recompute by hand.
 
 ## The daily card
 
-**+ Card** opens today's card; if there already is one for that day, it opens
-that one. The **Cards** tab lists them all.
+**+ DRC** opens today's card; if there already is one for that day, it opens
+that one. The **Cards** tab lists them, the daily ones in the upper table.
 
 - **date**: you can change it when reviewing yesterday. Changing the date moves
   the card, it does not create a second one; if the new day already has a card,
@@ -137,8 +137,9 @@ that one. The **Cards** tab lists them all.
 
 ## The weekly card
 
-The **Weeks** tab lists them, and **+ Week** opens the card of the week that is
-running; if there already is one, it opens that one.
+**+ WRC** opens the card of the week that is running; if there already is one,
+it opens that one. They are listed under the daily ones on the **Cards** tab,
+and both kinds are stored side by side in `journal/cards`.
 
 - **week**: the calendar week, Monday to Sunday, the same week the journal
   groups the trades by. Changing it moves the card, exactly as the date moves a
@@ -382,7 +383,7 @@ Everything is in the `journal/` folder: ordinary text files and pictures.
     journal/trades/2026-08-30-01-eurusd/trade.md
     journal/trades/2026-08-30-01-eurusd/shots/*.png
     journal/cards/2026-08-30.md
-    journal/weeks/2026-W36.md
+    journal/cards/2026-W36.md
     journal/plans/2026-08-31-eurusd/plan.md
     journal/plans/2026-08-31-eurusd/shots/*.png
     journal/accounts/*.md

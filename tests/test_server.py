@@ -1020,9 +1020,30 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/week/2026-W35")
         self.assertIn("waited for the retest", html)   # the form came back filled
         self.assertIn('value="XAU short"', html)
-        _, html = self.get("/weeks")
+        _, html = self.get("/cards")
         self.assertIn("24.08 - 30.08.2026", html)
         self.assertIn("the plan is written before the open", html)
+
+    def test_62a_both_cards_are_listed_on_the_cards_tab(self):
+        """One tab, one folder, two tables: the days and the weeks apart."""
+        _, html = self.get("/cards")
+        self.assertIn("Daily report cards", html)
+        self.assertIn("Weekly report cards", html)
+        self.assertIn('href="/card/', html)
+        self.assertIn('href="/week/2026-W35"', html)
+        # a row is opened by clicking anywhere on it
+        self.assertIn('<td class="cell"><a href="/week/2026-W35"', html)
+        # and the header of the journal offers both cards by their names
+        _, home = self.get("/")
+        self.assertIn("+ DRC", home)
+        self.assertIn("+ WRC", home)
+        self.assertNotIn("+ Card", home)
+
+    def test_62b_the_two_cards_share_the_cards_folder(self):
+        names = sorted(os.listdir(os.path.join(self.root, "journal", "cards")))
+        self.assertIn("2026-W35.md", names)
+        self.assertTrue(any(re.match(r"\d{4}-\d{2}-\d{2}\.md$", n) for n in names))
+        self.assertFalse(os.path.isdir(os.path.join(self.root, "journal", "weeks")))
 
     def test_63_a_weekly_card_with_empty_fields_saves_and_opens(self):
         self.post("/week/save", {"week": "2026-W34", "previous": "2026-W34",

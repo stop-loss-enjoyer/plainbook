@@ -228,7 +228,7 @@ journal/
   accounts/<id>.md        start balance, currency, archived
   trades/<id>/            one trade = one folder
   cards/YYYY-MM-DD.md     the daily card
-  weeks/YYYY-Www.md       the weekly card
+  cards/YYYY-Www.md       the weekly card, in the same folder
   plans/<id>/             one plan = one folder, screenshots and all
   adjustments/<id>.md     deposit, withdrawal, fee, reconciliation
   reports/2026-08.md      monthly and quarterly reports

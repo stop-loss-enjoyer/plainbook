@@ -6,17 +6,23 @@ What changed and why. Newest first.
 
 ### New
 
-- **The weekly card.** A **Weeks** tab next to the daily cards, holding the
-  paper Weekly Report Card as it is: process grade, opportunity quality, the
+- **The weekly card.** The paper Weekly Report Card as it is, opened by the
+  **+ WRC** button next to **+ DRC**: process grade, opportunity quality, the
   progress of the current focus from 1 to 5, the weekly process, what you
   learned, errors, the best trade of the week and the ones you missed, the key
   lesson, and the trades assessment where the week's trades get their marks on
   five numbered lines. The P&L and the number of trades are filled in from the
   week you traded and stay editable, the assessment field suggests the pairs
   you closed that week, and an empty line of it is not saved. A card belongs to
-  the calendar week the journal already groups the trades by, is stored as
-  `journal/weeks/2026-W36.md`, is found by search along with everything else,
-  and goes to the trash rather than away.
+  the calendar week the journal already groups the trades by, is found by
+  search along with everything else, and goes to the trash rather than away.
+- **The Cards tab holds both.** The daily cards in the upper table, the weekly
+  ones under them, and a click anywhere on a row opens that card for editing
+  with its Delete button inside. Both kinds are one record kept in two rhythms,
+  so both live in `journal/cards`: `2026-08-30.md` for a day, `2026-W36.md`
+  for a week.
+- **The buttons say which card they open.** **+ Card** in the header is now
+  **+ DRC**, and **+ WRC** stands next to it.
 
 ## v1.4.3, 02.09.2026
 
