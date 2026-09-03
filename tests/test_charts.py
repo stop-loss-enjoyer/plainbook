@@ -129,6 +129,24 @@ class RSplitCase(unittest.TestCase):
                          [("0…-0.5", 0), ("-0.5…-1", 1), ("-1…-1.2", 2),
                           ("-1.2R and worse", 2)])
 
+    def test_the_ev_counts_every_closed_trade(self):
+        """Σ R over the closed trades, break-evens included: a trade closed at
+        zero still paid its commission, and leaving it out would flatter the
+        figure. The winrate beside it keeps them out, as always."""
+        j = Journal(self.accounts, [
+            self.trade("t1", "Win", 200),        # +2.00 R
+            self.trade("t2", "Win", 100),        # +1.00 R
+            self.trade("t3", "Lose", -100),      # -1.00 R
+            self.trade("t4", "BE", -10),         # -0.10 R: the commission
+        ], [])
+        s = stats.summary(j, j.trades)
+        self.assertAlmostEqual(s.average_r, 1.9 / 4)
+        self.assertAlmostEqual(s.wr, 200 / 3)
+        # the three sums are the whole of Σ R, and the break-evens are in it
+        self.assertAlmostEqual(s.sum_r_win + s.sum_r_lose + s.sum_r_be, s.sum_r)
+        self.assertAlmostEqual(s.sum_r_be, -0.1)
+        self.assertEqual(stats.Summary().average_r, 0.0)
+
     def test_a_break_even_stays_out_of_both_rings(self):
         j = Journal(self.accounts, [self.trade("t1", "BE", 0)], [])
         losses, wins, be = stats.r_split(j, j.trades)

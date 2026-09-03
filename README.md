@@ -34,7 +34,8 @@ It is opinionated where it matters. Balances are computed from history rather
 than stored, so they cannot drift. Risk and R are measured against the balance
 **at the moment of entry**, not against a number typed in once. Break-even
 trades are kept out of the win rate, because a trade that ended at zero was
-neither won nor lost.
+neither won nor lost, and counted in the EV, because it still paid its
+commission.
 
 ## What it does
 
@@ -69,7 +70,7 @@ PnL and the number of trades come from the week you traded, and stay editable.
 
 **Statistics that answer honest questions.** An equity curve per account, the
 distribution of R as two rings, losses and wins each cut by size, slices by
-style, pair and account, and a monthly or quarterly report built on a button,
+style, pair and account with the EV of every row, and a monthly or quarterly report built on a button,
 with the figures recomputed and your conclusions kept. A report carries the
 period before it beside every figure, the rings of that period, the deepest fall
 from a high, the slices by direction, entry timeframe and execution format, the
@@ -81,7 +82,7 @@ GER40 the German one, gold and the coins a lettered face. The flags are drawn in
 the code, so nothing is fetched from anywhere.
 
 **A list you can actually read.** Trades are grouped by trading weeks, with the
-count, win rate, Σ PnL and Σ R in the total row; one switch turns it into months
+count, win rate, EV, Σ PnL and Σ R in the total row; one switch turns it into months
 or quarters. Filters hide behind a funnel button that says how many of them are on.
 
 **Screenshots by Ctrl+V.** Click the drop zone, paste, done. From TradingView,
@@ -133,7 +134,7 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in about a second.** 127 of them, no fixtures, no network.
+- **The tests finish in about a second.** 154 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
@@ -142,7 +143,7 @@ first place: plain files, no dependencies, a small surface.
 - **A guard stands between an agent and your records.** `tools/check_public.py`
   refuses a push that would carry trade records, private paths or anything
   else it recognises as yours; it runs as a pre-push hook and in CI.
-- **The whole program is ~5 500 lines** of straightforward Python, and the
+- **The whole program is ~6 100 lines** of straightforward Python, and the
   routing table fits on one screen. It fits in a context window, so an agent
   reasons about the real thing rather than about a summary of it.
 - **One language throughout:** code, comments, documents and commit messages.
@@ -265,8 +266,14 @@ stops looking like the same amount of money forever.
 **Win rate** = wins / (wins + losses). Break-even trades stay out of the
 denominator: such a trade ended neither way, and diluting the hit rate with it
 would be dishonest. What they do cost (commission, the spread, the opportunity
-spent) is fully visible in the sum and the average R, where they count like
+spent) is fully visible in the sum and in the EV, where they count like
 everything else.
+
+**EV** = Σ R / closed trades: what a trade brought on average, in R. It stands
+to the right of every win rate on the front page, and is a column of every
+table on the Statistics tab and in the reports. Unlike the win rate, it counts
+the break-evens: a trade closed at zero still paid its commission and never
+comes back at exactly zero R.
 
 **Total R rather than a total in dollars.** With more than one account, a dollar
 on a prop account and a dollar on your own are different kinds of money. The
@@ -296,7 +303,7 @@ Measured on a journal of 159 trades with 363 screenshots:
 | a trade page | **2 ms**, 14 KB |
 | statistics with charts | **7 ms**, 37 KB |
 | server memory | **25 MB** |
-| the whole program | **~5 500 lines of Python** |
+| the whole program | **~6 100 lines of Python** |
 
 Pages are plain HTML rendered by one Python process: no framework, no bundler,
 no build step. The charts are SVG generated on the server. There is nothing to

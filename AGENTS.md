@@ -98,8 +98,10 @@ data. Each one is followed by what it prevents.
    *Prevents:* `float('[]')` killing the page, and `"[]"` showing up in the
    interface.
 4. **Win rate = wins / (wins + losses)**, break-evens excluded; "trades" and
-   average R count every closed trade. It is defined in `stats.Summary` and
-   repeated in the reports and in the captions.
+   the EV, which is Σ R over every closed trade, count all of them. The EV is
+   `Summary.average_r` and goes by the name EV everywhere on the screen. Both
+   are defined in `stats.Summary` and repeated in the reports and in the
+   captions.
    *Prevents:* two numbers on the same screen disagreeing about the same trades.
 5. **The server binds 127.0.0.1 and has no authentication.** Keep it that way,
    and keep the `Origin` check in `_same_origin`.

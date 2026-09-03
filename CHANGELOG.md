@@ -2,6 +2,30 @@
 
 What changed and why. Newest first.
 
+## v1.4.5, 03.09.2026
+
+The expectancy next to every winrate on the front page, and by that name in
+the Statistics tab and in the reports.
+
+### New
+
+- **EV beside the winrate.** Every winrate on the journal page, in the overall
+  tile, in the tile of each style, in the current period and in the total row
+  of every week, month or quarter, now carries its EV to the right: what a
+  trade brought on average, in R, Σ R over the closed trades. Unlike the
+  winrate it counts the break-evens, because a trade closed at zero still paid
+  its commission and swap and never comes back at exactly zero R. Hovering over
+  it in a tile shows how the sum splits between wins, losses and break-evens.
+  The line under the total R tile, which used to say average, says EV as well,
+  since it is the same number.
+- **EV in the Statistics tab and in the reports.** The column that stood there
+  as "average R" is that same figure, and now carries the same name in every
+  table: by style, by pair and by account on the Statistics tab, and by
+  direction, entry timeframe and execution in a report too; the summary row of
+  a report says so. A pair gets its row, and its EV, from its first closed
+  trade, so there is nothing to add anywhere for a new one. A report built
+  before this keeps the old heading until it is rebuilt.
+
 ## v1.4.4, 03.09.2026
 
 A weekly report card next to the daily one, a table of trades graded on both,

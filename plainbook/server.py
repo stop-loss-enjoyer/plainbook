@@ -278,7 +278,8 @@ def trades_table(j, trades, group="week"):
         batch = sorted(buckets[key], key=lambda t: t.opened, reverse=True)
         s = stats.summary(j, batch)
         label, dates = group_label(key, group, batch[0])
-        wr = f"WR {s.wr:.0f}%" if s.decided else "-"
+        wr = (f'WR {s.wr:.0f}%<span class="dates">EV {s.average_r:+.2f}</span>'
+              if s.decided else "-")
         rows.append(
             f'<tr class="group"><td colspan="7">'
             f'<span class="label">{esc(label)}</span>'
@@ -305,7 +306,7 @@ def period_tile(j, trades, group):
                 f'<div class="sub">no trades yet</div></div>')
     sub = f"{len(inside)} trades"
     if s.decided:
-        sub += f" · WR {s.wr:.0f}%"
+        sub += f" · WR {s.wr:.0f}% · EV {s.average_r:+.2f} R"
     if s.trades:
         sub += f" · {amount(j, s.sum_pnl, signed=True)}"
     still_open = len(inside) - s.trades
@@ -395,11 +396,28 @@ def open_positions(j):
             f'<tbody>{rows}</tbody></table></div>')
 
 
+def expectancy(s):
+    """The EV of a summary, with the arithmetic behind it in the tooltip.
+
+    The tooltip splits the sum between wins, losses and break-evens, so it
+    can be seen what the break-evens cost: the one thing the winrate beside
+    it does not show."""
+    parts = [f"{word} {total:+.2f}" for n, word, total in
+             ((s.wins, "wins", s.sum_r_win), (s.losses, "losses", s.sum_r_lose),
+              (s.be, "break-evens", s.sum_r_be)) if n]
+    how = (f"{s.sum_r:+.2f} R over {s.trades} closed trades: "
+           + ", ".join(parts))
+    return (f'<span class="ev {sum_class(s.average_r)}" title="{how}">'
+            f'<span class="muted">EV</span> {s.average_r:+.2f} R</span>')
+
+
 def winrate_tile(name, styles, j, trades):
     """Winrate over a subset of styles. An empty selection gets a dash, not 0%.
 
-    Under the number there are only three figures: wins, losses, break-evens.
-    Which is which is told by colour, no labels needed."""
+    To the right of the winrate stands the EV: what a closed trade brought on
+    average, break-evens included. Under the two there are only three figures:
+    wins, losses, break-evens. Which is which is told by colour, no labels
+    needed."""
     s = stats.summary(j, [t for t in trades if styles is None or t.style in styles])
     if not s.trades:
         return (f'<div class="tile"><div class="name">{esc(name)}</div>'
@@ -408,7 +426,7 @@ def winrate_tile(name, styles, j, trades):
     sub = (f'<span class="breakdown"><span class="win">{s.wins}</span> / '
            f'<span class="lose">{s.losses}</span> / '
            f'<span class="be">{s.be}</span></span>')
-    value = f"{s.wr:.1f}%" if s.decided else "-"
+    value = f"{s.wr:.1f}% {expectancy(s)}" if s.decided else "-"
     return (f'<div class="tile"><div class="name">{esc(name)}</div>'
             f'<div class="value">{value}</div>'
             f'<div class="sub">{sub}</div></div>')
@@ -476,7 +494,7 @@ def home_page(q):
              # kinds of money. The total of a selection is honestly said in R.
              + f'<div class="tile"><div class="name">total R</div>'
              f'<div class="value">{s.sum_r:+.2f}</div>'
-             f'<div class="sub">average {s.average_r:+.2f} R</div></div>'
+             f'<div class="sub">EV {s.average_r:+.2f} R</div></div>'
              + streak_tile(j, trades) + '</div>')
     today = datetime.now().strftime("%Y-%m-%d")
     # Building a report belongs on the Reports tab, where the form for it is.
@@ -708,12 +726,13 @@ def stats_page(q):
             for v, s in stats.by_field(j, trades, key))
         slices += (f'<div class="card"><h2>{heading}</h2><table><thead><tr>'
                    f'<th></th><th class="num">trades</th><th class="num">WR</th>'
-                   f'<th class="num">Σ R</th><th class="num">average R</th>'
+                   f'<th class="num">Σ R</th><th class="num">EV</th>'
                    f'<th class="num">Σ {H.sign(j.currency())}</th></tr></thead><tbody>{rows}</tbody>'
                    f'</table>'
                    f'<p class="caption">WR is wins against wins + losses; '
                    f'break-even trades are not in it, their weight is in R. '
-                   f'"trades" and average R count every closed trade.</p>'
+                   f'"trades" and EV count every closed trade; EV is Σ R over '
+                   f'them, break-evens included.</p>'
                    f'</div>')
 
     body = (filter_form(j, q).replace('action="/"', 'action="/stats"')

@@ -116,6 +116,9 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 .tile .value{{font:600 22px/1.15 {MONO};margin-top:5px;
  font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
 .tile .sub{{color:{INK2};font-size:11px;margin-top:4px}}
+/* the EV shares the line with the winrate, a size down, and says by colour
+   which side of zero it is on; it drops to its own line if the tile is narrow */
+.tile .value .ev{{font-size:13px;margin-left:8px;white-space:nowrap}}
 /* a tile that asks for attention: the daily limit of a prop account is close */
 .tile.warn{{box-shadow:inset 3px 0 0 {WARN}}}
 .tile.warn .value{{color:{WARN}}}

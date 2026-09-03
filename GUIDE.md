@@ -182,12 +182,12 @@ and both kinds are stored side by side in `journal/cards`.
 - **Open positions**: what is in the market right now, with the risk in money
   and a Close button.
 - **Summary tiles**: the current period, the size of the selection, the
-  winrates, the total R and the **streak**: the run the selection is on now,
+  winrates with the **EV** to the right of each, the total R and the **streak**: the run the selection is on now,
   with the longest runs of wins and of losses under it. Runs are counted in
   the order the trades closed; a break-even neither extends one nor breaks it.
 - **The list of trades** is split into periods. The **Weeks / Months /
   Quarters** switch sits above the table on the right. The total row of a period
-  holds the number of trades, WR, Σ PnL and Σ R. **A click anywhere on a row
+  holds the number of trades, WR with its EV, Σ PnL and Σ R. **A click anywhere on a row
   opens that trade**: its fields, the idea you wrote before the entry with its
   screenshots, the exit moment and the conclusions. The same goes for a row in
   the open positions block.
@@ -213,9 +213,20 @@ unknown, and its PnL counts from the next day.
 
 **Winrate** = wins / (wins + losses). Break-even trades stay out of the
 denominator: such a trade ended neither way. What they cost (commission, the
-spread, the opportunity spent) is visible in the sum and the average R, where
+spread, the opportunity spent) is visible in the sum and in the EV, where
 break-evens count like everything else. Under the winrate stand three numbers:
 wins in green, losses in red, break-evens in yellow.
+
+**EV** = Σ R / the number of closed trades: what a trade brought on average,
+in R. It stands to the right of every winrate. Unlike the winrate, it counts the
+break-evens: a trade closed at zero still paid its commission and swap and never
+comes back at exactly zero R, so leaving it out would flatter the figure. Hover
+over it in a tile to see how the sum splits between wins, losses and
+break-evens. The total R tile carries the same figure under the sum, and every
+table of the Statistics tab and of a report has an EV column: by style, by pair,
+by account, and in a report also by direction, entry timeframe and execution. A
+pair gets its row, and its EV, from its first closed trade; nothing has to be
+added anywhere for a new one.
 
 **Total R** is more honest than a total in money when there is more than one
 account: a dollar on a prop account and a dollar on your own are different kinds
@@ -269,6 +280,11 @@ stop, not the bucket that stops short of it.
 Read together the two rings answer the question a trader actually asks: are the
 losses one size, and do the wins reach far enough to pay for them. The rings in
 a monthly or quarterly report are cut the same way, on the trades of that period.
+
+**By style, by pair, by account.** Three tables under the rings, one row per
+value: the number of trades, the WR, Σ R, the EV and the result in money. A row
+appears as soon as a value has a closed trade in the selection, so a new pair
+is counted from its first trade.
 
 ## Money in and out
 
@@ -363,7 +379,8 @@ report.
 **What is in a report.** The summary, with the same figures for the period
 before it in the next column, so every number is read against something. Under
 it the period cut by style, by pair, by account, by direction, by entry
-timeframe and by execution format; the balance of each account before and after;
+timeframe and by execution format, every row with its trades, WR, Σ R, EV and
+money; the balance of each account before and after;
 the best and the worst trade by R; and the process, meaning how many daily cards
 you wrote for the days you traded and what grades you gave them. In the summary
 there is one figure the tabs do not show: **deepest fall from a high**, how far

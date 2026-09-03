@@ -1248,6 +1248,55 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn('href="/card/2026-08-30"', html)
 
+    def test_69_the_ev_stands_next_to_every_winrate_on_the_front_page(self):
+        from plainbook import stats
+        code, html = self.get("/")
+        self.assertEqual(code, 200)
+        j = self.S.journal()
+        s = stats.summary(j, j.trades)
+        self.assertTrue(s.decided)
+        # the overall tile: the winrate, then the EV of the same trades
+        self.assertIn(f'{s.wr:.1f}% <span class="ev', html)
+        self.assertIn(f'<span class="muted">EV</span> {s.average_r:+.2f} R</span>',
+                      html)
+        # the total row of a period carries it after its WR
+        self.assertRegex(html, r'WR \d+%<span class="dates">EV [+-]\d+\.\d\d</span>')
+
+    def test_70_the_ev_is_in_the_statistics_and_the_reports_for_every_pair(self):
+        from plainbook import stats
+        # a pair never traded before: its row and its EV come with its first
+        # closed trade, nothing has to be added anywhere for it
+        _, html = self.get("/new")
+        _, where = self.post("/new", {
+            "token": self.form_token(html), "blocks": "1", "account": "bybit",
+            "pair": "NZDCAD", "direction": "short", "style": "swing",
+            "entry_tf": "H4", "risk": "1", "entry": "2026-08-20T10:00",
+            "idea_tf_1": "H4", "idea_text_1": "a pair traded once"})
+        q = urllib.parse.quote(self.landed(where))
+        _, html = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(html), "result": "BE",
+                                  "pnl": "-3", "exit": "2026-08-21",
+                                  "conclusions": "flat, minus the commission"})
+        j = self.S.journal()
+        rows = dict(stats.by_field(j, j.trades, lambda t: t.pair))
+        self.assertIn("NZDCAD", rows)
+        code, html = self.get("/stats")
+        self.assertEqual(code, 200)
+        self.assertIn('<th class="num">EV</th>', html)
+        self.assertNotIn("average R", html)
+        for pair, s in rows.items():
+            row = re.search(rf'<tr><td>{re.escape(self.S.H.pair(pair))}</td>(.*?)</tr>',
+                            html)
+            self.assertTrue(row, pair)
+            self.assertIn(f'<td class="num">{s.average_r:+.2f}</td>', row.group(1), pair)
+        # the same column in a report, in the summary and in every slice
+        self.post("/report/build", {"what": "month", "period_month": "2026-08"})
+        code, html = self.get("/report/2026-08")
+        self.assertEqual(code, 200)
+        self.assertIn("EV (average R, BE counted)", html)
+        self.assertEqual(html.count('<th class="num">EV</th>'), 6)
+        self.assertIn(f'<td class="num">{rows["NZDCAD"].average_r:+.2f}</td>', html)
+
 
 if __name__ == "__main__":
     unittest.main()

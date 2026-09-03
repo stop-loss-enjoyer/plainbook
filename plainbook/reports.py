@@ -108,7 +108,7 @@ def build(root, journal, period, conclusions=None):
               f"| {f'{was.wr:.1f}%' if was.decided else '-'} |",
               f"| total R | {total.sum_r:+.2f} "
               f"| {f'{was.sum_r:+.2f}' if was.trades else '-'} |",
-              f"| average R | {total.average_r:+.2f} "
+              f"| EV (average R, BE counted) | {total.average_r:+.2f} "
               f"| {f'{was.average_r:+.2f}' if was.trades else '-'} |",
               f"| result in money | {total.sum_pnl:+,.2f} {cur} "
               f"| {f'{was.sum_pnl:+,.2f} {cur}' if was.trades else '-'} |".replace(",", " "),
@@ -123,7 +123,7 @@ def build(root, journal, period, conclusions=None):
                          ("By entry TF", lambda t: [t.entry_tf or "not set"]),
                          ("By execution", lambda t: t.execution or ["not set"])):
         lines += [f"### {heading}", "",
-                  f"| | trades | WR | Σ R | average R | Σ {cur} |", "|---|---|---|---|---|---|"]
+                  f"| | trades | WR | Σ R | EV | Σ {cur} |", "|---|---|---|---|---|---|"]
         for value, s in stats.by_values(journal, trades, key):
             lines.append(f"| {value} | {s.trades} | {s.wr:.1f}% | {s.sum_r:+.2f} "
                          f"| {s.average_r:+.2f} | {s.sum_pnl:+,.0f} |".replace(",", " "))

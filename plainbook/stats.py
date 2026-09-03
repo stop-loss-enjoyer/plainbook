@@ -16,6 +16,9 @@ class Summary:
     be: int = 0
     sum_r: float = 0.0
     sum_pnl: float = 0.0
+    sum_r_win: float = 0.0
+    sum_r_lose: float = 0.0
+    sum_r_be: float = 0.0
 
     @property
     def decided(self):
@@ -35,6 +38,12 @@ class Summary:
 
     @property
     def average_r(self):
+        """What a closed trade brought on average, in R: the EV.
+
+        Unlike the winrate, it counts the break-evens. A trade closed at zero
+        still paid its commission and swap and never comes back at exactly
+        zero R, so leaving it out would flatter the figure. The three sums
+        below say how much of it came from each kind of trade."""
         return self.sum_r / self.trades if self.trades else 0.0
 
 
@@ -47,7 +56,11 @@ def summary(journal, trades):
         s.wins += t.result == "Win"
         s.losses += t.result == "Lose"
         s.be += t.result == "BE"
-        s.sum_r += journal.r(t.id) or 0.0
+        r = journal.r(t.id) or 0.0
+        s.sum_r += r
+        s.sum_r_win += r if t.result == "Win" else 0.0
+        s.sum_r_lose += r if t.result == "Lose" else 0.0
+        s.sum_r_be += r if t.result == "BE" else 0.0
         s.sum_pnl += t.pnl or 0.0
     return s
 
