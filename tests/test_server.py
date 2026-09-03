@@ -31,7 +31,7 @@ class ServerCase(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.root = cls.tmp.name
-        store.save_account(cls.root, Account(id="bybit", name="Bybit",
+        store.save_account(cls.root, Account(id="broker", name="Broker",
                                              start_balance=10000))
         store.save_account(cls.root, Account(id="legacy", name="Legacy",
                                              start_balance=5000, archived=True))
@@ -84,7 +84,7 @@ class ServerCase(unittest.TestCase):
     def test_01_home_page_opens(self):
         code, html = self.get("/")
         self.assertEqual(code, 200)
-        self.assertIn("Bybit", html)
+        self.assertIn("Broker", html)
         self.assertIn("10 000 $", html)         # account tile: name and balance
         self.assertNotIn("1% =", html)          # no risk conversion here
 
@@ -103,7 +103,7 @@ class ServerCase(unittest.TestCase):
     def test_02_archived_account_is_not_offered(self):
         _, html = self.get("/new")
         field = re.search(r'<select name="account">(.*?)</select>', html, re.S).group(1)
-        self.assertIn("bybit", field)
+        self.assertIn("broker", field)
         self.assertNotIn("legacy", field)
 
     def test_03_open_a_trade_with_a_screenshot(self):
@@ -111,7 +111,7 @@ class ServerCase(unittest.TestCase):
         token = self.form_token(html)
         shot = self.paste_shot(token, "idea-1")
         code, where = self.post("/new", {
-            "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+            "token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
             "direction": "long", "style": "swing", "entry_tf": "H4",
             "execution": ["Market Entry", "SNR"], "risk": "1",
             "entry": "2026-08-29T14:30", "idea_tf_1": "H4",
@@ -166,7 +166,7 @@ class ServerCase(unittest.TestCase):
         _, html = self.get(f"/edit/{q}")
         token = self.form_token(html)
         self.post(f"/edit/{q}", {
-            "token": token, "blocks": "1", "account": "bybit", "pair": "GBPUSD",
+            "token": token, "blocks": "1", "account": "broker", "pair": "GBPUSD",
             "direction": "short", "style": "EMT", "entry_tf": "H1",
             "risk": "0.5", "entry": "2026-08-29T14:30", "idea_tf_1": "H1",
             "idea_text_1": "idea rewritten",
@@ -188,7 +188,7 @@ class ServerCase(unittest.TestCase):
     def test_09_a_bad_form_does_not_break_the_journal(self):
         before = len(store.all_trades(self.root))
         data = urllib.parse.urlencode({
-            "token": "0" * 16, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+            "token": "0" * 16, "blocks": "1", "account": "broker", "pair": "EURUSD",
             "direction": "sideways", "style": "swing", "risk": "1",
             "entry": "2026-08-29T10:00"}).encode()
         req = urllib.request.Request(self.url("/new"), data=data)
@@ -253,9 +253,9 @@ class ServerCase(unittest.TestCase):
         self.assertNotIn("test-acc", store.all_accounts(self.root))
 
     def test_15_an_account_with_trades_is_not_deleted(self):
-        _, where = self.post("/account/delete", {"id": "bybit"})
+        _, where = self.post("/account/delete", {"id": "broker"})
         self.assertIn("archive it instead", urllib.parse.unquote(where))
-        self.assertIn("bybit", store.all_accounts(self.root))
+        self.assertIn("broker", store.all_accounts(self.root))
 
     def test_16_pairs_are_added_and_removed(self):
         self.post("/pair/new", {"pair": "eurjpy"})
@@ -275,7 +275,7 @@ class ServerCase(unittest.TestCase):
         self.assertIn('class="remove"', html)      # the cross on a thumbnail
         token = self.form_token(html)
         self.post(f"/edit/{q}", {
-            "token": token, "closed": "1", "blocks": "1", "account": "bybit",
+            "token": token, "closed": "1", "blocks": "1", "account": "broker",
             "pair": "GBPUSD", "direction": "short", "style": "EMT",
             "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
             "idea_text_1": "idea rewritten", "result": "Win", "pnl": "250",
@@ -292,7 +292,7 @@ class ServerCase(unittest.TestCase):
         _, html = self.get(f"/edit/{q}")
         token = self.form_token(html)
         self.post(f"/edit/{q}", {
-            "token": token, "closed": "1", "blocks": "1", "account": "bybit",
+            "token": token, "closed": "1", "blocks": "1", "account": "broker",
             "pair": "GBPUSD", "direction": "short", "style": "EMT",
             "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
             "idea_text_1": "idea rewritten", "result": "Win", "pnl": "250",
@@ -327,7 +327,7 @@ class ServerCase(unittest.TestCase):
         self.assertIn('name="result"', html)
         token = self.form_token(html)
         self.post(f"/edit/{q}", {
-            "token": token, "closed": "1", "blocks": "1", "account": "bybit",
+            "token": token, "closed": "1", "blocks": "1", "account": "broker",
             "pair": "GBPUSD", "direction": "short", "style": "EMT",
             "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
             "idea_text_1": "idea rewritten", "result": "Lose", "pnl": "-250",
@@ -340,7 +340,7 @@ class ServerCase(unittest.TestCase):
         # and back, so the trades the tests below count stay what they were
         self.post(f"/edit/{q}", {
             "token": self.form_token(self.get(f"/edit/{q}")[1]),
-            "closed": "1", "blocks": "1", "account": "bybit",
+            "closed": "1", "blocks": "1", "account": "broker",
             "pair": "GBPUSD", "direction": "short", "style": "EMT",
             "entry_tf": "H1", "risk": "0.5", "entry": "2026-08-29T14:30",
             "idea_text_1": "idea rewritten", "result": "Win", "pnl": "250",
@@ -511,7 +511,7 @@ class ServerCase(unittest.TestCase):
         code, html = self.get("/stats")
         self.assertEqual(code, 200)
         tabs = re.search(r'Equity by account.*?</p>', html, re.S).group(0)
-        self.assertIn("Bybit", tabs)
+        self.assertIn("Broker", tabs)
         self.assertNotIn("Legacy", tabs)                 # archived
         self.assertIn("Archived accounts are not drawn", html)
         # picked by hand through the filter, it is shown again
@@ -524,7 +524,7 @@ class ServerCase(unittest.TestCase):
             _, html = self.get("/new")
             token = self.form_token(html)
             _, where = self.post("/new", {
-                "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+                "token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
                 "direction": "long", "style": "swing", "entry_tf": "H4",
                 "risk": "1", "entry": "2026-08-20T10:00"})
             tid = self.landed(where)
@@ -556,16 +556,16 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/new")
         token = self.form_token(html)
         _, where = self.post("/new", {
-            "token": token, "blocks": "1", "account": "bybit", "pair": "WHATEVER",
+            "token": token, "blocks": "1", "account": "broker", "pair": "WHATEVER",
             "direction": "long", "style": "swing", "entry_tf": "H4",
             "risk": "1", "entry": "2026-08-19T10:00"})
         tid = self.landed(where)
         self.assertEqual(store.load_trade(self.root, tid).pair, "WHATEVER")
 
     def test_32_money_and_corrections_are_folded_and_kept_apart(self):
-        self.post("/money/new", {"account": "bybit", "kind": "withdrawal",
+        self.post("/money/new", {"account": "broker", "kind": "withdrawal",
                                  "amount": "100", "day": "2026-08-18"})
-        self.post("/money/correct", {"account": "bybit", "balance": "12345",
+        self.post("/money/correct", {"account": "broker", "balance": "12345",
                                      "day": "2026-08-19", "comment": "broker"})
         _, html = self.get("/accounts")
         self.assertIn('<details class="fold"><summary>Money in and out', html)
@@ -584,7 +584,7 @@ class ServerCase(unittest.TestCase):
         self.post("/report/build", {"what": "month", "period_month": "2026-08"})
         _, html = self.get("/report/2026-08")
         self.assertIn("/?pair=EURUSD&from=2026-08&to=2026-08", html)
-        self.assertIn("/?account=bybit&from=2026-08&to=2026-08", html)
+        self.assertIn("/?account=broker&from=2026-08&to=2026-08", html)
         self.assertIn("/?style=swing&from=2026-08&to=2026-08", html)
         # the head of a table is not a link: "account" is not an account
         self.assertNotIn("/?account=account", html)
@@ -614,7 +614,7 @@ class ServerCase(unittest.TestCase):
 
     def test_35_a_trade_is_duplicated_on_a_second_account(self):
         """One form, two trades: the same idea, another account, another risk."""
-        self.post("/account/new", {"id": "prop-100k", "name": "FTMO 100k",
+        self.post("/account/new", {"id": "prop-100k", "name": "prop 100k",
                                    "start": "100000", "currency": "USD"})
         _, html = self.get("/new")
         self.assertIn("Duplicate on another account", html)
@@ -622,7 +622,7 @@ class ServerCase(unittest.TestCase):
         shot = self.paste_shot(token, "idea-1")
         before = {t.id for t in store.all_trades(self.root)}
         code, where = self.post("/new", {
-            "token": token, "blocks": "1", "account": "bybit", "pair": "GBPUSD",
+            "token": token, "blocks": "1", "account": "broker", "pair": "GBPUSD",
             "direction": "short", "style": "swing", "entry_tf": "H4",
             "risk": "2", "entry": "2026-08-30T09:00", "idea_tf_1": "H4",
             "idea_text_1": "range high, selling the sweep",
@@ -631,7 +631,7 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(code, 200)
         fresh = [t for t in store.all_trades(self.root) if t.id not in before]
         self.assertEqual(len(fresh), 2)
-        origin = next(t for t in fresh if t.account == "bybit")
+        origin = next(t for t in fresh if t.account == "broker")
         copy = next(t for t in fresh if t.account == "prop-100k")
         self.assertEqual(self.landed(where), origin.id)  # opens the one entered
         self.assertEqual(origin.risk, 2)
@@ -649,10 +649,10 @@ class ServerCase(unittest.TestCase):
         token = self.form_token(html)
         before = len(store.all_trades(self.root))
         data = urllib.parse.urlencode({
-            "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+            "token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
             "direction": "long", "style": "swing", "risk": "1",
             "entry": "2026-08-30T11:00", "idea_text_1": "no",
-            "dup_account": "bybit", "dup_risk": "1"}).encode()
+            "dup_account": "broker", "dup_risk": "1"}).encode()
         req = urllib.request.Request(self.url("/new"), data=data)
         try:
             urllib.request.urlopen(req)
@@ -694,7 +694,7 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/new")
         token = self.form_token(html)
         code, where = self.post("/new", {
-            "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+            "token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
             "direction": "long", "style": "scalp", "entry_tf": "M5",
             "execution": ["OB retest"], "risk": "1",
             "entry": "2026-08-31T08:00", "idea_text_1": "quick one"})
@@ -715,7 +715,7 @@ class ServerCase(unittest.TestCase):
         # saving the form back does not drop them
         edit_token = self.form_token(form)
         self.post(f"/edit/{urllib.parse.quote(trade_id)}", {
-            "token": edit_token, "blocks": "1", "account": "bybit",
+            "token": edit_token, "blocks": "1", "account": "broker",
             "pair": "EURUSD", "direction": "long", "style": "scalp",
             "entry_tf": "M5", "execution": ["OB retest"], "risk": "1",
             "entry": "2026-08-31T08:00", "idea_text_1": "quick one"})
@@ -789,7 +789,7 @@ class ServerCase(unittest.TestCase):
         self.assertIn(plan_id, form)
         token = self.form_token(form)
         _, where = self.post("/new", {
-            "token": token, "blocks": "1", "account": "bybit", "pair": "EURUSD",
+            "token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
             "direction": "long", "style": "swing", "risk": "1",
             "entry": "2026-09-01T10:00", "idea_text_1": "per the plan",
             "plan": plan_id})
@@ -854,7 +854,7 @@ class ServerCase(unittest.TestCase):
     # --- v1.4.3 ---
     def open_trade(self, **over):
         _, html = self.get("/new")
-        fields = {"token": self.form_token(html), "blocks": "1", "account": "bybit",
+        fields = {"token": self.form_token(html), "blocks": "1", "account": "broker",
                   "pair": "EURUSD", "direction": "long", "style": "swing",
                   "entry_tf": "H4", "risk": "1", "entry": "2026-08-29T14:30",
                   "idea_tf_1": "H4", "idea_text_1": "a plain idea"}
@@ -875,7 +875,7 @@ class ServerCase(unittest.TestCase):
         folder = store.trade_dir(self.root, "2026-01-05-01-eurusd")
         os.makedirs(folder)
         with open(os.path.join(folder, "trade.md"), "w") as f:
-            f.write("---\nid: 2026-01-05-01-eurusd\naccount: bybit\npair: EURUSD\n"
+            f.write("---\nid: 2026-01-05-01-eurusd\naccount: broker\npair: EURUSD\n"
                     "direction: long\nstyle: swing\nrisk %: 1\nentry: 05.01.2026\n---\n")
         self.S.drop_cache()
         try:
@@ -940,17 +940,17 @@ class ServerCase(unittest.TestCase):
         self.assertTrue(all("USDJPY" in line for line in lines[1:]))
 
     def test_56_the_daily_limit_warns_on_the_front_page(self):
-        self.post("/account/limit", {"id": "bybit", "limit": "50"})
-        self.assertEqual(store.all_accounts(self.root)["bybit"].daily_loss_limit, 50)
+        self.post("/account/limit", {"id": "broker", "limit": "50"})
+        self.assertEqual(store.all_accounts(self.root)["broker"].daily_loss_limit, 50)
         now = datetime.now().strftime("%Y-%m-%dT%H:%M")
         trade_id = self.open_trade(entry=now, risk="1")     # 1% of ~10 000 at risk
         _, html = self.get("/")
-        tile = re.search(r'<div class="tile([^"]*)"><div class="name">Bybit', html)
+        tile = re.search(r'<div class="tile([^"]*)"><div class="name">Broker', html)
         self.assertIn("over", tile.group(1))
         self.assertIn("daily loss limit reached", html)
         self.assertIn("limit 50 $", html)
-        self.post("/account/limit", {"id": "bybit", "limit": ""})
-        self.assertIsNone(store.all_accounts(self.root)["bybit"].daily_loss_limit)
+        self.post("/account/limit", {"id": "broker", "limit": ""})
+        self.assertIsNone(store.all_accounts(self.root)["broker"].daily_loss_limit)
         self.assertNotIn("daily loss limit reached", self.get("/")[1])
         self.post(f"/trade/{urllib.parse.quote(trade_id)}/delete", {})
 
@@ -998,7 +998,7 @@ class ServerCase(unittest.TestCase):
         q = urllib.parse.quote(trade_id)
         token = self.form_token(self.get(f"/edit/{q}")[1])
         _, where = self.post(f"/edit/{q}", {
-            "token": token, "blocks": "1", "account": "bybit", "pair": "AUDUSD",
+            "token": token, "blocks": "1", "account": "broker", "pair": "AUDUSD",
             "direction": "long", "style": "swing", "entry_tf": "H4", "risk": "1",
             "entry": "2026-06-11T09:00", "idea_tf_1": "H4", "idea_text_1": "moved"})
         moved = self.landed(where)
@@ -1268,7 +1268,7 @@ class ServerCase(unittest.TestCase):
         # closed trade, nothing has to be added anywhere for it
         _, html = self.get("/new")
         _, where = self.post("/new", {
-            "token": self.form_token(html), "blocks": "1", "account": "bybit",
+            "token": self.form_token(html), "blocks": "1", "account": "broker",
             "pair": "NZDCAD", "direction": "short", "style": "swing",
             "entry_tf": "H4", "risk": "1", "entry": "2026-08-20T10:00",
             "idea_tf_1": "H4", "idea_text_1": "a pair traded once"})

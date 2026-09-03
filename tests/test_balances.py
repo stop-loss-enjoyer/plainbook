@@ -12,7 +12,7 @@ from plainbook.balances import Journal
 from plainbook.model import Trade, Account, Adjustment
 
 
-def trade(id, day, pnl=None, result=None, risk=1.0, account="bybit", closed=None):
+def trade(id, day, pnl=None, result=None, risk=1.0, account="broker", closed=None):
     """`day` and `closed` are tuples; give them an hour and a minute and the
     journal knows the moment, which is what puts two trades of one day in
     order."""
@@ -26,14 +26,14 @@ def trade(id, day, pnl=None, result=None, risk=1.0, account="bybit", closed=None
 
 class Balances(unittest.TestCase):
     def setUp(self):
-        self.accounts = {"bybit": Account(id="bybit", start_balance=10000)}
+        self.accounts = {"broker": Account(id="broker", start_balance=10000)}
 
     def test_balance_grows_by_closed_pnl(self):
         j = Journal(self.accounts, [
             trade("t1", (2025, 6, 25), pnl=1000, result="Win", closed=(2025, 6, 26)),
             trade("t2", (2025, 7, 1)),                     # open, not in the balance
         ], [])
-        self.assertEqual(j.balance("bybit"), 11000)
+        self.assertEqual(j.balance("broker"), 11000)
 
     def test_risk_follows_the_current_balance(self):
         """Risk in dollars is measured against the computed balance, not the start."""
@@ -48,16 +48,16 @@ class Balances(unittest.TestCase):
 
     def test_adjustments_move_the_balance(self):
         j = Journal(self.accounts, [], [
-            Adjustment(id="c1", account="bybit", kind="deposit", amount=5000,
+            Adjustment(id="c1", account="broker", kind="deposit", amount=5000,
                        day=datetime(2025, 6, 1)),
-            Adjustment(id="c2", account="bybit", kind="withdrawal", amount=-2000,
+            Adjustment(id="c2", account="broker", kind="withdrawal", amount=-2000,
                        day=datetime(2025, 7, 1)),
         ])
-        self.assertEqual(j.balance("bybit"), 13000)
+        self.assertEqual(j.balance("broker"), 13000)
 
     def test_an_adjustment_counts_from_its_own_day(self):
         j = Journal(self.accounts, [trade("t1", (2025, 6, 1))], [
-            Adjustment(id="c1", account="bybit", kind="deposit", amount=10000,
+            Adjustment(id="c1", account="broker", kind="deposit", amount=10000,
                        day=datetime(2025, 6, 1)),
         ])
         self.assertEqual(j.computed["t1"].balance_at_entry, 20000)
@@ -112,10 +112,10 @@ class Balances(unittest.TestCase):
         j = Journal(accounts, [
             trade("t1", (2025, 6, 25), pnl=-940, result="Lose", closed=(2025, 6, 26),
                   account="prop-100k"),
-            trade("t2", (2025, 7, 1), account="bybit"),
+            trade("t2", (2025, 7, 1), account="broker"),
         ], [])
         self.assertEqual(j.balance("prop-100k"), 99060)
-        self.assertEqual(j.balance("bybit"), 10000)
+        self.assertEqual(j.balance("broker"), 10000)
         self.assertEqual(j.computed["t2"].balance_at_entry, 10000)
 
     def test_equity_curve(self):
@@ -123,18 +123,18 @@ class Balances(unittest.TestCase):
             trade("t1", (2025, 6, 25), pnl=500, result="Win", closed=(2025, 6, 26)),
             trade("t2", (2025, 7, 1), pnl=-200, result="Lose", closed=(2025, 7, 3)),
         ], [])
-        self.assertEqual([b for _, b in j.equity("bybit")], [10500, 10300])
+        self.assertEqual([b for _, b in j.equity("broker")], [10500, 10300])
 
     def test_reconciliation_brings_the_balance_to_the_real_one(self):
         """A gap is written down as an adjustment, never silently."""
         j = Journal(self.accounts, [
             trade("t1", (2025, 6, 25), pnl=900, result="Win", closed=(2025, 6, 26)),
         ], [
-            Adjustment(id="reconciliation", account="bybit", kind="reconciliation",
+            Adjustment(id="reconciliation", account="broker", kind="reconciliation",
                        amount=100, day=datetime(2026, 8, 29),
                        comment="reconciled while importing"),
         ])
-        self.assertEqual(j.balance("bybit"), 11000)
+        self.assertEqual(j.balance("broker"), 11000)
 
     def test_money_moved_is_kept_apart_from_what_was_earned(self):
         """A payout is not a loss: the result of the account is the balance
@@ -142,25 +142,25 @@ class Balances(unittest.TestCase):
         j = Journal(self.accounts, [
             trade("t1", (2025, 6, 25), pnl=1000, result="Win", closed=(2025, 6, 26)),
         ], [
-            Adjustment(id="a1", account="bybit", kind="withdrawal", amount=-3000,
+            Adjustment(id="a1", account="broker", kind="withdrawal", amount=-3000,
                        day=datetime(2025, 7, 1), comment="payout"),
-            Adjustment(id="a2", account="bybit", kind="deposit", amount=500,
+            Adjustment(id="a2", account="broker", kind="deposit", amount=500,
                        day=datetime(2025, 7, 2)),
         ])
-        self.assertEqual(j.balance("bybit"), 8500)      # 10000 + 1000 - 3000 + 500
-        self.assertEqual(j.cashed_out("bybit"), 3000)
-        self.assertEqual(j.deposited("bybit"), 500)
-        self.assertEqual(j.result("bybit"), 1000)       # the trade, and only it
+        self.assertEqual(j.balance("broker"), 8500)      # 10000 + 1000 - 3000 + 500
+        self.assertEqual(j.cashed_out("broker"), 3000)
+        self.assertEqual(j.deposited("broker"), 500)
+        self.assertEqual(j.result("broker"), 1000)       # the trade, and only it
         # the line on the tile adds up
-        self.assertEqual(10000 + j.result("bybit") + j.deposited("bybit")
-                         - j.cashed_out("bybit"), j.balance("bybit"))
+        self.assertEqual(10000 + j.result("broker") + j.deposited("broker")
+                         - j.cashed_out("broker"), j.balance("broker"))
 
     def test_a_withdrawal_lowers_the_balance_a_later_entry_risks_against(self):
         """Money taken off is gone from the risk of every trade opened after."""
         j = Journal(self.accounts, [
             trade("t1", (2025, 7, 5), risk=1.0),
         ], [
-            Adjustment(id="a1", account="bybit", kind="withdrawal", amount=-2000,
+            Adjustment(id="a1", account="broker", kind="withdrawal", amount=-2000,
                        day=datetime(2025, 7, 1)),
         ])
         self.assertEqual(j.computed["t1"].balance_at_entry, 8000)
@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
 class StreaksAndPeriods(unittest.TestCase):
     def setUp(self):
-        self.accounts = {"bybit": Account(id="bybit", start_balance=10000)}
+        self.accounts = {"broker": Account(id="broker", start_balance=10000)}
 
     def test_streaks_follow_the_order_of_closing(self):
         from plainbook import stats
@@ -196,16 +196,16 @@ class StreaksAndPeriods(unittest.TestCase):
             trade("t1", (2026, 7, 1), pnl=500, result="Win", closed=(2026, 7, 2)),
             trade("t2", (2026, 8, 1), pnl=-200, result="Lose", closed=(2026, 8, 2)),
             trade("t3", (2026, 8, 3), pnl=300, result="Win", closed=(2026, 8, 4)),
-        ], [Adjustment(id="a", account="bybit", kind="deposit", amount=1000,
+        ], [Adjustment(id="a", account="broker", kind="deposit", amount=1000,
                        day=datetime(2026, 7, 15))])
         since = datetime(2026, 8, 1)
         august = [t for t in j.trades if t.opened >= since]
-        points = stats.equity(j, "bybit", august, since)
+        points = stats.equity(j, "broker", august, since)
         # July's trade and the deposit are in the first point, not on the line
         self.assertEqual(points[0], (since, 11500))
         self.assertEqual([b for _, b in points[1:]], [11300, 11600])
         # a filter by trade leaves the others out of the line, still from 11500
-        points = stats.equity(j, "bybit", [j.trades[2]], since)
+        points = stats.equity(j, "broker", [j.trades[2]], since)
         self.assertEqual([b for _, b in points], [11500, 11800])
 
     def test_the_currency_is_the_accounts_own_or_the_shared_one(self):

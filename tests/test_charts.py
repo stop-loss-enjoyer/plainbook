@@ -82,10 +82,10 @@ class SpreadCase(unittest.TestCase):
 
 class RSplitCase(unittest.TestCase):
     def setUp(self):
-        self.accounts = {"bybit": Account(id="bybit", start_balance=10000)}
+        self.accounts = {"broker": Account(id="broker", start_balance=10000)}
 
     def trade(self, tid, result, pnl):
-        return Trade(id=tid, account="bybit", pair="EURUSD", direction="long",
+        return Trade(id=tid, account="broker", pair="EURUSD", direction="long",
                      style="swing", risk=1.0, opened=datetime(2026, 8, 1),
                      result=result, pnl=pnl, closed=datetime(2026, 8, 2))
 
@@ -158,11 +158,11 @@ class DrawdownAndSlicesCase(unittest.TestCase):
     """Figures the reports lean on: the deepest fall, and a field held twice."""
 
     def journal(self, results):
-        accounts = {"bybit": Account(id="bybit", start_balance=10000)}
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
         trades = []
         for i, (pnl, execution) in enumerate(results, 1):
             trades.append(Trade(
-                id=f"t{i}", account="bybit", pair="EURUSD", direction="long",
+                id=f"t{i}", account="broker", pair="EURUSD", direction="long",
                 style="swing", risk=1.0, execution=execution,
                 opened=datetime(2026, 8, i), closed=datetime(2026, 8, i),
                 result="Win" if pnl > 0 else "Lose" if pnl < 0 else "BE",

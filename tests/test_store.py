@@ -17,7 +17,7 @@ from plainbook.model import (Trade, Account, Adjustment, IdeaBlock, Card, Week,
 def sample_trade(**kw):
     t = Trade(
         id="2025-06-25-01-eurusd",
-        account="bybit",
+        account="broker",
         pair="EURUSD",
         direction="long",
         style="swing",
@@ -44,7 +44,7 @@ def sample_trade(**kw):
 
 class FileHeader(unittest.TestCase):
     def test_round_trip(self):
-        head = {"account": "bybit", "risk %": "1", "execution": ["M15", "M5"]}
+        head = {"account": "broker", "risk %": "1", "execution": ["M15", "M5"]}
         text = mdfile.dump(head, "body")
         again, body = mdfile.parse(text)
         self.assertEqual(again, head)
@@ -57,7 +57,7 @@ class FileHeader(unittest.TestCase):
 
     def test_unterminated_header(self):
         with self.assertRaises(ValueError):
-            mdfile.parse("---\naccount: bybit\nbody")
+            mdfile.parse("---\naccount: broker\nbody")
 
 
 class TradeRoundTrip(unittest.TestCase):
@@ -193,7 +193,7 @@ class AccountAndAdjustmentRoundTrip(unittest.TestCase):
         self.assertEqual(again.note, "Closed.")
 
     def test_adjustment(self):
-        c = Adjustment(id="2026-08-29-reconciliation-bybit", account="bybit",
+        c = Adjustment(id="2026-08-29-reconciliation-broker", account="broker",
                        kind="reconciliation", amount=-12.5,
                        day=datetime(2026, 8, 29),
                        comment="Reconciled while importing.")
@@ -207,13 +207,13 @@ class AccountAndAdjustmentRoundTrip(unittest.TestCase):
 class FilesOnDisk(unittest.TestCase):
     def test_write_read_and_list(self):
         with tempfile.TemporaryDirectory() as root:
-            store.save_account(root, Account(id="bybit", name="Bybit",
+            store.save_account(root, Account(id="broker", name="Broker",
                                              start_balance=10000))
             t = store.save_trade(root, sample_trade())
             again = store.load_trade(root, t.id)
             self.assertEqual(store.trade_to_text(again), store.trade_to_text(t))
             self.assertEqual([x.id for x in store.all_trades(root)], [t.id])
-            self.assertEqual(list(store.all_accounts(root)), ["bybit"])
+            self.assertEqual(list(store.all_accounts(root)), ["broker"])
 
     def test_saving_twice_does_not_add_folders(self):
         with tempfile.TemporaryDirectory() as root:
@@ -269,7 +269,7 @@ class Cards(unittest.TestCase):
 
     def test_empty_trade_field_is_not_brackets(self):
         t = store.text_to_trade(
-            "---\nid: x\naccount: bybit\npair: EURUSD\ndirection: long\n"
+            "---\nid: x\naccount: broker\npair: EURUSD\ndirection: long\n"
             "style: swing\nentry tf: \nrisk %: 1\nentry: 2026-08-30\n---\n")
         self.assertEqual(t.entry_tf, "")
 
@@ -356,14 +356,14 @@ if __name__ == "__main__":
 class Trash(unittest.TestCase):
     def test_a_record_is_listed_and_restored(self):
         with tempfile.TemporaryDirectory() as root:
-            t = Trade(id="2026-08-29-01-eurusd", account="bybit", pair="EURUSD",
+            t = Trade(id="2026-08-29-01-eurusd", account="broker", pair="EURUSD",
                       direction="long", style="swing", opened=datetime(2026, 8, 29))
             store.save_trade(root, t)
-            store.save_account(root, Account(id="bybit", start_balance=1))
+            store.save_account(root, Account(id="broker", start_balance=1))
             store.delete_trade(root, t.id)
-            store.delete_account(root, "bybit")
+            store.delete_account(root, "broker")
             kinds = {kind: record_id for _, kind, record_id, _ in store.trash_list(root)}
-            self.assertEqual(kinds, {"trade": t.id, "account": "bybit"})
+            self.assertEqual(kinds, {"trade": t.id, "account": "broker"})
             name = next(x[0] for x in store.trash_list(root) if x[1] == "trade")
             self.assertEqual(store.restore(root, name), ("trade", t.id))
             self.assertEqual(store.load_trade(root, t.id).pair, "EURUSD")
@@ -377,7 +377,7 @@ class Trash(unittest.TestCase):
 
     def test_the_id_follows_the_day_and_the_pair(self):
         with tempfile.TemporaryDirectory() as root:
-            t = Trade(id="2026-08-29-01-eurusd", account="bybit", pair="EURUSD",
+            t = Trade(id="2026-08-29-01-eurusd", account="broker", pair="EURUSD",
                       direction="long", style="swing", opened=datetime(2026, 8, 29))
             store.save_trade(root, t)
             self.assertTrue(store.id_fits(t))
@@ -396,13 +396,13 @@ class Trash(unittest.TestCase):
 
     def test_a_broken_file_is_reported_and_skipped(self):
         with tempfile.TemporaryDirectory() as root:
-            good = Trade(id="2026-08-29-01-eurusd", account="bybit", pair="EURUSD",
+            good = Trade(id="2026-08-29-01-eurusd", account="broker", pair="EURUSD",
                          direction="long", style="swing", opened=datetime(2026, 8, 29))
             store.save_trade(root, good)
             bad = store.trade_dir(root, "2026-08-30-01-eurusd")
             os.makedirs(bad)
             with open(os.path.join(bad, "trade.md"), "w") as f:
-                f.write("---\nid: 2026-08-30-01-eurusd\naccount: bybit\n"
+                f.write("---\nid: 2026-08-30-01-eurusd\naccount: broker\n"
                         "direction: long\nstyle: swing\nrisk %: one\n"
                         "entry: 2026-08-30\n---\n")
             with self.assertRaises(ValueError):
