@@ -35,6 +35,16 @@ class Balances(unittest.TestCase):
         ], [])
         self.assertEqual(j.balance("broker"), 11000)
 
+    def test_a_trade_closed_within_its_own_minute_is_not_in_its_own_balance(self):
+        """Both hours known and equal: the close is not earlier than the entry,
+        so the trade's own result must not be in the balance it was opened on."""
+        j = Journal(self.accounts, [
+            trade("t1", (2025, 6, 25, 10, 0), pnl=500, result="Win",
+                  closed=(2025, 6, 25, 10, 0)),
+        ], [])
+        self.assertEqual(j.computed["t1"].balance_at_entry, 10000)
+        self.assertEqual(j.computed["t1"].r, 5.0)
+
     def test_risk_follows_the_current_balance(self):
         """Risk in dollars is measured against the computed balance, not the start."""
         j = Journal(self.accounts, [

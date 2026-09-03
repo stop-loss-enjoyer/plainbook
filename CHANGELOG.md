@@ -2,6 +2,74 @@
 
 What changed and why. Newest first.
 
+## v1.4.6, 03.09.2026
+
+The third column of the paper's trades assessment, filled in by the journal,
+periods counted by the exit, and a round of fixes from a reading of the whole
+code.
+
+### Fixed
+
+- **A trade with a risk off the 0.05 step could not be saved again.** The risk
+  field accepted 0.05, 0.10 and so on, and a trade recorded at 0.81% was
+  refused by the browser the moment its form was opened for any other change.
+  The field takes any figure now and refuses only an empty one, with a word
+  instead of a traceback.
+- **A refused edit no longer renames the folder first.** The folder of a trade
+  follows its day and its pair, and it was renamed before the record was
+  checked: an entry moved past the exit was refused, but the folder had already
+  moved, leaving a file that named one id inside a folder named by another. The
+  check comes first now; nothing on the disk moves for a record that is not
+  saved.
+- **A trade closed within the minute it was opened counted its own result in
+  the balance it was opened on.** Only possible with both hours recorded and
+  equal, but the R of such a trade was wrong. A trade's own close is left out
+  of its own balance now.
+- **The tip over an equity curve said $ whatever the account's currency.** It
+  names the currency of the account.
+- **A day or a week that netted exactly zero opened its card with an empty
+  P&L.** Zero is a figure too, and it is offered like any other.
+- The form refuses a trade on an account the journal does not have, which the
+  interface never sends but a hand-made request could.
+
+### Changed
+
+- **A period is the trades that closed in it.** A monthly or quarterly report
+  and the current-period tile on the front page used to count the trades by
+  their entry, while the cards, the equity curve and the balance change of the
+  same report counted by the exit. In one report the result in money and the
+  balance change disagreed by every trade that ran across the edge of the
+  month. Both now count by the exit, the way a broker states a month; the
+  Reports tab offers the months and quarters trades closed in, and the tile
+  says how many closed. The list of trades still groups by entry, because a
+  journal is read by the decisions in it, and a row of a report opens that
+  list, so the two can differ by a trade that ran across the boundary.
+
+### New
+
+- **The risk of a new trade follows the account.** The field starts at the risk
+  of your last trade on the account picked, and changes with the account until
+  you type a figure yourself; the duplicate's risk follows its own account the
+  same way. A prop account and your own are run at different sizes, and the
+  form asked for the figure every time.
+- **A result that disagrees with the money is pointed out.** A Win with a
+  negative PnL, or a Lose with a positive one, is saved as written and marked
+  on the trade page, right where the closing form lands: nearly always one of
+  the two is a slip, and Edit puts it right. It is a word, not a refusal, since
+  a win eaten by commission is a real thing.
+
+- **The result column of the trades assessment.** The paper Daily Report Card
+  grades a trade in three columns, trade, grade and result, and the journal had
+  two. The third is there now, on the daily card and on the weekly one, and it
+  fills itself in: pick a trade from the suggestions, or type its pair, and the
+  result stands there as the journal knows it, `Win +1.20 R`, to be kept or
+  overwritten. A card graded before this shows the results of the trades it
+  named the next time it is opened, and keeps them when saved. Files written
+  before still read; a line with two cells is a line with an empty result.
+- **The daily card laid out as the paper is.** The best trade of the day stands
+  beside the trades assessment, and the overview runs under both across the
+  width, the order the paper has; on a narrow window the two columns become one.
+
 ## v1.4.5, 03.09.2026
 
 The expectancy next to every winrate on the front page, and by that name in

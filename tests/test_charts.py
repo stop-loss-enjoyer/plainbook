@@ -80,6 +80,32 @@ class SpreadCase(unittest.TestCase):
         self.assertEqual(spread_days(pts), pts)
 
 
+class PeriodCase(unittest.TestCase):
+    def test_a_report_counts_the_trades_that_closed_in_its_period(self):
+        """By the exit, as a broker states a month: a trade entered in August
+        and closed in September is September's, and an open one is nobody's."""
+        from plainbook import reports
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
+        ran_over = Trade(id="t1", account="broker", pair="EURUSD", direction="long",
+                         style="swing", risk=1.0, opened=datetime(2026, 8, 28),
+                         result="Win", pnl=200, closed=datetime(2026, 9, 2))
+        still_open = Trade(id="t2", account="broker", pair="GBPUSD", direction="long",
+                           style="swing", risk=1.0, opened=datetime(2026, 9, 1))
+        j = Journal(accounts, [ran_over, still_open], [])
+        self.assertEqual([t.id for t in reports.trades_of_period(j, "2026-09")], ["t1"])
+        self.assertEqual(reports.trades_of_period(j, "2026-08"), [])
+        self.assertEqual(stats.closing_months(j.trades), ["2026-09"])
+        self.assertEqual(stats.months(j.trades), ["2026-08", "2026-09"])
+
+
+class EquityTipCase(unittest.TestCase):
+    def test_the_tip_names_the_currency_of_the_account(self):
+        from plainbook.html import equity_svg
+        pts = [(datetime(2026, 7, 1), 100.0), (datetime(2026, 7, 2), 110.0)]
+        svg = equity_svg([("acc", "#fff", pts)], sign="€")
+        self.assertIn('"sign": "€"', svg)
+
+
 class RSplitCase(unittest.TestCase):
     def setUp(self):
         self.accounts = {"broker": Account(id="broker", start_balance=10000)}

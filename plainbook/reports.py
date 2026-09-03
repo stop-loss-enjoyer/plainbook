@@ -63,8 +63,17 @@ def period_months(period):
 
 
 def trades_of_period(journal, period):
+    """The trades that closed in the period.
+
+    A period is measured by the exit, the way a broker states a month and the
+    cards count a day: a trade belongs to the month it paid or cost, not to the
+    one it was entered in. Without this the result in money and the balance
+    change of one report disagreed by every trade that ran across its edge.
+    The list on the front page groups by the entry, so a trade that crossed a
+    boundary stands in one month there and in the other here."""
     start, end, _ = parse_period(period)
-    return [t for t in journal.trades if start <= t.opened < end]
+    return [t for t in journal.trades
+            if not t.is_open and t.closed and start <= t.closed < end]
 
 
 # Reports built before this used to carry a stub under the heading, and the
@@ -178,7 +187,7 @@ def process(root, trades, start, end):
     A month is not only its result. The grades of the cards say how the days
     were traded, and the count says how many of them were reviewed at all."""
     cards = [k for k in store.all_cards(root) if k.day and start <= k.day < end]
-    days = {t.opened.date() for t in trades if t.opened}
+    days = {t.closed.date() for t in trades if t.closed}
     lines = ["### Process", ""]
     if not cards:
         return lines + [f"No cards written for this period, and {len(days)} days "

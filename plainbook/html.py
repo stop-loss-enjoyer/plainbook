@@ -195,6 +195,12 @@ select:focus,input:focus,textarea:focus{{outline:none;border-color:{ACCENT};
  box-shadow:0 0 0 2px rgba(111,157,255,.18)}}
 textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .fields{{display:flex;gap:14px;flex-wrap:wrap}}
+/* the paper puts the best trade beside the trades assessment: two columns, the
+   text field stretching to the height of the table */
+.twin{{display:grid;grid-template-columns:1fr 1fr;gap:22px}}
+.twin>div{{display:flex;flex-direction:column;min-width:0}}
+.twin textarea{{flex:1}}
+@media (max-width:900px){{.twin{{grid-template-columns:1fr}}}}
 .field{{min-width:150px}}
 .actions{{display:flex;gap:8px;align-items:center;margin:16px 0 0}}
 .actions .right{{margin-left:auto}}
@@ -537,8 +543,9 @@ def spread_days(points):
     return out
 
 
-def equity_svg(series, width=980, height=260, cid="equity"):
+def equity_svg(series, width=980, height=260, cid="equity", sign="$"):
     """Equity lines with hovering. series: [(name, colour, [(date, value)])].
+    `sign` is the currency the tip names next to a balance.
 
     Only like quantities share a picture: accounts go on one chart, the total
     on its own. There are never two scales in one image.
@@ -601,7 +608,7 @@ def equity_svg(series, width=980, height=260, cid="equity"):
         parts.append(f'<circle cx="{X(dt):.1f}" cy="{Y(v):.1f}" r="3" fill="{colour}"/>')
         parts.append(f'<text x="{X(dt)+7:.1f}" y="{Y(v)+3:.1f}" fill="{INK2}" '
                      f'font-size="10">{esc(name)}</text>')
-        data.append({"name": name, "colour": colour,
+        data.append({"name": name, "colour": colour, "sign": sign,
                      "points": [[round(X(dt), 1), round(Y(v), 1),
                                  dt.strftime("%d.%m.%Y"), round(v)]
                                 for dt, v in pts]})
@@ -648,7 +655,7 @@ function hover_chart(cid){
         if (dd < d) { d = dd; best = p; } }
       if (!best) continue;
       lines.push(s.name + ': ' +
-        String(best[3]).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ') + ' $');
+        String(best[3]).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ') + ' ' + s.sign);
       at = best;
       const c = document.createElementNS(NS, 'circle');
       c.setAttribute('cx', best[0]); c.setAttribute('cy', best[1]);

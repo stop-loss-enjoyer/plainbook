@@ -298,20 +298,19 @@ def period_tile(j, trades, group):
     name = {"week": "this week", "month": "this month",
             "quarter": "this quarter"}[group]
     key = group_key(datetime.now(), group)
-    inside = [t for t in trades if group_key(t.opened, group) == key]
+    # the trades that closed in the period, as a report counts a month and a
+    # card counts a day; the list below groups by the entry
+    inside = [t for t in trades if not t.is_open and t.closed
+              and group_key(t.closed, group) == key]
     s = stats.summary(j, inside)
     if not inside:
         return (f'<div class="tile"><div class="name">{name}</div>'
                 f'<div class="value muted">-</div>'
-                f'<div class="sub">no trades yet</div></div>')
-    sub = f"{len(inside)} trades"
+                f'<div class="sub">nothing closed yet</div></div>')
+    sub = f"{len(inside)} closed"
     if s.decided:
         sub += f" · WR {s.wr:.0f}% · EV {s.average_r:+.2f} R"
-    if s.trades:
-        sub += f" · {amount(j, s.sum_pnl, signed=True)}"
-    still_open = len(inside) - s.trades
-    if still_open:
-        sub += f" · {still_open} open"
+    sub += f" · {amount(j, s.sum_pnl, signed=True)}"
     return (f'<div class="tile"><div class="name">{name}</div>'
             f'<div class="value {sum_class(s.sum_r)}">{s.sum_r:+.2f} R</div>'
             f'<div class="sub">{esc(sub)}</div></div>')
@@ -520,6 +519,19 @@ def home_page(q):
 
 # --- trade page ------------------------------------------------------------
 
+def outcome_warning(t):
+    """A result that disagrees with the sign of the PnL is nearly always a slip
+    of the hand. It is said on the page and not refused by the form, because
+    the owner may mean it: a win eaten by commission is one."""
+    if t.is_open or t.pnl is None:
+        return ""
+    if (t.result == "Win" and t.pnl < 0) or (t.result == "Lose" and t.pnl > 0):
+        return (f'<div class="notice"><b>{esc(t.result)} with a PnL of '
+                f'{H.money(t.pnl, signed=True)}</b>: the result and the money '
+                f'disagree. If one of them is a slip, Edit puts it right.</div>')
+    return ""
+
+
 def trade_page(trade_id):
     j = journal()
     t = next((x for x in j.trades if x.id == trade_id), None)
@@ -576,7 +588,8 @@ def trade_page(trade_id):
         buttons = (f'<a class="btn primary" href="/close/{U(t.id)}">Close trade</a>'
                    + buttons)
     body = (f'<div class="card{" is-open" if t.is_open else ""}">'
-            f'<h2>{esc(t.id)}</h2><table class="props">{table}</table></div>'
+            f'<h2>{esc(t.id)}</h2>{outcome_warning(t)}'
+            f'<table class="props">{table}</table></div>'
             + (f'<div class="card"><h2>Idea</h2>{idea}</div>' if idea else "")
             + (f'<div class="card"><h2>Exit moment</h2>'
                f'<div class="shots">{exit_shots}</div></div>' if exit_shots else "")
@@ -647,10 +660,10 @@ def r_rings(j, trades):
             f'<p class="caption">Each ring is one pile of trades cut by the size '
             f'of R: the further from zero, the brighter the slice. In the middle '
             f'of a ring stands the number of trades in it and their total R. '
-            f'Break-even trades are in neither ring; they ended at zero. On the '
-            f'losses, -1 to -1.2 R is the stop as designed, since commission and '
-            f'swap are paid on top of it; a loss past -1.2 R was not the stop '
-            f'but too much size.</p>'
+            f'Break-even trades are in neither ring; what their commission cost '
+            f'is in the EV. On the losses, -1 to -1.2 R is the stop as designed, '
+            f'since commission and swap are paid on top of it; a loss past '
+            f'-1.2 R was not the stop but too much size.</p>'
             f'</div>')
 
 
@@ -693,7 +706,7 @@ def stats_page(q):
         name = j.accounts[selected].name or selected
         charts = (f'<div class="card"><h2>Equity: {esc(name)}</h2>'
                   f'{account_tabs(j, q, selected)}'
-                  f'{H.equity_svg([(name, H.SERIES[0], points)], height=300, cid="acc")}'
+                  f'{H.equity_svg([(name, H.SERIES[0], points)], height=300, cid="acc", sign=H.sign(j.currency(selected)))}'
                   + (f'<p class="caption">{how.strip()}</p>' if how else '')
                   + '</div>')
     else:
@@ -706,7 +719,7 @@ def stats_page(q):
                 continue
             name = j.accounts[a].name or a
             cards += (f'<h3>{esc(name)}</h3>'
-                      f'{H.equity_svg([(name, H.SERIES[i % len(H.SERIES)], points)], height=190, cid=f"acc-{i}")}')
+                      f'{H.equity_svg([(name, H.SERIES[i % len(H.SERIES)], points)], height=190, cid=f"acc-{i}", sign=H.sign(j.currency(a)))}')
         charts = (f'<div class="card"><h2>Equity by account</h2>'
                   f'{account_tabs(j, q, "")}'
                   f'{cards or "<p class=\'muted\'>Nothing to plot yet.</p>"}'
@@ -953,12 +966,40 @@ def block_inside(n, tf="", text="", existing=(), base=None):
 {dropzone(f"idea-{n}", "click here and press Ctrl+V to paste a screenshot", old)}"""
 
 
+def last_risks(j):
+    """The risk of the latest trade of each account, which is what the next
+    one most likely carries: a prop account and one's own are run at different
+    sizes, and the form should not ask for the figure every time."""
+    return {t.account: t.risk for t in j.trades}     # sorted by entry: the last stays
+
+
+# The risk field follows the account until a figure is typed into it by hand,
+# and the risk of the duplicate follows its own account the same way.
+RISK_SCRIPT = """
+const risks = JSON.parse(document.querySelector('form').dataset.lastRisk || '{}');
+function follow_account(selectName, inputName){
+  const sel = document.querySelector('[name=' + selectName + ']');
+  const input = document.querySelector('[name=' + inputName + ']');
+  if (!sel || !input) return;
+  input.dataset.auto = '1';
+  input.addEventListener('input', () => { delete input.dataset.auto; });
+  sel.addEventListener('change', () => {
+    if (input.dataset.auto && risks[sel.value] !== undefined) input.value = risks[sel.value];
+  });
+}
+follow_account('account', 'risk');
+follow_account('dup_account', 'dup_risk');
+"""
+
+
 def trade_form(t=None, token=""):
     """One form for opening and for editing: the fields are the same."""
     j = journal()
     editing = t is not None
     accounts = [a for a in sorted(j.accounts) if not j.accounts[a].archived or
                 (editing and t.account == a)]
+    risks = last_risks(j)
+    risk = t.risk if editing else risks.get(accounts[0] if accounts else "", 1.0)
     pairs = sorted(set(store.all_pairs(ROOT)) |
                    {x.pair for x in j.trades if x.pair != PAIR_NOT_SET})
     now = datetime.now().strftime("%Y-%m-%dT%H:%M")
@@ -1006,7 +1047,7 @@ def trade_form(t=None, token=""):
 <div class="field"><label>account</label>
 {select("dup_account", accounts, "", empty="-")}</div>
 <div class="field"><label>risk, %</label>
-<input type="number" name="dup_risk" step="0.05" min="0.05" style="width:90px"
+<input type="number" name="dup_risk" step="any" min="0.01" style="width:90px"
  value="1"></div>
 </div>
 <p class="caption" style="margin:8px 0 0">Pick an account and the journal writes
@@ -1028,7 +1069,7 @@ two trades: this one, and a copy on that account with the risk set here.</p>
 {dropzone("concl", "screenshots for conclusions, Ctrl+V here",
           [shot_in_zone(shots_base(t.id), s, "have_concl")
            for s in conclusion_images(t.conclusions)])}</div>"""
-    return f"""<form method="post" action="{action}">
+    return f"""<form method="post" action="{action}" data-last-risk="{esc(json.dumps(risks))}">
 <input type="hidden" name="token" value="{esc(token)}">
 <input type="hidden" name="blocks" value="{count}">
 <div class="card"><h2>{title}</h2>
@@ -1049,8 +1090,8 @@ two trades: this one, and a copy on that account with the risk set here.</p>
 {select("entry_tf", offered("timeframes", t.entry_tf if editing else ""),
         t.entry_tf if editing else "", empty="-")}</div>
 <div class="field"><label>risk, %</label>
-<input type="number" name="risk" step="0.05" min="0.05" style="width:90px"
- value="{t.risk if editing else 1}"></div>
+<input type="number" name="risk" step="any" min="0.01" style="width:90px"
+ value="{risk:g}" required></div>
 <div class="field"><label>entry</label>
 <input type="datetime-local" name="entry" value="{entry}"
  onclick="this.showPicker && this.showPicker()"></div>
@@ -1070,7 +1111,7 @@ two trades: this one, and a copy on that account with the risk set here.</p>
 </form>
 <script>{FORM_SCRIPT}</script>
 <script>document.body.dataset.token = {json.dumps(token)};
-init_zones();</script>"""
+init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}"""
 
 
 def outcome_fields(t):
@@ -1270,7 +1311,12 @@ def apply_fields(t, data):
     t.entry_tf = one(data, "entry_tf")
     t.execution = data.get("execution", [])
     t.plan = one(data, "plan")
-    t.risk = float(one(data, "risk", "1").replace(",", "."))
+    if t.account not in journal(True).accounts:
+        raise RecordError(f"no account {t.account!r}")
+    risk = one(data, "risk")
+    if not risk:
+        raise RecordError("the risk is missing")
+    t.risk = float(risk.replace(",", "."))
     t.opened = entry
     t.opened_time = bool(entry.hour or entry.minute) or t.opened_time
     return t
@@ -1336,6 +1382,12 @@ def create_trade(data):
 def edit_trade(t, data):
     token = one(data, "token")
     apply_fields(t, data)
+    editing_close = one(data, "closed") == "1"
+    if editing_close:
+        apply_outcome(t, data)
+    # checked before anything on the disk moves: a folder renamed for a record
+    # that is then refused would be a folder whose file names another id
+    t.check()
     # the folder is named after the day and the pair, so it follows them
     if not store.id_fits(t):
         try:
@@ -1354,9 +1406,7 @@ def edit_trade(t, data):
     # The exit and the conclusions only come from the form of a closed trade.
     # If they were not in the form, keep them as they are: empty zones would
     # wipe the screenshots off the disk.
-    editing_close = one(data, "closed") == "1"
     if editing_close:
-        apply_outcome(t, data)
         zones["exit"] = zone_sources(data, "exit", folder, token)
         zones["concl"] = zone_sources(data, "concl", folder, token)
     else:
@@ -1365,7 +1415,6 @@ def edit_trade(t, data):
         zones["concl"] = [own.format(s)
                           for s in conclusion_images(t.conclusions)]
     t.idea = kept
-    t.check()
     names = apply_shots(folder, zones)
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
@@ -1851,36 +1900,113 @@ def day_pnl(j, day):
     return sum(t.pnl or 0.0 for t in day_trades(j, day))
 
 
-def assessment_rows(k, closed):
-    """The table of the paper: numbered lines of a trade and the mark it earned.
+def trade_labels(closed):
+    """How the closed trades are offered to the assessment, by trade id.
+
+    Pair, direction and the day of the close, which is what a reader wants to
+    see. The account is added only when two trades share all three, which is
+    what a trade duplicated on a second account does; the hour when they share
+    the account too, and the id itself when the exits carry no hour. The label
+    has to be unique or the result column would be filled from the wrong
+    trade."""
+    forms = (lambda t: f"{t.pair} {t.direction}, {t.closed:%d.%m}",
+             lambda t: f"{t.pair} {t.direction}, {t.closed:%d.%m}, {t.account}",
+             lambda t: f"{t.pair} {t.direction}, {t.closed:%d.%m %H:%M}, {t.account}",
+             lambda t: f"{t.pair} {t.direction}, {t.closed:%d.%m}, {t.id}")
+
+    def label(t):
+        for form in forms:
+            if sum(form(x) == form(t) for x in closed) == 1:
+                return form(t)
+        return forms[-1](t)
+    return {t.id: label(t) for t in closed}
+
+
+def outcomes(j, closed):
+    """What the journal knows for the result column, by what the trade field
+    may hold: the label the trade was offered under, and the bare pair when
+    that pair was traded once in the period, because a pair alone is what
+    gets typed."""
+    def outcome(t):
+        r = j.r(t.id)
+        return t.result + ("" if r is None else f" {r:+.2f} R")
+    labels = trade_labels(closed)
+    known = {labels[t.id]: outcome(t) for t in closed}
+    by_pair = {}
+    for t in closed:
+        by_pair.setdefault(t.pair, []).append(t)
+    known.update({pair: outcome(ts[0]) for pair, ts in by_pair.items() if len(ts) == 1})
+    return known
+
+
+# The result of a picked trade is filled in as it is picked, so that the card
+# is complete on the first save. A result the owner typed is never touched; one
+# the script filled follows the trade field if that is changed again.
+ASSESSMENT_SCRIPT = """
+document.querySelectorAll('table.assessment').forEach(table => {
+  const known = JSON.parse(table.dataset.known || '{}');
+  table.addEventListener('input', e => {
+    if (e.target.name === 'assess_result') { delete e.target.dataset.auto; return; }
+    if (e.target.name !== 'assess_trade') return;
+    const result = e.target.closest('tr').querySelector('[name=assess_result]');
+    const text = e.target.value.trim();
+    const hit = known[text] || known[text.toUpperCase()];
+    if (hit && (!result.value || result.dataset.auto)) {
+      result.value = hit; result.dataset.auto = '1';
+    }
+  });
+});
+"""
+
+
+def assessment_rows(j, k, closed):
+    """The table of the paper: numbered lines of a trade, the mark it earned
+    and how it ended.
 
     A card written by hand may carry more than the paper's rows, so every row
-    it has is drawn; a row left empty is dropped when the form comes back."""
+    it has is drawn; a row left empty is dropped when the form comes back. A
+    row that names a trade the journal knows and has no result yet is shown
+    with the journal's result, the way a new card is shown with the day's P&L:
+    offered, and saved only when the card is."""
     listed = list(k.assessment) + [Graded() for _ in range(ASSESSMENT_ROWS)]
-    options = "".join(f'<option value="{esc(t.pair)} {esc(t.direction)}, '
-                      f'{t.closed:%d.%m}">' for t in closed)
+    known = outcomes(j, closed)
+    options = "".join(f'<option value="{esc(label)}">'
+                      for label in trade_labels(closed).values())
+
+    def result_of(row):
+        text = row.trade.strip()
+        return row.result or known.get(text) or known.get(text.upper()) or ""
     body = "".join(
         f'<tr><td class="muted">{n}.</td>'
         f'<td><input type="text" name="assess_trade" list="assesstrades" '
         f'autocomplete="off" style="width:100%" value="{esc(row.trade)}"></td>'
         f'<td><input type="text" name="assess_grade" list="grades" '
-        f'autocomplete="off" style="width:90px" value="{esc(row.grade)}"></td></tr>'
+        f'autocomplete="off" style="width:90px" value="{esc(row.grade)}"></td>'
+        f'<td><input type="text" name="assess_result" '
+        f'autocomplete="off" style="width:100%" value="{esc(result_of(row))}"></td></tr>'
         for n, row in enumerate(listed[:max(ASSESSMENT_ROWS, len(k.assessment))], 1))
     return (f'<h3>trades assessment</h3>'
             f'<datalist id="assesstrades">{options}</datalist>'
-            f'<table><thead><tr><th style="width:24px"></th><th>trade</th>'
-            f'<th style="width:110px">grade</th></tr></thead>'
-            f'<tbody>{body}</tbody></table>')
+            f'<table class="assessment" data-known="{esc(json.dumps(known))}">'
+            f'<thead><tr><th style="width:24px"></th><th>trade</th>'
+            f'<th style="width:110px">grade</th><th style="width:150px">result</th>'
+            f'</tr></thead><tbody>{body}</tbody></table>'
+            f'<script>{ASSESSMENT_SCRIPT}</script>')
 
 
 def read_assessment(data):
-    """The rows of the assessment table, the empty ones left out."""
+    """The rows of the assessment table, the empty ones left out. A result
+    without a trade is not a row: the result was offered for a trade that was
+    then taken out."""
     grades = data.get("assess_grade", [])
+    results = data.get("assess_result", [])
     rows = []
     for n, text in enumerate(data.get("assess_trade", [])):
         grade = grades[n] if n < len(grades) else ""
+        result = results[n] if n < len(results) else ""
         if text.strip() or grade.strip():
-            rows.append(Graded(trade=text.strip(), grade=grade.strip()))
+            rows.append(Graded(trade=text.strip(), grade=grade.strip(),
+                               result=result.strip()))
     return rows
 
 
@@ -1947,13 +2073,17 @@ def card_page(day):
     closed = day_trades(j, day)
     is_new = k is None
     if is_new:
-        k = Card(day=day, pnl=day_pnl(j, day) or None)
+        k = Card(day=day, pnl=day_pnl(j, day) if closed else None)
     options = "".join(f'<option value="{g}">' for g in GRADES)
-    sections = "".join(
-        f'<h3>{esc(label)}</h3>'
-        f'<textarea name="{name}" style="min-height:'
-        f'{SECTION_HEIGHT.get(name, 84)}px">{esc(getattr(k, name))}</textarea>'
-        for name, _, label in CARD_SECTIONS)
+    labels = {name: label for name, _, label in CARD_SECTIONS}
+
+    def section(name):
+        return (f'<h3>{esc(labels[name])}</h3>'
+                f'<textarea name="{name}" style="min-height:'
+                f'{SECTION_HEIGHT.get(name, 84)}px">{esc(getattr(k, name))}</textarea>')
+    # laid out as the paper is: the best trade and the assessment side by
+    # side, the overview across the width under them
+    upper = "".join(section(name) for name in ("focus", "process", "learned", "errors"))
     delete = "" if is_new else (
         f'<span class="right"><button class="btn danger" '
         f'formaction="/card/{U(k.id)}/delete" formnovalidate '
@@ -1979,8 +2109,10 @@ def card_page(day):
 <p class="caption">P&amp;L for the day by closed trades:
 {amount(j, day_pnl(j, day), signed=True)}. The field is yours to override.</p>
 </div>
-<div class="card">{sections}</div>
-<div class="card">{assessment_rows(k, closed)}</div>
+<div class="card">{upper}</div>
+<div class="card twin"><div>{section("best")}</div>
+<div>{assessment_rows(j, k, closed)}</div></div>
+<div class="card">{section("overview")}</div>
 <div class="actions"><button class="btn primary">Save card</button>
 <a class="btn" href="/cards">Cancel</a>{delete}</div>
 </form>"""
@@ -2037,8 +2169,8 @@ def week_page(key):
     closed = week_trades(j, key)
     is_new = k is None
     if is_new:
-        k = Week(week=key, pnl=sum(t.pnl or 0.0 for t in closed) or None,
-                 trades=len(closed) or None)
+        k = Week(week=key, pnl=sum(t.pnl or 0.0 for t in closed) if closed else None,
+                 trades=len(closed) if closed else None)
     options = "".join(f'<option value="{g}">' for g in GRADES)
     progress = "".join(
         f'<option value="{n}"{" selected" if k.progress == n else ""}>{n}</option>'
@@ -2086,7 +2218,7 @@ def week_page(key):
 yours to override.</p>
 </div>
 <div class="card">{sections}</div>
-<div class="card">{assessment_rows(k, closed)}</div>
+<div class="card">{assessment_rows(j, k, closed)}</div>
 <div class="actions"><button class="btn primary">Save card</button>
 <a class="btn" href="/cards">Cancel</a>{delete}</div>
 </form>"""
@@ -2170,8 +2302,9 @@ def md_to_html(text, link=None):
 
 def reports_page():
     j = journal()
-    months = stats.months(j.trades)
-    quarters = sorted({stats.quarter(t.opened) for t in j.trades})
+    months = stats.closing_months(j.trades)
+    quarters = sorted({stats.quarter(t.closed) for t in j.trades
+                       if not t.is_open and t.closed})
     ready = reports.existing(ROOT)
     ready_rows = "".join(
         f'<tr><td><a href="/report/{U(p)}">{esc(p)}</a></td>'

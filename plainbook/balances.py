@@ -17,7 +17,8 @@ Order of events when replaying the history:
   - without those hours the PnL counts from the day after the close, because a
     date alone cannot say which of the two came first.
 
-R = PnL / (risk% x balance at entry). For BE, R is 0.
+R = PnL / (risk% x balance at entry), for a break-even as for the rest: a trade
+called break-even still paid its commission, and that small R is real.
 """
 from dataclasses import dataclass
 from datetime import datetime
@@ -62,18 +63,22 @@ class Journal:
         in order. A close that carries the hour belongs to the balance of a
         trade opened later that day and not to one opened earlier, and a single
         pass through a list of events cannot give both answers on one day."""
-        events = []            # (moment, kind, account, amount, hour is known)
+        # (moment, kind, account, amount, hour is known, the trade it came from)
+        events = []
         for c in self.adjustments:
-            events.append((c.day, 0, c.account, c.amount, False))
+            events.append((c.day, 0, c.account, c.amount, False, None))
         for t in self.trades:
             if not t.is_open and t.closed is not None:
                 events.append((t.closed, 1, t.account, t.pnl or 0.0,
-                               t.closed_time))
+                               t.closed_time, t.id))
 
         computed = {}
         for t in self.trades:
+            # a trade opened and closed within the same minute must not find
+            # its own result in the balance it was opened on
             b = self._start(t.account) + sum(
-                e[3] for e in events if e[2] == t.account and _before(e, t))
+                e[3] for e in events
+                if e[2] == t.account and e[5] != t.id and _before(e, t))
             risk_money = b * (t.risk or 0.0) / 100.0
             r = None
             if not t.is_open:

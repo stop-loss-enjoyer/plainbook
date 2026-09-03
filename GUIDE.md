@@ -34,7 +34,9 @@ who was right. In hindsight an idea always looks tidier than it was.
 - **direction**, **style**, **entry TF**: the styles and the timeframes come
   from your own lists, edited on the Accounts tab.
 - **risk, %**: the risk as a percent of the current computed balance of the
-  account. What that is in money shows on the trade page once it is saved.
+  account. What that is in money shows on the trade page once it is saved. The field starts at the risk of your last
+  trade on that account and follows the account until you type a figure
+  yourself; the duplicate's risk follows its own account the same way.
 - **entry**: date and time of entry; clicking the field opens a calendar.
 - **plan**: the trading plan this trade follows, picked from the plans you have
   written. Left at "-" if the trade belongs to none.
@@ -107,7 +109,9 @@ so a trade cannot be closed with a result nobody picked.
 The exit holds the hour as well as the date, and it matters: a trade opened later
 the same day is measured against the balance this close left behind. Leave the
 time at midnight and the journal takes the hour as unknown, as it does for an
-entry. An exit dated before the entry is refused.
+entry. An exit dated before the entry is refused. A Win with a negative PnL,
+or a Lose with a positive one, is saved but pointed out on the trade page:
+nearly always one of the two is a slip, and Edit puts it right.
 
 R is worked out by itself: `PnL / (risk% × the balance at the moment of entry)`.
 There is nothing to recompute by hand.
@@ -138,10 +142,14 @@ that one. The **Cards** tab lists them, the daily ones in the upper table.
   A / B / C / D / F, but the field is free, so write in whatever scale you use.
 - **P&L** is filled in from the trades closed that day. The field is editable:
   a day can have a tally of its own that differs from the journal's sum.
-- **trades assessment**: numbered lines for the trades of the day and the mark
-  each one earned, the same table as the weekly card below. The field suggests
-  the pairs you closed that day, and an empty line is not saved.
-- Then: focus, process, what went well, errors, best trade, overview.
+- **trades assessment**: numbered lines for the trades of the day, the mark
+  each one earned and how it ended, the three columns of the paper, the same
+  table as the weekly card below. The trade field suggests the trades you
+  closed that day; pick one, or type its pair, and the result fills in with
+  what the journal knows, `Win +1.20 R`, and stays yours to change. An empty
+  line is not saved.
+- Then, laid out as on paper: focus, process, what went well, errors, then the
+  best trade beside the assessment, and the overview under them.
 
 ## The weekly card
 
@@ -157,8 +165,9 @@ and both kinds are stored side by side in `journal/cards`.
 - **progress** under the focus is the 1 to 5 of the paper card: how far the
   thing you are working on has moved.
 - **trades assessment**: the same table as the daily card, for the trades of
-  the week and the mark each one earned. The field suggests the pairs you
-  closed that week, and an empty line is not saved.
+  the week, the mark each one earned and how each ended. The trade field
+  suggests the trades you closed that week, and the result fills in from the
+  journal as on the daily card; an empty line is not saved.
 - Then, as on paper: the weekly process, what went well, errors, the best trade,
   what you missed, and the key lesson of the week.
 
@@ -185,6 +194,10 @@ and both kinds are stored side by side in `journal/cards`.
   winrates with the **EV** to the right of each, the total R and the **streak**: the run the selection is on now,
   with the longest runs of wins and of losses under it. Runs are counted in
   the order the trades closed; a break-even neither extends one nor breaks it.
+- **The current period** counts the trades that closed in it, the way a broker
+  states a week and the cards count a day. The list under it groups by entry,
+  so a trade held over a weekend stands in last week's group and in this
+  week's tile.
 - **The list of trades** is split into periods. The **Weeks / Months /
   Quarters** switch sits above the table on the right. The total row of a period
   holds the number of trades, WR with its EV, Σ PnL and Σ R. **A click anywhere on a row
@@ -375,6 +388,11 @@ has no button for it; building a report belongs on the tab that shows them. A re
 an ordinary file in `journal/reports/`. Building it again recomputes the figures
 and **never overwrites your conclusions**, so you can write them right in the
 report.
+
+**A report counts the trades that closed in the period**, the way a broker
+states a month and the cards count a day. The list of trades groups by entry,
+so a row of a report and the list it opens can differ by a trade that ran
+across the boundary.
 
 **What is in a report.** The summary, with the same figures for the period
 before it in the next column, so every number is read against something. Under

@@ -317,7 +317,9 @@ def text_to_plan(text):
 
 
 # --- the trades assessment: object <-> text ---------------------------------
-# Written the way the paper numbers it: "1. what was traded | grade".
+# Written the way the paper numbers it: "1. what was traded | grade | result".
+# Empty cells at the end of a line are not written, so a line that has only a
+# trade is just the trade, as it was before the result column existed.
 
 _ROW = re.compile(r"^\s*\d+[.)]\s*")
 
@@ -325,8 +327,10 @@ _ROW = re.compile(r"^\s*\d+[.)]\s*")
 def assessment_to_text(rows):
     lines = []
     for n, row in enumerate(rows, 1):
-        line = f"{n}. {row.trade}".rstrip()
-        lines.append(f"{line} | {row.grade}" if row.grade else line)
+        cells = [f"{n}. {row.trade}".rstrip(), row.grade, row.result]
+        while len(cells) > 1 and not cells[-1]:
+            cells.pop()
+        lines.append(" | ".join(cells))
     return "\n".join(lines)
 
 
@@ -336,10 +340,9 @@ def text_to_assessment(text):
         line = _ROW.sub("", line).strip()
         if not line:
             continue
-        trade, _, grade = line.rpartition("|")
-        if not trade:
-            trade, grade = grade, ""
-        rows.append(Graded(trade=trade.strip(), grade=grade.strip()))
+        cells = [c.strip() for c in line.split("|")]
+        trade, grade, result = (cells + ["", ""])[:3]
+        rows.append(Graded(trade=trade, grade=grade, result=result))
     return rows
 
 

@@ -118,8 +118,8 @@ def build(root, days=40):
         errors="Sized up on the second trade to make the first one back.",
         best="GBPUSD long from the H4 imbalance: planned, sized, held.",
         overview="A quiet day traded quietly. The plan survived the session.",
-        assessment=[Graded("GBPUSD long, H4 imbalance", "A"),
-                    Graded("EURUSD long, second entry", "C")]))
+        assessment=[Graded("GBPUSD long, H4 imbalance", "A", "Win +2.40 R"),
+                    Graded("EURUSD long, second entry", "C", "Lose -1.04 R")]))
 
     store.save_week(root, Week(
         week=stats.week(today), grade="B", quality="B", progress=3,
@@ -138,9 +138,9 @@ def build(root, days=40):
         missed="US100 gave the same setup on Thursday and was watched, not "
                "taken.",
         lesson="The trades that pay are the ones written down before the open.",
-        assessment=[Graded("EURUSD long, Monday", "B"),
-                    Graded("GBPUSD long, Tuesday", "A"),
-                    Graded("XAU short, Thursday", "C")]))
+        assessment=[Graded("EURUSD long, Monday", "B", "Win +1.53 R"),
+                    Graded("GBPUSD long, Tuesday", "A", "Win +2.09 R"),
+                    Graded("XAU short, Thursday", "C", "Lose -0.98 R")]))
 
 
 if __name__ == "__main__":

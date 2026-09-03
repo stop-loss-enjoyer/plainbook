@@ -16,7 +16,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from plainbook import store
+from plainbook import stats, store
 from plainbook.model import Account
 
 # a one-pixel PNG, enough to exercise the whole screenshot path
@@ -1296,6 +1296,109 @@ class ServerCase(unittest.TestCase):
         self.assertIn("EV (average R, BE counted)", html)
         self.assertEqual(html.count('<th class="num">EV</th>'), 6)
         self.assertIn(f'<td class="num">{rows["NZDCAD"].average_r:+.2f}</td>', html)
+
+    def test_71_the_assessment_has_the_result_column_of_the_paper(self):
+        j = self.S.journal()
+        t = next(x for x in j.trades if not x.is_open and x.closed)
+        day = t.closed.strftime("%Y-%m-%d")
+        closed = self.S.day_trades(j, t.closed)
+        labels = self.S.trade_labels(closed)
+        # the same pair, direction and day on two accounts: told apart by the
+        # account, or the result would be filled in from the wrong trade
+        self.assertEqual(len(set(labels.values())), len(closed))
+        label = labels[t.id]
+        expected = self.S.outcomes(j, closed)[label]
+        self.assertTrue(expected.startswith(t.result))
+        _, html = self.get(f"/card/{day}")
+        self.assertIn(f'<option value="{label}">', html)
+        self.assertIn('name="assess_result"', html)
+        # graded without a result, as a card written before the column was
+        self.post("/card/save", {"date": day, "previous": day, "grade": "B",
+                                 "assess_trade": [label, "XAU short"],
+                                 "assess_grade": ["A", "C"],
+                                 "assess_result": ["", "by hand"]})
+        k = store.load_card(self.root, datetime.strptime(day, "%Y-%m-%d"))
+        self.assertEqual([(r.trade, r.result) for r in k.assessment],
+                         [(label, ""), ("XAU short", "by hand")])
+        # the form offers the journal's result for the trade it knows, and
+        # leaves the one typed by hand alone
+        _, html = self.get(f"/card/{day}")
+        self.assertIn(f'name="assess_result" autocomplete="off" '
+                      f'style="width:100%" value="{expected}"', html)
+        self.assertIn('value="by hand"', html)
+        # a result without a trade is not a row
+        self.post("/card/save", {"date": day, "previous": day, "grade": "B",
+                                 "assess_trade": [label, ""],
+                                 "assess_grade": ["A", ""],
+                                 "assess_result": [expected, "orphan"]})
+        k = store.load_card(self.root, datetime.strptime(day, "%Y-%m-%d"))
+        self.assertEqual([(r.trade, r.grade, r.result) for r in k.assessment],
+                         [(label, "A", expected)])
+
+    def test_72_a_refused_edit_leaves_the_folder_where_it_was(self):
+        """The record is checked before its folder is renamed: an entry moved
+        past the exit is refused, and the trade still opens under its id."""
+        t = next(x for x in self.S.journal(True).trades if not x.is_open)
+        tid = t.id
+        q = urllib.parse.quote(tid)
+        _, html = self.get(f"/edit/{q}")
+        # any risk figure is a risk figure: 0.81% is a trade, not a typo
+        self.assertIn('name="risk" step="any"', html)
+        fields = {"token": self.form_token(html), "blocks": "1",
+                  "account": t.account, "pair": "AUDNZD", "direction": t.direction,
+                  "style": t.style, "entry_tf": t.entry_tf, "risk": f"{t.risk:g}",
+                  "entry": "2027-01-05T10:00", "closed": "1", "result": t.result,
+                  "pnl": f"{t.pnl:g}", "exit": t.closed.strftime("%Y-%m-%dT%H:%M"),
+                  "conclusions": "kept", "idea_tf_1": "H4", "idea_text_1": "kept"}
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.post(f"/edit/{q}", fields)
+        self.assertEqual(e.exception.code, 400)
+        e.exception.close()
+        self.assertTrue(os.path.isdir(store.trade_dir(self.root, tid)))
+        self.assertEqual(store.load_trade(self.root, tid).pair, t.pair)
+        self.assertEqual(self.get(f"/trade/{q}")[0], 200)
+        # a risk left empty is refused with a word, not a traceback
+        fields.update(entry=t.opened.strftime("%Y-%m-%dT%H:%M"), risk="")
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.post(f"/edit/{q}", fields)
+        self.assertIn("risk is missing", e.exception.read().decode())
+        e.exception.close()
+        self.assertEqual(store.load_trade(self.root, tid).risk, t.risk)
+
+    def test_73_the_risk_follows_the_account_and_the_period_tile_the_exit(self):
+        j = self.S.journal(True)
+        first = next(a for a in sorted(j.accounts) if not j.accounts[a].archived)
+        last = {t.account: t.risk for t in j.trades}
+        _, html = self.get("/new")
+        self.assertIn(f'value="{last[first]:g}" required>', html)
+        self.assertIn('data-last-risk="', html)
+        self.assertIn("follow_account('account', 'risk')", html)
+        # a trade opened and closed now, said to be a Win that lost money
+        now = datetime.now()
+        _, where = self.post("/new", {
+            "token": self.form_token(html), "blocks": "1", "account": first,
+            "pair": "EURUSD", "direction": "long", "style": "swing",
+            "entry_tf": "H4", "risk": "0.7", "entry": now.strftime("%Y-%m-%dT%H:%M"),
+            "idea_tf_1": "H4", "idea_text_1": "closed within the hour"})
+        tid = self.landed(where)
+        q = urllib.parse.quote(tid)
+        _, html = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(html), "result": "Win",
+                                  "pnl": "-40", "exit": now.strftime("%Y-%m-%dT%H:%M"),
+                                  "conclusions": "a slip of the hand"})
+        # the next new trade on that account starts at the risk this one had
+        _, html = self.get("/new")
+        self.assertIn('value="0.7" required>', html)
+        # the disagreement is said on the trade page, the record is kept
+        _, html = self.get(f"/trade/{q}")
+        self.assertIn('<div class="notice"><b>Win with a PnL of', html)
+        self.assertEqual(store.load_trade(self.root, tid).result, "Win")
+        # the period tile counts what closed this week, this trade among it
+        j = self.S.journal(True)
+        n = sum(1 for t in j.trades if not t.is_open and t.closed
+                and stats.week(t.closed) == stats.week(now))
+        _, home = self.get("/")
+        self.assertIn(f"{n} closed", home)
 
 
 if __name__ == "__main__":

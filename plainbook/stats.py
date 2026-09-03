@@ -212,8 +212,13 @@ def streaks(journal, trades):
 
 
 def months(trades):
-    """Months as 'YYYY-MM', oldest first."""
+    """Months as 'YYYY-MM' by the entry, oldest first: what the list filters by."""
     return sorted({f"{t.opened:%Y-%m}" for t in trades})
+
+
+def closing_months(trades):
+    """Months as 'YYYY-MM' by the exit, oldest first: what a report is built for."""
+    return sorted({f"{t.closed:%Y-%m}" for t in trades if not t.is_open and t.closed})
 
 
 def quarter(date):

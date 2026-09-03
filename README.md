@@ -59,8 +59,9 @@ only question worth asking of a plan.
 
 **A daily card.** The day reviewed on the pattern of a paper Daily Report Card:
 process grade, opportunity quality, focus, what went well, errors, best trade,
-overview, and a trades assessment where the day's trades get their marks. The
-day's PnL is filled in from the trades you closed, and stays editable.
+overview, and a trades assessment where the day's trades get their marks and
+their results, the result offered by the journal. The day's PnL is filled in
+from the trades you closed, and stays editable.
 
 **A weekly card.** The same on the pattern of a paper Weekly Report Card, one
 per trading week: process grade, opportunity quality, progress on the focus,
@@ -134,7 +135,7 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in about a second.** 154 of them, no fixtures, no network.
+- **The tests finish in about a second.** 161 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
@@ -274,6 +275,11 @@ to the right of every win rate on the front page, and is a column of every
 table on the Statistics tab and in the reports. Unlike the win rate, it counts
 the break-evens: a trade closed at zero still paid its commission and never
 comes back at exactly zero R.
+
+**A period is what closed in it.** A report, the current-period tile on the
+front page and the cards count the trades that closed in the period, the way a
+broker states a month. The list of trades groups by entry, because a journal is
+read by the decisions in it.
 
 **Total R rather than a total in dollars.** With more than one account, a dollar
 on a prop account and a dollar on your own are different kinds of money. The

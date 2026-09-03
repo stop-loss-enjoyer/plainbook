@@ -253,7 +253,8 @@ class Cards(unittest.TestCase):
         """The same table the weekly card has, on the same shared code."""
         with tempfile.TemporaryDirectory() as root:
             k = Card(day=datetime(2026, 8, 30), grade="A", focus="pennies",
-                     assessment=[Graded("EURUSD long", "A"), Graded("XAU short", "")])
+                     assessment=[Graded("EURUSD long", "A", "Win +1.20 R"),
+                                 Graded("XAU short", "")])
             store.save_card(root, k)
             again = store.load_card(root, datetime(2026, 8, 30))
             self.assertEqual(again, k)
@@ -334,6 +335,20 @@ class Weeks(unittest.TestCase):
             "1. EURUSD long | B\n2. XAU short\n3.\n")
         self.assertEqual([(r.trade, r.grade) for r in k.assessment],
                          [("EURUSD long", "B"), ("XAU short", "")])
+
+    def test_the_result_is_the_third_cell_and_an_old_line_still_reads(self):
+        """A line written before the result column has two cells, or one; it
+        reads as a row with an empty result, and is written back unchanged."""
+        k = store.text_to_week(
+            "---\nweek: 2026-W36\n---\n\n## Trades\n\n"
+            "1. EURUSD long, 31.08 | B | Win +1.20 R\n2. XAU short | C\n3. GBPUSD\n")
+        self.assertEqual([(r.trade, r.grade, r.result) for r in k.assessment],
+                         [("EURUSD long, 31.08", "B", "Win +1.20 R"),
+                          ("XAU short", "C", ""), ("GBPUSD", "", "")])
+        text = store.week_to_text(k)
+        self.assertIn("1. EURUSD long, 31.08 | B | Win +1.20 R\n", text)
+        self.assertIn("2. XAU short | C\n", text)
+        self.assertNotIn("3. GBPUSD |", text)
 
 
 class Layout(unittest.TestCase):

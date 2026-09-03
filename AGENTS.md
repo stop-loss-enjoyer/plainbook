@@ -126,6 +126,11 @@ data. Each one is followed by what it prevents.
     is raised, which is what the tests and the checking tool want.
     *Prevents:* one mistyped date leaving every page blank with the reason only
     in the log, which is what happened before 1.4.3.
+11. **A period is measured by the exit** in a report, in the period tile of
+    the front page and in the cards; the list of trades, its filters and the
+    totals of its groups go by the entry. *Prevents:* a report whose result in
+    money and balance change disagree by the trades that ran across its edge,
+    which is what they did before 1.4.6.
 
 ## 5. Recipes
 

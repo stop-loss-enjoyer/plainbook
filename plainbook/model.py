@@ -189,9 +189,12 @@ ASSESSMENT_ROWS = 5
 
 @dataclass
 class Graded:
-    """One line of the trades assessment: a trade and the mark it earned."""
+    """One line of the trades assessment: a trade, the mark it earned, and how
+    it ended. The result is text, as on paper: the journal offers what it
+    knows, the owner keeps the last word."""
     trade: str = ""
     grade: str = ""
+    result: str = ""
 
 
 # --- daily card ------------------------------------------------------------
