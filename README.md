@@ -86,7 +86,10 @@ count, win rate, Σ PnL and Σ R in the total row; one switch turns it into mont
 or quarters. Filters hide behind a funnel button that says how many of them are on.
 
 **Screenshots by Ctrl+V.** Click the drop zone, paste, done. From TradingView,
-from a screen capture, from anywhere. A cross on the thumbnail takes it back out.
+from a screen capture, from anywhere. A cross on the thumbnail takes it back
+out. There is a zone in the idea of a trade, in its conclusions, in the analysis
+and the plan of a trading plan, and in the update of one, so a picture lands
+under the line it belongs to.
 
 **Money in and out, counted apart from trading.** Deposits, withdrawals and
 fees are written down on the Accounts tab, and the money taken off an account
