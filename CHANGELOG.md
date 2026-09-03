@@ -2,6 +2,27 @@
 
 What changed and why. Newest first.
 
+## v1.4.7, 03.09.2026
+
+The trash reads the same on every disk, and two tests that failed on some
+computers and not on others.
+
+### Fixed
+
+- **Two records deleted within one second stood in the trash in the order the
+  disk gave them.** The stamp on a deleted record counts seconds, and two
+  records with the same stamp were listed the way the file system happened to
+  list the folder: one way on one computer, the other way on the next. Within
+  one second the trash now lists by name. A record deleted, written again and
+  deleted within the same second used to land on its earlier copy; it takes
+  the stamp of the next second instead.
+- **Two tests of the trash failed on some computers.** They took the first
+  record of their kind in the trash and expected their own, which held only
+  where the folder is listed newest first. On another file system the record
+  of an earlier test came first, and `test_58` or `test_66` failed with a
+  record that was not theirs. Reported from an installation where the tests
+  failed three runs in a row. The tests look their record up by its id now.
+
 ## v1.4.6, 03.09.2026
 
 The third column of the paper's trades assessment, filled in by the journal,

@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -389,6 +390,32 @@ class Trash(unittest.TestCase):
             name = next(x[0] for x in store.trash_list(root) if x[1] == "trade")
             with self.assertRaises(FileExistsError):
                 store.restore(root, name)
+
+    def test_one_second_holds_two_deletions_in_one_order(self):
+        class Frozen(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 9, 3, 18, 47, 3)
+
+        with tempfile.TemporaryDirectory() as root, \
+                mock.patch.object(store, "datetime", Frozen):
+            for account in ("test-acc", "spare"):
+                store.save_account(root, Account(id=account, start_balance=1))
+                store.delete_account(root, account)
+            # the same stamp on both: the order is by name, whichever way the
+            # file system lists the folder
+            names = [x[0] for x in store.trash_list(root)]
+            self.assertEqual([x[2] for x in store.trash_list(root)],
+                             ["spare", "test-acc"])
+            with mock.patch.object(store.os, "listdir", return_value=names[::-1]):
+                self.assertEqual([x[0] for x in store.trash_list(root)], names)
+            # the same id deleted again within the second does not write over
+            # its earlier copy: it takes the next second
+            store.save_account(root, Account(id="spare", start_balance=2))
+            store.delete_account(root, "spare")
+            listed = store.trash_list(root)
+            self.assertEqual([x[2] for x in listed], ["spare", "spare", "test-acc"])
+            self.assertEqual(listed[0][3], datetime(2026, 9, 3, 18, 47, 4))
 
     def test_the_id_follows_the_day_and_the_pair(self):
         with tempfile.TemporaryDirectory() as root:

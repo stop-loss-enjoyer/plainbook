@@ -19,7 +19,7 @@ screenshots), "Exit" (screenshots) and "Conclusions" (free markdown, kept as is)
 import os
 import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import mdfile
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
@@ -623,8 +623,7 @@ def delete_plan(root, plan_id):
     path = plan_dir(root, plan_id)
     if not os.path.isdir(path):
         return None
-    target = os.path.join(root, TRASH,
-                          f"plan-{plan_id}-{datetime.now():%Y%m%d-%H%M%S}")
+    target = _trash_target(root, f"plan-{plan_id}")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(path, target)
     return target
@@ -688,8 +687,7 @@ def delete_card(root, day):
     path = card_path(root, day)
     if not os.path.isfile(path):
         return None
-    target = os.path.join(root, TRASH,
-                          f"card-{day:%Y-%m-%d}-{datetime.now():%Y%m%d-%H%M%S}.md")
+    target = _trash_target(root, f"card-{day:%Y-%m-%d}", ".md")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(path, target)
     return target
@@ -730,8 +728,7 @@ def delete_week(root, key):
     path = week_path(root, key)
     if not os.path.isfile(path):
         return None
-    target = os.path.join(root, TRASH,
-                          f"week-{key}-{datetime.now():%Y%m%d-%H%M%S}.md")
+    target = _trash_target(root, f"week-{key}", ".md")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(path, target)
     return target
@@ -746,8 +743,7 @@ def delete_trade(root, trade_id):
     path = trade_dir(root, trade_id)
     if not os.path.isdir(path):
         return None
-    target = os.path.join(root, TRASH,
-                          f"{trade_id}-{datetime.now():%Y%m%d-%H%M%S}")
+    target = _trash_target(root, trade_id)
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(path, target)
     return target
@@ -774,8 +770,7 @@ def delete_adjustment(root, adjustment_id):
     path = os.path.join(root, JOURNAL, ADJUSTMENTS, adjustment_id + ".md")
     if not os.path.isfile(path):
         return None
-    target = os.path.join(root, TRASH,
-                          f"adjustment-{adjustment_id}-{datetime.now():%Y%m%d-%H%M%S}.md")
+    target = _trash_target(root, f"adjustment-{adjustment_id}", ".md")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(path, target)
     return target
@@ -878,8 +873,7 @@ def delete_account(root, account_id):
     path = os.path.join(root, JOURNAL, ACCOUNTS, account_id + ".md")
     if not os.path.isfile(path):
         return None
-    target = os.path.join(root, TRASH,
-                          f"account-{account_id}-{datetime.now():%Y%m%d-%H%M%S}.md")
+    target = _trash_target(root, f"account-{account_id}", ".md")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(path, target)
     return target
@@ -892,6 +886,20 @@ def delete_account(root, account_id):
 
 _TRASHED = re.compile(r"^(?:(plan|card|week|adjustment|account)-)?(.+)-"
                       r"(\d{8}-\d{6})(\.md)?$")
+
+
+def _trash_target(root, stem, suffix=""):
+    """A free name in the trash: the stem, the second it went, the suffix.
+
+    The stamp counts seconds, so a record deleted, written again and deleted
+    within one second would land on its own earlier copy; it takes the next
+    second instead."""
+    when = datetime.now().replace(microsecond=0)
+    while True:
+        target = os.path.join(root, TRASH, f"{stem}-{when:%Y%m%d-%H%M%S}{suffix}")
+        if not os.path.exists(target):
+            return target
+        when += timedelta(seconds=1)
 
 
 def trash_list(root):
@@ -907,6 +915,9 @@ def trash_list(root):
             continue                     # a folder record with .md, or the reverse
         when = datetime.strptime(m.group(3), "%Y%m%d-%H%M%S")
         items.append((name, kind, m.group(2), when))
+    # within one second, by name: os.listdir has an order of its own on every
+    # file system, and the trash should read the same on all of them
+    items.sort(key=lambda x: x[0])
     items.sort(key=lambda x: x[3], reverse=True)
     return items
 

@@ -244,3 +244,10 @@ and none of them was obvious from the code.
   `page()` function in the same routine, and every route that had both died
   with an UnboundLocalError. *Lesson:* a wrapper takes the name of what it
   wraps only when nothing else in the file has it.
+- **A test that trusted the order of a folder.** Two tests took the first
+  record of their kind in the trash. The server tests share one journal, so a
+  record of an earlier test was there too, deleted within the same second and
+  carrying the same stamp, and `os.listdir` broke the tie: newest first on
+  tmpfs, oldest first on btrfs. Green here, red on another computer, three runs
+  out of three. *Lesson:* a test finds its own record by id, and a sort on a
+  coarse key gets a second key, or the order belongs to the disk.

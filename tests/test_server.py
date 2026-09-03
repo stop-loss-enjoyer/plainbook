@@ -973,9 +973,11 @@ class ServerCase(unittest.TestCase):
         self.assertIn("1 €", self.get("/accounts")[1])
         self.post("/account/delete", {"id": "spare"})
         self.assertNotIn("spare", store.all_accounts(self.root))
-        entries = [x for x in store.trash_list(self.root) if x[1] == "account"]
-        self.assertEqual(entries[0][2], "spare")
-        self.post("/trash/restore", {"name": entries[0][0]})
+        # by id, not first of its kind: the trash of these tests is shared, and
+        # a record deleted within the same second by an earlier test ties with it
+        name = next(x[0] for x in store.trash_list(self.root)
+                    if x[1] == "account" and x[2] == "spare")
+        self.post("/trash/restore", {"name": name})
         self.assertEqual(store.all_accounts(self.root)["spare"].currency, "EUR")
         self.post("/account/delete", {"id": "spare"})
 
@@ -1225,9 +1227,9 @@ class ServerCase(unittest.TestCase):
     def test_66_a_weekly_card_is_deleted_into_the_trash_and_comes_back(self):
         self.post("/week/2026-W32/delete", {})
         self.assertIsNone(store.load_week(self.root, "2026-W32"))
-        entries = [x for x in store.trash_list(self.root) if x[1] == "week"]
-        self.assertEqual(entries[0][2], "2026-W32")
-        self.post("/trash/restore", {"name": entries[0][0]})
+        name = next(x[0] for x in store.trash_list(self.root)
+                    if x[1] == "week" and x[2] == "2026-W32")
+        self.post("/trash/restore", {"name": name})
         self.assertEqual(store.load_week(self.root, "2026-W32").focus, "the second")
 
     def test_67_a_week_that_does_not_exist_is_a_404(self):
