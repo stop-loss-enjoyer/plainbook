@@ -23,6 +23,11 @@ What changed and why. Newest first.
   for a week.
 - **The buttons say which card they open.** **+ Card** in the header is now
   **+ DRC**, and **+ WRC** stands next to it.
+- **Screenshots in the plan and in its updates.** The **plan** field has a drop
+  zone under it, so the position you set up stands with the plan you wrote, and
+  the update form on the plan page has one as well: paste before pressing Add
+  and the picture stays under that dated line. Adding an update leaves every
+  other picture of the plan where it was.
 
 ## v1.4.3, 02.09.2026
 

@@ -142,6 +142,14 @@ folder whole, `shot_in_zone` draws a thumbnail. They take the record's folder
 and the address its pictures are served from, never a trade, so a third kind of
 record with screenshots needs no new code here.
 
+A form that shows **one** zone of a record must not call `apply_shots`: the
+rewrite would take every picture the form does not draw (invariant 2). The
+update form on the plan page is such a form, and it uses `add_shots`, which
+copies the new pictures in under the first free numbers and touches nothing
+else. A picture that lives inside a text is kept there as `![](shots/name.png)`;
+`place_shots` puts the new names back where the old ones stood after a rewrite,
+and `with_shots` draws them on the page.
+
 **Add a page.** A function returning `H.page(title, body, tab, header_right)`,
 one `if` in `do_GET`, and a tab in the `links` list in `html.page` if it belongs
 in the navigation. Anything user-supplied goes through `esc()`.

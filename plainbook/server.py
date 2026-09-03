@@ -1125,7 +1125,8 @@ def zone_sources(data, zone, folder, token):
 
 
 # what a zone of a form is called on the disk
-ZONE_PREFIX = {"exit": "exit", "concl": "conclusions", "review": "review"}
+ZONE_PREFIX = {"exit": "exit", "concl": "conclusions", "review": "review",
+               "plan": "plan", "update": "update"}
 
 
 def apply_shots(record, zones):
@@ -1150,6 +1151,38 @@ def apply_shots(record, zones):
     shutil.rmtree(folder, ignore_errors=True)
     os.replace(fresh, folder)
     return result
+
+
+def add_shots(record, prefix, sources):
+    """Adds pictures to the shots folder without touching what is already there.
+
+    `apply_shots` rewrites the folder whole from a form that shows every zone.
+    An update is added from the plan page, where no such form stands, so its
+    screenshots are appended under the first free numbers instead."""
+    folder = os.path.join(record, store.SHOTS)
+    os.makedirs(folder, exist_ok=True)
+    taken = set(os.listdir(folder))
+    names, n = [], 1
+    for src in sources:
+        ext = os.path.splitext(src)[1] or ".png"
+        while f"{prefix}-{n:02d}{ext}" in taken:
+            n += 1
+        name = f"{prefix}-{n:02d}{ext}"
+        shutil.copyfile(src, os.path.join(folder, name))
+        taken.add(name)
+        names.append(os.path.join(store.SHOTS, name))
+    return names
+
+
+def place_shots(text, images):
+    """The new file names put back where the old ones stood, the rest at the end.
+
+    The pictures of a text keep their place in it, and a picture just pasted
+    has no place yet, so it goes after the last line."""
+    queue = list(images)
+    kept = _IMAGE_IN_TEXT.sub(
+        lambda m: f"![]({queue.pop(0)})" if queue else "", text).strip()
+    return "\n\n".join([kept] + [f"![]({s})" for s in queue]).strip()
 
 
 def drop_draft(token):
@@ -1394,6 +1427,16 @@ def inline(text):
     return _BOLD.sub(r"<strong>\1</strong>", esc(text)).replace("\n", "<br>")
 
 
+def with_shots(text, base):
+    """Text of a record with its screenshots drawn where they stand in it.
+
+    A picture is kept in the text as `![](shots/name.png)`, so a screenshot
+    pasted into an update stays under the line it belongs to."""
+    return _IMAGE_IN_TEXT.sub(
+        lambda m: f'<img src="{base}/{U(os.path.basename(m.group(1)))}" '
+                  f'alt="screenshot">', inline(text))
+
+
 def plan_title(plan_id):
     """The name of a plan for a link. A plan deleted later leaves its id."""
     try:
@@ -1514,19 +1557,20 @@ def plan_page(plan_id):
                      f'{f"<h3>{esc(block.tf)}</h3>" if block.tf else ""}'
                      f'<div>{esc(block.text).replace(chr(10), "<br>")}</div>'
                      f'<div class="shots">{images}</div></div>')
-    review = re.sub(r"!\[\]\(([^)]+)\)",
-                    lambda m: f'<img src="{base}/'
-                              f'{U(os.path.basename(m.group(1)))}" alt="screenshot">',
-                    inline(k.review))
-    updates = (f'<div>{inline(k.updates)}</div>'
+    review = with_shots(k.review, base)
+    updates = (f'<div class="shots">{with_shots(k.updates, base)}</div>'
                if k.updates.strip() else
                '<p class="muted">Nothing has happened to the plan yet.</p>')
+    token = new_token()
     update_form = (f'<form method="post" action="/plan/{U(k.id)}/update" '
-                   f'class="filters" style="margin-top:12px">'
-                   f'<div style="flex:1"><label>add an update</label>'
+                   f'style="margin-top:12px">'
+                   f'<input type="hidden" name="token" value="{esc(token)}">'
+                   f'<label>add an update</label>'
                    f'<input type="text" name="update" style="width:100%"'
                    f' placeholder="what changed since the plan was written" required>'
-                   f'</div><div><button class="btn">Add</button></div></form>')
+                   f'{dropzone("update", "click here and press Ctrl+V to paste a screenshot")}'
+                   f'<div class="actions"><button class="btn">Add</button></div>'
+                   f'</form>')
 
     rows = "".join(trade_row(j, t) for t in
                    sorted(trades, key=lambda t: t.opened, reverse=True))
@@ -1553,12 +1597,16 @@ def plan_page(plan_id):
             + (f'<div class="card"><h2>Analysis</h2>{analysis}</div>'
                if analysis else "")
             + (f'<div class="card"><h2>Plan</h2>'
-               f'<div>{inline(k.plan)}</div></div>'
+               f'<div class="shots">{with_shots(k.plan, base)}</div></div>'
                if k.plan.strip() else "")
             + f'<div class="card"><h2>Updates</h2>{updates}{update_form}</div>'
-            + (f'<div class="card"><h2>Review</h2><div>{review}</div></div>'
+            + (f'<div class="card"><h2>Review</h2>'
+               f'<div class="shots">{review}</div></div>'
                if k.review.strip() else "")
-            + trades_card)
+            + trades_card
+            + f'<script>{FORM_SCRIPT}</script>'
+            + f'<script>document.body.dataset.token = {json.dumps(token)};'
+              f'init_zones();</script>')
     return page(k.title or k.id, body, "plans", buttons)
 
 
@@ -1585,8 +1633,12 @@ def plan_form(k=None, token=""):
     if editing:
         review = f"""<div class="card"><h2>Updates</h2>
 <textarea name="updates">{esc(k.updates)}</textarea>
+{dropzone("update", "screenshots of the updates, Ctrl+V here",
+          [shot_in_zone(base, src, "have_update")
+           for src in conclusion_images(k.updates)])}
 <p class="caption">Written as the plan runs; the plan page adds a dated line to
-this without opening the form.</p></div>
+this without opening the form. A screenshot keeps the line it was pasted
+under.</p></div>
 <div class="card"><h2>Review</h2>
 <textarea name="review">{esc(conclusions_text(k.review))}</textarea>
 {dropzone("review", "screenshots for the review, Ctrl+V here",
@@ -1622,7 +1674,10 @@ this without opening the form.</p></div>
 <template id="block-template">{block_inside("__N__")}</template>
 <p><button type="button" class="btn" onclick="add_block()">+ analysis block</button></p>
 <div class="card"><h2>Plan</h2>
-<textarea name="plan_text" placeholder="what you will do, and what you will not">{esc(k.plan) if editing else ""}</textarea>
+<textarea name="plan_text" placeholder="what you will do, and what you will not">{esc(conclusions_text(k.plan)) if editing else ""}</textarea>
+{dropzone("plan", "screenshots of the positions, Ctrl+V here",
+          [shot_in_zone(base, src, "have_plan")
+           for src in conclusion_images(k.plan)] if editing else ())}
 </div>
 {review}
 <div class="actions"><button class="btn primary">{"Save" if editing else "Write the plan"}</button>
@@ -1670,10 +1725,12 @@ def create_plan(data):
     plan_fields(k, data)
     folder = store.plan_dir(ROOT, k.id)
     zones, k.analysis = plan_blocks(data, folder, token)
+    zones["plan"] = zone_sources(data, "plan", folder, token)
     k.check()
     names = apply_shots(folder, zones)
     for i, block in enumerate(k.analysis, 1):
         block.images = names.get(f"idea-{i}", [])
+    k.plan = build_conclusions(one(data, "plan_text"), names.get("plan", []))
     store.save_plan(ROOT, k)
     drop_draft(token)
     return k
@@ -1685,25 +1742,43 @@ def edit_plan(k, data):
     folder = store.plan_dir(ROOT, k.id)
     zones, k.analysis = plan_blocks(data, folder, token, k)
     zones["review"] = zone_sources(data, "review", folder, token)
+    zones["plan"] = zone_sources(data, "plan", folder, token)
+    # the updates are edited as they are written, images and all: the zone sends
+    # back what the text still shows, and the names are put back in its places
+    zones["update"] = zone_sources(data, "update", folder, token)
     k.updates = one(data, "updates")
     k.check()
     names = apply_shots(folder, zones)
     for i, block in enumerate(k.analysis, 1):
         block.images = names.get(f"idea-{i}", [])
     k.review = build_conclusions(one(data, "review"), names.get("review", []))
+    k.plan = build_conclusions(one(data, "plan_text"), names.get("plan", []))
+    k.updates = place_shots(one(data, "updates"), names.get("update", []))
     store.save_plan(ROOT, k)
     drop_draft(token)
     return k
 
 
 def add_update(k, data):
-    """A dated line at the end of the updates: the plan meets the week."""
+    """A dated line at the end of the updates: the plan meets the week.
+
+    The screenshots pasted with it are appended to the shots folder rather than
+    rewritten into it: this form shows one zone, and a rewrite from a form that
+    shows one zone would take every other picture of the plan with it."""
     text = one(data, "update")
     if not text:
         raise RecordError("an update without a word in it")
+    token = one(data, "token")
+    folder = store.plan_dir(ROOT, k.id)
+    shots = add_shots(folder, "update",
+                      zone_sources(data, "update", folder, token)) if token else []
     line = f"**{datetime.now():%d.%m.%Y}**: {text}"
+    for name in shots:
+        line += f"\n![]({name})"
     k.updates = (k.updates + "\n\n" + line) if k.updates.strip() else line
     store.save_plan(ROOT, k)
+    if token:
+        drop_draft(token)
     return k
 
 

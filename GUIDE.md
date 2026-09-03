@@ -72,11 +72,16 @@ market opens and holds what a trade cannot: what was supposed to happen.
 - **analysis blocks**: timeframe, text and screenshots, the same blocks as the
   idea of a trade. **+ analysis block** adds another timeframe.
 - **plan**: what you will do, and what you will not. This is the part you read
-  back when a trade tempts you mid-week.
+  back when a trade tempts you mid-week. Under it there is a drop zone of its
+  own: the levels you marked, the position you set up, Ctrl+V and they sit with
+  the plan itself.
 
 **Updates** are added from the plan page, not from the form: one line, and the
 journal stamps it with the date. The plan stays as it was written and the week
-is written under it.
+is written under it. An update takes screenshots too: paste into the zone under
+the field before pressing **Add**, and the pictures stay under that line, so a
+week of a plan reads as it happened. Nothing else in the plan is touched when
+an update is added.
 
 **Review** is written later, in the plan form: how it went, with screenshots.
 

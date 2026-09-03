@@ -1024,6 +1024,109 @@ class ServerCase(unittest.TestCase):
         self.assertIn("24.08 - 30.08.2026", html)
         self.assertIn("the plan is written before the open", html)
 
+    # --- screenshots in the plan and in its updates ---
+    def new_plan(self, **over):
+        _, form = self.get("/plan/new")
+        fields = {"token": self.form_token(form), "blocks": "1", "title": "shots",
+                  "pair": "EURUSD", "narrative": "bullish", "from": "2026-08-31",
+                  "until": "2026-09-06", "idea_tf_1": "D1",
+                  "idea_text_1": "range formed", "plan_text": "long from the SNR"}
+        fields.update(over)
+        _, where = self.post("/plan/new", fields)
+        return urllib.parse.unquote(where.rsplit("/", 1)[1])
+
+    def test_69_the_plan_text_carries_screenshots(self):
+        _, form = self.get("/plan/new")
+        token = self.form_token(form)
+        shot = self.paste_shot(token, "plan")
+        plan_id = self.new_plan(token=token, file_plan=shot["file"])
+        k = store.load_plan(self.root, plan_id)
+        self.assertIn("![](shots/plan-01.png)", k.plan)
+        self.assertEqual(
+            self.get(f"/plan-shot/{plan_id}/plan-01.png", as_text=False)[0], 200)
+        q = urllib.parse.quote(plan_id)
+        _, html = self.get(f"/plan/{q}")
+        self.assertIn(f'<img src="/plan-shot/{plan_id}/plan-01.png"', html)
+        # the picture is not typed into the text field, it hangs in its own zone
+        _, form = self.get(f"/plan/{q}/edit")
+        self.assertNotIn("![](shots/plan-01.png)", form)
+        self.assertIn('name="have_plan" value="shots/plan-01.png"', form)
+
+    def test_70_an_update_carries_a_screenshot_and_keeps_it(self):
+        _, form = self.get("/plan/new")
+        token = self.form_token(form)
+        idea_shot = self.paste_shot(token, "idea-1")
+        plan_id = self.new_plan(title="updates", token=token,
+                                **{"file_idea-1": idea_shot["file"]})
+        q = urllib.parse.quote(plan_id)
+        _, html = self.get(f"/plan/{q}")
+        token = self.form_token(html)
+        shot = self.paste_shot(token, "update")
+        self.post(f"/plan/{q}/update", {"token": token, "update": "level held",
+                                        "file_update": shot["file"]})
+        k = store.load_plan(self.root, plan_id)
+        self.assertIn("level held", k.updates)
+        self.assertIn("![](shots/update-01.png)", k.updates)
+        _, html = self.get(f"/plan/{q}")
+        self.assertIn(f'<img src="/plan-shot/{plan_id}/update-01.png"', html)
+        # an update is added from a form that shows one zone, so the pictures
+        # of the analysis have to be exactly where they were
+        self.assertEqual(k.analysis[0].images, ["shots/idea-01-01.png"])
+        self.assertEqual(
+            self.get(f"/plan-shot/{plan_id}/idea-01-01.png", as_text=False)[0], 200)
+
+        # a second update must not take the picture of the first one with it
+        token = self.form_token(self.get(f"/plan/{q}")[1])
+        shot = self.paste_shot(token, "update")
+        self.post(f"/plan/{q}/update", {"token": token, "update": "stop moved",
+                                        "file_update": shot["file"]})
+        k = store.load_plan(self.root, plan_id)
+        self.assertIn("![](shots/update-01.png)", k.updates)
+        self.assertIn("![](shots/update-02.png)", k.updates)
+        for name in ("update-01.png", "update-02.png", "idea-01-01.png"):
+            self.assertEqual(
+                self.get(f"/plan-shot/{plan_id}/{name}", as_text=False)[0], 200)
+
+        # and editing the plan afterwards keeps both, in their own lines
+        _, form = self.get(f"/plan/{q}/edit")
+        self.assertIn('name="have_update" value="shots/update-01.png"', form)
+        token = self.form_token(form)
+        self.post(f"/plan/{q}/edit", {
+            "token": token, "blocks": "1", "title": "updates", "pair": "EURUSD",
+            "narrative": "bullish", "from": "2026-08-31", "until": "2026-09-06",
+            "idea_tf_1": "D1", "idea_text_1": "range formed",
+            "plan_text": "long from the SNR",
+            "updates": store.load_plan(self.root, plan_id).updates,
+            "have_update": ["shots/update-01.png", "shots/update-02.png"],
+            "have_idea-1": ["shots/idea-01-01.png"]})
+        k = store.load_plan(self.root, plan_id)
+        self.assertEqual(k.updates.count("!["), 2)
+        first = k.updates.index("![](shots/update-01.png)")
+        self.assertLess(k.updates.index("stop moved"), first + 200)
+        self.assertLess(k.updates.index("level held"), k.updates.index("stop moved"))
+        for name in ("update-01.png", "update-02.png", "idea-01-01.png"):
+            self.assertEqual(
+                self.get(f"/plan-shot/{plan_id}/{name}", as_text=False)[0], 200)
+
+    def test_71_a_removed_update_screenshot_leaves_the_plan(self):
+        plan_id = self.new_plan(title="removing")
+        q = urllib.parse.quote(plan_id)
+        token = self.form_token(self.get(f"/plan/{q}")[1])
+        shot = self.paste_shot(token, "update")
+        self.post(f"/plan/{q}/update", {"token": token, "update": "one",
+                                        "file_update": shot["file"]})
+        form = self.get(f"/plan/{q}/edit")[1]
+        # the cross takes the thumbnail out of the form, so nothing comes back
+        self.post(f"/plan/{q}/edit", {
+            "token": self.form_token(form), "blocks": "1", "title": "removing",
+            "pair": "EURUSD", "narrative": "bullish", "from": "2026-08-31",
+            "until": "2026-09-06", "idea_tf_1": "D1", "idea_text_1": "range formed",
+            "plan_text": "long from the SNR",
+            "updates": store.load_plan(self.root, plan_id).updates})
+        k = store.load_plan(self.root, plan_id)
+        self.assertNotIn("![", k.updates)
+        self.assertIn("one", k.updates)
+
     def test_62a_both_cards_are_listed_on_the_cards_tab(self):
         """One tab, one folder, two tables: the days and the weeks apart."""
         _, html = self.get("/cards")
