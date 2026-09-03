@@ -4,6 +4,10 @@ What changed and why. Newest first.
 
 ## v1.4.4, 03.09.2026
 
+A weekly report card next to the daily one, a table of trades graded on both,
+screenshots that reach into a plan and its updates, and a word from the
+journal after every form that saves something.
+
 ### Fixed
 
 - **A trade suggested on one card no longer follows you to another.** The
