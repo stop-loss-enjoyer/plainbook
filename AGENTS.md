@@ -59,7 +59,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 
 | file | owns |
 |---|---|
-| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`, `Plan`; the vocabularies a journal starts with; the checks |
+| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`, `Week`, `Plan`; the vocabularies a journal starts with; the checks |
 | `plainbook/mdfile.py` | the markdown header format, and only that |
 | `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash, the owner's lists of pairs and words |
 | `plainbook/balances.py` | balances and R, computed by replaying history |

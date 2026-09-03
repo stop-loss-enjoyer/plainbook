@@ -19,8 +19,9 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from plainbook import store
-from plainbook.model import Account, Card, IdeaBlock, Plan, Trade
+from plainbook import stats, store
+from plainbook.model import (Account, Card, Graded, IdeaBlock, Plan, Trade,
+                             Week)
 
 ACCOUNTS = [Account(id="broker", name="broker", start_balance=10000),
             Account(id="prop-100k", name="prop 100k", start_balance=100000)]
@@ -117,6 +118,27 @@ def build(root, days=40):
         errors="Sized up on the second trade to make the first one back.",
         best="GBPUSD long from the H4 imbalance: planned, sized, held.",
         overview="A quiet day traded quietly. The plan survived the session."))
+
+    store.save_week(root, Week(
+        week=stats.week(today), grade="B", quality="B", progress=3,
+        pnl=sum(t.pnl or 0.0 for t in store.all_trades(root)
+                if not t.is_open and t.closed
+                and stats.week(t.closed) == stats.week(today)),
+        trades=sum(1 for t in store.all_trades(root)
+                   if not t.is_open and t.closed
+                   and stats.week(t.closed) == stats.week(today)),
+        focus="Stop taking the second entry after a loss.",
+        process="Levels marked on Sunday, and the trades that came from them "
+                "were the calm ones. The one taken in the session lost.",
+        learned="Every trade held to target was planned before the open.",
+        errors="Still adding size after a loss. Twice this week.",
+        best="GBPUSD long from the H4 imbalance: planned, sized, held.",
+        missed="US100 gave the same setup on Thursday and was watched, not "
+               "taken.",
+        lesson="The trades that pay are the ones written down before the open.",
+        assessment=[Graded("EURUSD long, Monday", "B"),
+                    Graded("GBPUSD long, Tuesday", "A"),
+                    Graded("XAU short, Thursday", "C")]))
 
 
 if __name__ == "__main__":

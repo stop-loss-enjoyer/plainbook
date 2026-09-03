@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Journal records: trade, account, adjustment, daily card.
+Journal records: trade, account, adjustment, daily and weekly card.
 
 Storage is one markdown file per record (see mdfile.py). Header keys are the
 same words the interface shows, so a file reads like the screen it came from.
 Anything that can be computed (balance, R) is NOT stored; see balances.py.
 """
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -227,6 +228,93 @@ class Card:
     def check(self):
         if self.day is None:
             raise RecordError("card without a date")
+        return self
+
+
+# --- weekly card -----------------------------------------------------------
+
+WEEK_KEYS = [
+    ("week", "week"),
+    ("grade", "process grade"),
+    ("pnl", "pnl $"),
+    ("trades", "trades"),
+    ("quality", "opportunity quality"),
+    ("progress", "progress"),
+]
+
+# The same shape as the daily card, with the headings of the paper Weekly
+# Report Card. The trades assessment is not here: it is a table, not a text.
+WEEK_SECTIONS = [
+    ("focus", "Focus", "current focus (progress)"),
+    ("process", "Process", "weekly trading process"),
+    ("learned", "Learned", "what I learned / did well this week?"),
+    ("errors", "Errors", "errors & improvement"),
+    ("best", "Best trade", "best trade of the week"),
+    ("missed", "Missed", "missed / underexploited opportunities"),
+    ("lesson", "Key lesson", "key lesson of the week"),
+]
+
+# rows of the trades assessment, as on paper
+WEEK_ROWS = 5
+_WEEK_ID = re.compile(r"^\d{4}-W\d{2}$")
+
+
+@dataclass
+class Graded:
+    """One line of the trades assessment: a trade and the mark it earned."""
+    trade: str = ""
+    grade: str = ""
+
+
+@dataclass
+class Week:
+    """The week reviewed: the paper Weekly Report Card, kept in the journal."""
+    week: str = ""                  # ISO key, 2026-W36, as stats.week gives it
+    grade: str = ""                 # process grade: A, B, C...
+    pnl: float = None
+    trades: int = None              # how many trades the week held
+    quality: str = ""               # how good the opportunities were
+    progress: int = None            # 1 to 5 on the current focus
+    focus: str = ""
+    process: str = ""
+    learned: str = ""
+    errors: str = ""
+    best: str = ""
+    missed: str = ""
+    lesson: str = ""
+    assessment: list = field(default_factory=list)   # [Graded]
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def id(self):
+        return self.week
+
+    @property
+    def monday(self):
+        """The first day of the week, worked out from the key."""
+        year, number = int(self.week[:4]), int(self.week[6:])
+        return datetime.fromisocalendar(year, number, 1)
+
+    @property
+    def number(self):
+        return int(self.week[6:])
+
+    @property
+    def is_empty(self):
+        return not any(getattr(self, name).strip()
+                       for name, _, _ in WEEK_SECTIONS) and not self.assessment
+
+    def check(self):
+        if not _WEEK_ID.match(self.week or ""):
+            raise RecordError(f"bad week {self.week!r}: expected YYYY-Www")
+        if not 1 <= self.number <= 53:
+            raise RecordError(f"no week {self.number} in a year")
+        if self.progress is not None and not 1 <= self.progress <= 5:
+            raise RecordError(f"{self.week}: progress is 1 to 5")
+        try:
+            self.monday
+        except ValueError:
+            raise RecordError(f"there is no week {self.week} in that year")
         return self
 
 

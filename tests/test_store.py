@@ -10,8 +10,8 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import mdfile, store
-from plainbook.model import (Trade, Account, Adjustment, IdeaBlock, Card, Plan,
-                      RecordError, PAIR_NOT_SET)
+from plainbook.model import (Trade, Account, Adjustment, IdeaBlock, Card, Week,
+                      Graded, Plan, RecordError, PAIR_NOT_SET)
 
 
 def sample_trade(**kw):
@@ -265,11 +265,58 @@ class Cards(unittest.TestCase):
         self.assertEqual(t.entry_tf, "")
 
 
+class Weeks(unittest.TestCase):
+    def sample(self, **kw):
+        k = Week(week="2026-W36", grade="B", pnl=480.0, trades=4, quality="A",
+                 progress=3, focus="one setup a day", lesson="write it first",
+                 assessment=[Graded("EURUSD long", "A"), Graded("XAU short", "")])
+        for name, value in kw.items():
+            setattr(k, name, value)
+        return k
+
+    def test_a_week_survives_the_round_trip(self):
+        k = self.sample()
+        again = store.text_to_week(store.week_to_text(k))
+        self.assertEqual(again, k)
+
+    def test_the_dates_come_from_the_key(self):
+        k = self.sample()
+        self.assertEqual(k.monday, datetime(2026, 8, 31))
+        self.assertEqual(k.number, 36)
+
+    def test_a_week_that_never_happened_is_refused(self):
+        for bad in ("", "2026-36", "2026-W00", "2025-W53"):
+            with self.assertRaises(RecordError):
+                Week(week=bad).check()
+
+    def test_empty_week_fields_survive_a_write(self):
+        with tempfile.TemporaryDirectory() as root:
+            k = Week(week="2026-W36", grade="A", focus="pennies")
+            store.save_week(root, k)
+            with open(store.week_path(root, k.week), encoding="utf-8") as f:
+                text = f.read()
+            self.assertNotIn("pnl $:", text)          # no empty key in the file
+            self.assertNotIn("## Trades", text)       # nothing was assessed
+            again = store.load_week(root, "2026-W36")
+            self.assertIsNone(again.pnl)
+            self.assertIsNone(again.trades)
+            self.assertEqual(again.quality, "")       # not "[]"
+            self.assertEqual(again.assessment, [])
+
+    def test_an_assessment_row_without_a_grade_reads_back(self):
+        k = store.text_to_week(
+            "---\nweek: 2026-W36\n---\n\n## Trades\n\n"
+            "1. EURUSD long | B\n2. XAU short\n3.\n")
+        self.assertEqual([(r.trade, r.grade) for r in k.assessment],
+                         [("EURUSD long", "B"), ("XAU short", "")])
+
+
 class Layout(unittest.TestCase):
     def test_journal_dirs_appear_at_once(self):
         with tempfile.TemporaryDirectory() as root:
             created = store.make_layout(root)
             self.assertIn(store.CARDS, created)
+            self.assertIn(store.WEEKS, created)
             for name in store.JOURNAL_DIRS:
                 path = os.path.join(root, store.JOURNAL, name)
                 self.assertTrue(os.path.isdir(path), name)

@@ -16,7 +16,8 @@ its own and survives a reboot; there is nothing to "start" by hand.
 3. **Closed it?** Close the trade too: the **Close** button in the open
    positions block or on the trade page.
 4. **At the end of the day**, a card: the **+ Card** button.
-5. **At the end of a month or a quarter**, a report: the **Reports** tab.
+5. **At the end of the week**, a card for the week: the **Weeks** tab.
+6. **At the end of a month or a quarter**, a report: the **Reports** tab.
 
 The point of the first step: the idea is written down before the market shows
 who was right. In hindsight an idea always looks tidier than it was.
@@ -133,6 +134,24 @@ that one. The **Cards** tab lists them all.
 - **P&L** is filled in from the trades closed that day. The field is editable:
   a day can have a tally of its own that differs from the journal's sum.
 - Then: focus, process, what went well, errors, best trade, overview.
+
+## The weekly card
+
+The **Weeks** tab lists them, and **+ Week** opens the card of the week that is
+running; if there already is one, it opens that one.
+
+- **week**: the calendar week, Monday to Sunday, the same week the journal
+  groups the trades by. Changing it moves the card, exactly as the date moves a
+  daily one, and the journal refuses to write one week over another.
+- **P&L** and **trades** are filled in from the trades that week closed. Both
+  are editable: the count you review by is yours, not the journal's.
+- **progress** under the focus is the 1 to 5 of the paper card: how far the
+  thing you are working on has moved.
+- **trades assessment**: five lines for the trades of the week and the mark each
+  one earned. The field suggests the pairs you closed that week, and an empty
+  line is not saved.
+- Then, as on paper: the weekly process, what went well, errors, the best trade,
+  what you missed, and the key lesson of the week.
 
 ## The front page
 
@@ -350,7 +369,8 @@ each entry. The best and the worst trade lead straight to the trade itself.
 
 The **Search** tab. A word or a phrase is looked for in everything you have
 written: the ideas and conclusions of trades, their notes, the analysis, plan,
-updates and review of every plan, and every field of every card. Case does not
+updates and review of every plan, and every field of every card, daily and
+weekly alike. Case does not
 matter. Every hit is a link to the record, with the matching words shown in
 the text around them. It is the way to find the trade where you wrote "moved
 the stop too early" three months ago.
@@ -362,6 +382,7 @@ Everything is in the `journal/` folder: ordinary text files and pictures.
     journal/trades/2026-08-30-01-eurusd/trade.md
     journal/trades/2026-08-30-01-eurusd/shots/*.png
     journal/cards/2026-08-30.md
+    journal/weeks/2026-W36.md
     journal/plans/2026-08-31-eurusd/plan.md
     journal/plans/2026-08-31-eurusd/shots/*.png
     journal/accounts/*.md

@@ -180,11 +180,11 @@ form.filters{{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end}}
 label{{display:block;color:{DIM};font-size:10px;margin-bottom:4px;
  text-transform:uppercase;letter-spacing:.09em}}
 select,input[type=text],input[type=number],input[type=date],
-input[type=datetime-local],textarea{{background:{GROUND};color:{INK};
+input[type=week],input[type=datetime-local],textarea{{background:{GROUND};color:{INK};
  border:1px solid {AXIS};border-radius:4px;padding:6px 8px;
  font:13px system-ui,sans-serif}}
-input[type=number],input[type=date],input[type=datetime-local]{{
- font-family:{MONO};font-size:12px}}
+input[type=number],input[type=date],input[type=week],
+input[type=datetime-local]{{font-family:{MONO};font-size:12px}}
 select:hover,input:hover{{border-color:{DIM}}}
 input[type=checkbox]{{accent-color:{ACCENT};vertical-align:-2px}}
 select:focus,input:focus,textarea:focus{{outline:none;border-color:{ACCENT};
@@ -322,7 +322,8 @@ def money(x, signed=False):
 
 def page(title, body, tab="journal", header_right="", notice=""):
     links = [("journal", "/", "Journal"), ("plans", "/plans", "Plans"),
-             ("cards", "/cards", "Cards"), ("stats", "/stats", "Statistics"),
+             ("cards", "/cards", "Cards"), ("weeks", "/weeks", "Weeks"),
+             ("stats", "/stats", "Statistics"),
              ("reports", "/reports", "Reports"), ("accounts", "/accounts", "Accounts"),
              ("search", "/search", "Search")]
     nav = "".join(

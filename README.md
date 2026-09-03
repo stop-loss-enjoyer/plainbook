@@ -61,6 +61,13 @@ process grade, opportunity quality, focus, what went well, errors, best trade,
 overview. The day's PnL is filled in from the trades you closed, and stays
 editable.
 
+**A weekly card.** The same on the pattern of a paper Weekly Report Card, one
+per trading week: process grade, opportunity quality, progress on the focus,
+the weekly process, what went well, errors, the best trade and the ones you
+missed, the key lesson, and the five lines of the trades assessment where the
+week's trades get their marks. The PnL and the number of trades come from the
+week you traded, and stay editable.
+
 **Statistics that answer honest questions.** An equity curve per account, the
 distribution of R as two rings, losses and wins each cut by size, slices by
 style, pair and account, and a monthly or quarterly report built on a button,
@@ -221,6 +228,7 @@ journal/
   accounts/<id>.md        start balance, currency, archived
   trades/<id>/            one trade = one folder
   cards/YYYY-MM-DD.md     the daily card
+  weeks/YYYY-Www.md       the weekly card
   plans/<id>/             one plan = one folder, screenshots and all
   adjustments/<id>.md     deposit, withdrawal, fee, reconciliation
   reports/2026-08.md      monthly and quarterly reports

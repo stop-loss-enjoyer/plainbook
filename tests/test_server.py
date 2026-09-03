@@ -996,6 +996,81 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/stats")
         self.assertIn("longest run of wins", html)
 
+    # --- the weekly card ---
+    def test_62_a_weekly_card_is_written_and_read_back(self):
+        _, html = self.get("/week/2026-W35")
+        self.assertIn("Weekly report card", html)
+        self.assertIn("missed / underexploited opportunities", html)
+        self.post("/week/save", {
+            "week": "2026-W35", "previous": "2026-W35", "grade": "B", "pnl": "480",
+            "trades": "4", "quality": "A", "progress": "3",
+            "focus": "one setup a day", "process": "levels marked on Sunday",
+            "learned": "waited for the retest", "errors": "sized up after a loss",
+            "best": "GBPUSD long", "missed": "US100 on Thursday",
+            "lesson": "the plan is written before the open",
+            "assess_trade": ["EURUSD long", "", "XAU short", "", ""],
+            "assess_grade": ["A", "", "C", "", ""]})
+        k = store.load_week(self.root, "2026-W35")
+        self.assertEqual((k.grade, k.pnl, k.trades, k.quality, k.progress),
+                         ("B", 480.0, 4, "A", 3))
+        self.assertEqual(k.lesson, "the plan is written before the open")
+        # the empty rows of the paper table are not records
+        self.assertEqual([(r.trade, r.grade) for r in k.assessment],
+                         [("EURUSD long", "A"), ("XAU short", "C")])
+        _, html = self.get("/week/2026-W35")
+        self.assertIn("waited for the retest", html)   # the form came back filled
+        self.assertIn('value="XAU short"', html)
+        _, html = self.get("/weeks")
+        self.assertIn("24.08 - 30.08.2026", html)
+        self.assertIn("the plan is written before the open", html)
+
+    def test_63_a_weekly_card_with_empty_fields_saves_and_opens(self):
+        self.post("/week/save", {"week": "2026-W34", "previous": "2026-W34",
+                                 "grade": "A", "pnl": "", "trades": "",
+                                 "quality": "", "progress": "", "focus": "pennies"})
+        code, html = self.get("/week/2026-W34")
+        self.assertEqual(code, 200)
+        self.assertIn("pennies", html)
+        self.assertRegex(html, r'name="quality"[^>]*value=""')
+        self.assertRegex(html, r'name="trades"[^>]*value=""')
+
+    def test_64_changing_the_week_moves_the_card(self):
+        self.post("/week/save", {"week": "2026-W33", "previous": "2026-W34",
+                                 "grade": "A", "focus": "pennies"})
+        self.assertIsNone(store.load_week(self.root, "2026-W34"))
+        self.assertIsNotNone(store.load_week(self.root, "2026-W33"))
+
+    def test_65_a_weekly_card_is_not_moved_onto_another(self):
+        self.post("/week/save", {"week": "2026-W31", "previous": "2026-W31",
+                                 "focus": "the first"})
+        self.post("/week/save", {"week": "2026-W32", "previous": "2026-W32",
+                                 "focus": "the second"})
+        self.refused("/week/save", {"week": "2026-W31", "previous": "2026-W32",
+                                    "focus": "the second, moved"})
+        self.assertEqual(store.load_week(self.root, "2026-W31").focus, "the first")
+        self.assertIsNotNone(store.load_week(self.root, "2026-W32"))
+
+    def test_66_a_weekly_card_is_deleted_into_the_trash_and_comes_back(self):
+        self.post("/week/2026-W32/delete", {})
+        self.assertIsNone(store.load_week(self.root, "2026-W32"))
+        entries = [x for x in store.trash_list(self.root) if x[1] == "week"]
+        self.assertEqual(entries[0][2], "2026-W32")
+        self.post("/trash/restore", {"name": entries[0][0]})
+        self.assertEqual(store.load_week(self.root, "2026-W32").focus, "the second")
+
+    def test_67_a_week_that_does_not_exist_is_a_404(self):
+        for bad in ("2026-W99", "2025-W53", "week"):
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                self.get(f"/week/{bad}")
+            self.assertEqual(e.exception.code, 404, bad)
+            e.exception.close()
+
+    def test_68_search_finds_a_word_in_a_weekly_card(self):
+        code, html = self.get("/search?q=US100+on+Thursday")
+        self.assertEqual(code, 200)
+        self.assertIn('href="/week/2026-W35"', html)
+        self.assertIn("<mark>US100 on Thursday</mark>", html)
+
 
 if __name__ == "__main__":
     unittest.main()

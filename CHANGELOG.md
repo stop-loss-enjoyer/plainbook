@@ -2,6 +2,22 @@
 
 What changed and why. Newest first.
 
+## v1.4.4, 03.09.2026
+
+### New
+
+- **The weekly card.** A **Weeks** tab next to the daily cards, holding the
+  paper Weekly Report Card as it is: process grade, opportunity quality, the
+  progress of the current focus from 1 to 5, the weekly process, what you
+  learned, errors, the best trade of the week and the ones you missed, the key
+  lesson, and the trades assessment where the week's trades get their marks on
+  five numbered lines. The P&L and the number of trades are filled in from the
+  week you traded and stay editable, the assessment field suggests the pairs
+  you closed that week, and an empty line of it is not saved. A card belongs to
+  the calendar week the journal already groups the trades by, is stored as
+  `journal/weeks/2026-W36.md`, is found by search along with everything else,
+  and goes to the trash rather than away.
+
 ## v1.4.3, 02.09.2026
 
 A journal that survives a broken file, a search across everything written, the

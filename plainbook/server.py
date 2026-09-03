@@ -20,9 +20,10 @@ from datetime import datetime, timedelta
 from . import html as H
 from . import reports, stats, store
 from .balances import Journal
-from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Plan,
-                    RecordError, DIRECTIONS, RESULTS, NARRATIVES,
-                    CARD_SECTIONS, TRADE_KEYS, PAIR_NOT_SET)
+from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
+                    Plan, RecordError, DIRECTIONS, RESULTS, NARRATIVES,
+                    CARD_SECTIONS, WEEK_SECTIONS, WEEK_ROWS, TRADE_KEYS,
+                    PAIR_NOT_SET)
 
 PORT = int(os.environ.get("PLAINBOOK_PORT") or 8778)
 # the journal root can be overridden; the tests and a split data folder use it
@@ -755,6 +756,14 @@ def search_page(q):
         if hit(texts):
             found.append(("card", f"/card/{U(c.id)}",
                           f"{c.day:%d.%m.%Y}" + (f" · grade {c.grade}" if c.grade else ""),
+                          _snippet(texts, needle)))
+    for c in store.all_weeks(ROOT, []):
+        texts = [getattr(c, name) for name, _, _ in WEEK_SECTIONS] \
+            + [row.trade for row in c.assessment]
+        if hit(texts):
+            found.append(("week", f"/week/{U(c.id)}",
+                          f"week {c.number}, {week_dates(c)}"
+                          + (f" - grade {c.grade}" if c.grade else ""),
                           _snippet(texts, needle)))
     rows = "".join(
         f'<tr><td class="muted">{kind}</td>'
@@ -1814,6 +1823,175 @@ def save_card(data):
     return k
 
 
+# --- weekly card -----------------------------------------------------------
+# The paper Weekly Report Card, next to the daily one: the same fields in the
+# same order, plus the assessment of the week's trades. One file per ISO week
+# in journal/weeks, keyed the way the journal groups its trades by week.
+
+def week_from_url(text):
+    key = (text or "").strip().upper()
+    Week(week=key).check()          # the format is the id, so it is checked here
+    return key
+
+
+def week_trades(j, key):
+    """The trades the week closed: the figures a new card is offered."""
+    return [t for t in j.trades if not t.is_open and t.closed
+            and stats.week(t.closed) == key]
+
+
+def week_dates(k):
+    return f"{k.monday:%d.%m} - {k.monday + timedelta(days=6):%d.%m.%Y}"
+
+
+def weeks_page():
+    problems = []
+    weeks = store.all_weeks(ROOT, problems)
+    now = stats.week(datetime.now())
+    right = f'<a class="btn primary" href="/week/{now}">+ Week</a>'
+    if not weeks:
+        body = ('<div class="card"><h2>Weekly report cards</h2>'
+                '<p class="muted">No cards yet. The button above opens '
+                'this week&rsquo;s card.</p></div>')
+        return page("Weeks", body, "weeks", right, problems)
+    rows = "".join(
+        f'<tr><td><a href="/week/{U(k.id)}">{k.number}</a>'
+        f'<span class="muted" style="margin-left:8px">{week_dates(k)}</span></td>'
+        f'<td>{esc(k.grade) or "-"}</td>'
+        f'<td class="num {sum_class(k.pnl or 0)}">'
+        f'{H.money(k.pnl, signed=True) if k.pnl is not None else "-"}</td>'
+        f'<td class="num">{"-" if k.trades is None else k.trades}</td>'
+        f'<td>{esc(k.quality) or "-"}</td>'
+        f'<td class="muted">{esc(first_line(k.lesson or k.focus))}</td></tr>'
+        for k in weeks)
+    body = (f'<div class="card"><h2>Weekly report cards</h2>'
+            f'<table><thead><tr><th>week</th><th>process</th>'
+            f'<th class="num">P&amp;L {H.sign(journal().currency())}</th>'
+            f'<th class="num">trades</th><th>opportunity</th><th>key lesson</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table></div>')
+    return page("Weeks", body, "weeks", right, problems)
+
+
+def assessment_rows(k, closed):
+    """The table of the paper: five numbered lines of a trade and its mark.
+
+    A card written by hand may carry more, so the rows it has are all drawn;
+    a row left empty is dropped when the form comes back."""
+    listed = list(k.assessment) + [Graded() for _ in range(WEEK_ROWS)]
+    options = "".join(f'<option value="{esc(t.pair)} {esc(t.direction)}, '
+                      f'{t.closed:%d.%m}">' for t in closed)
+    body = "".join(
+        f'<tr><td class="muted">{n}.</td>'
+        f'<td><input type="text" name="assess_trade" list="weektrades" '
+        f'style="width:100%" value="{esc(row.trade)}"></td>'
+        f'<td><input type="text" name="assess_grade" list="grades" '
+        f'style="width:90px" value="{esc(row.grade)}"></td></tr>'
+        for n, row in enumerate(listed[:max(WEEK_ROWS, len(k.assessment))], 1))
+    return (f'<h3>trades assessment</h3><datalist id="weektrades">{options}</datalist>'
+            f'<table><thead><tr><th style="width:24px"></th><th>trade</th>'
+            f'<th style="width:110px">grade</th></tr></thead>'
+            f'<tbody>{body}</tbody></table>')
+
+
+def week_page(key):
+    j = journal()
+    k = store.load_week(ROOT, key)
+    closed = week_trades(j, key)
+    is_new = k is None
+    if is_new:
+        k = Week(week=key, pnl=sum(t.pnl or 0.0 for t in closed) or None,
+                 trades=len(closed) or None)
+    options = "".join(f'<option value="{g}">' for g in GRADES)
+    progress = "".join(
+        f'<option value="{n}"{" selected" if k.progress == n else ""}>{n}</option>'
+        for n in range(1, 6))
+    sections = ""
+    for name, _, label in WEEK_SECTIONS:
+        sections += (f'<h3>{esc(label)}</h3>'
+                     f'<textarea name="{name}" style="min-height:'
+                     f'{SECTION_HEIGHT.get(name, 84)}px">{esc(getattr(k, name))}'
+                     f'</textarea>')
+        if name == "focus":
+            sections += (f'<div class="fields" style="margin-top:8px">'
+                         f'<div class="field"><label>progress</label>'
+                         f'<select name="progress" style="width:110px">'
+                         f'<option value=""></option>{progress}</select>'
+                         f'</div></div>')
+    delete = "" if is_new else (
+        f'<span class="right"><button class="btn danger" '
+        f'formaction="/week/{U(k.id)}/delete" formnovalidate '
+        f'onclick="return confirm(\'Delete the card for week {k.number}? '
+        f'It goes to .trash.\')">Delete</button></span>')
+    body = f"""<form method="post" action="/week/save">
+<input type="hidden" name="previous" value="{k.week}">
+<div class="card"><h2>Weekly report card</h2>
+<div class="fields">
+<div class="field"><label>week</label>
+<input type="week" name="week" value="{k.week}" required
+ onclick="this.showPicker && this.showPicker()" style="width:150px"></div>
+<div class="field"><label>process grade</label>
+<input type="text" name="grade" list="grades" value="{esc(k.grade)}"
+ placeholder="A" style="width:110px"><datalist id="grades">{options}</datalist></div>
+<div class="field"><label>P&amp;L, {H.sign(j.currency())}</label>
+<input type="number" name="pnl" step="0.01" style="width:130px"
+ value="{"" if k.pnl is None else f"{k.pnl:g}"}"></div>
+<div class="field"><label>trades</label>
+<input type="number" name="trades" step="1" min="0" style="width:90px"
+ value="{"" if k.trades is None else k.trades}"></div>
+<div class="field"><label>opportunity quality</label>
+<input type="text" name="quality" list="grades" value="{esc(k.quality)}"
+ placeholder="B" style="width:150px"></div>
+</div>
+<p class="caption">{week_dates(k)}. The week closed {len(closed)}
+{"trade" if len(closed) == 1 else "trades"} for
+{amount(j, sum(t.pnl or 0.0 for t in closed), signed=True)}. The fields are
+yours to override.</p>
+</div>
+<div class="card">{sections}</div>
+<div class="card">{assessment_rows(k, closed)}</div>
+<div class="actions"><button class="btn primary">Save card</button>
+<a class="btn" href="/weeks">Cancel</a>{delete}</div>
+</form>"""
+    return page(f"Week {k.number}", body, "weeks")
+
+
+def read_assessment(data):
+    """The rows of the assessment table, the empty ones left out."""
+    grades = data.get("assess_grade", [])
+    rows = []
+    for n, text in enumerate(data.get("assess_trade", [])):
+        grade = grades[n] if n < len(grades) else ""
+        if text.strip() or grade.strip():
+            rows.append(Graded(trade=text.strip(), grade=grade.strip()))
+    return rows
+
+
+def save_week(data):
+    key = week_from_url(one(data, "week"))
+    previous = one(data, "previous")
+    k = Week(week=key, grade=one(data, "grade"), quality=one(data, "quality"))
+    pnl = one(data, "pnl")
+    k.pnl = float(pnl.replace(",", ".")) if pnl else None
+    trades = one(data, "trades")
+    k.trades = int(float(trades.replace(",", "."))) if trades else None
+    progress = one(data, "progress")
+    k.progress = int(progress) if progress else None
+    for name, _, _ in WEEK_SECTIONS:
+        setattr(k, name, one(data, name))
+    k.assessment = read_assessment(data)
+    old = store.load_week(ROOT, key)
+    if old is not None and previous and previous != k.week:
+        raise RecordError(f"there is a card for {k.week} already: open that one "
+                          f"instead of moving this one onto it")
+    if old is not None:
+        k.extra = old.extra
+    store.save_week(ROOT, k)
+    # the week was changed in the form, which is a rename, not a second card
+    if previous and previous != k.week:
+        store.delete_week(ROOT, week_from_url(previous))
+    return k
+
+
 # --- reports ---------------------------------------------------------------
 
 def md_to_html(text, link=None):
@@ -2474,6 +2652,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except RecordError as e:
                 return self._send(str(e), 404, "text/plain; charset=utf-8")
             return self._send(card_page(day))
+        if path == "/weeks":
+            return self._send(weeks_page())
+        if len(parts) == 2 and parts[0] == "week":
+            try:
+                key = week_from_url(parts[1])
+            except RecordError as e:
+                return self._send(str(e), 404, "text/plain; charset=utf-8")
+            return self._send(week_page(key))
         if path == "/accounts":
             return self._send(accounts_page((q.get("m") or [""])[0]))
         if path == "/plans":
@@ -2592,6 +2778,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if len(parts) == 3 and parts[0] == "card" and parts[2] == "delete":
                 store.delete_card(ROOT, day_from_url(parts[1]))
                 return self._go("/cards")
+            if path == "/week/save":
+                k = save_week(data)
+                return self._go(f"/week/{U(k.id)}")
+            if len(parts) == 3 and parts[0] == "week" and parts[2] == "delete":
+                store.delete_week(ROOT, week_from_url(parts[1]))
+                return self._go("/weeks")
             if len(parts) == 3 and parts[0] == "trade" and parts[2] == "delete":
                 if next((x for x in journal(True).trades if x.id == parts[1]),
                         None) is None:

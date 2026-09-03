@@ -9,6 +9,7 @@ Layout (the source of truth, all under git):
     journal/trades/2025-06-25-01-eurusd/trade.md
     journal/trades/2025-06-25-01-eurusd/shots/*.png
     journal/cards/2026-08-30.md
+    journal/weeks/2026-W36.md
     journal/adjustments/2026-08-29-reconciliation-bybit.md
     journal/reports/2026-08.md
 
@@ -21,15 +22,16 @@ import shutil
 from datetime import datetime
 
 from . import mdfile
-from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Plan,
-                    TRADE_KEYS, ACCOUNT_KEYS, ADJUSTMENT_KEYS, CARD_KEYS,
-                    PLAN_KEYS, CARD_SECTIONS, PAIR_NOT_SET,
-                    STYLES, TIMEFRAMES, EXECUTION)
+from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
+                    Plan, TRADE_KEYS, ACCOUNT_KEYS, ADJUSTMENT_KEYS, CARD_KEYS,
+                    WEEK_KEYS, PLAN_KEYS, CARD_SECTIONS, WEEK_SECTIONS,
+                    PAIR_NOT_SET, STYLES, TIMEFRAMES, EXECUTION)
 
 JOURNAL = "journal"
 TRASH = ".trash"            # deleted records: outside git, but not gone
 TRADES, ACCOUNTS, ADJUSTMENTS, REPORTS = "trades", "accounts", "adjustments", "reports"
 CARDS = "cards"             # daily reviews, one file per day
+WEEKS = "weeks"             # weekly reviews, one file per ISO week
 PLANS = "plans"             # trading plans, a folder each, like a trade
 TRADE_FILE = "trade.md"
 PLAN_FILE = "plan.md"
@@ -351,6 +353,73 @@ def text_to_card(text):
     return k
 
 
+# --- weekly card: object <-> text ------------------------------------------
+# The trades assessment is written as the paper numbers it: "1. what | grade".
+
+_ROW = re.compile(r"^\s*\d+[.)]\s*")
+
+
+def week_to_text(k):
+    head = {"week": k.week}
+    if k.grade:
+        head["process grade"] = k.grade
+    if k.pnl is not None:
+        head["pnl $"] = _number_to_text(k.pnl)
+    if k.trades is not None:
+        head["trades"] = str(k.trades)
+    if k.quality:
+        head["opportunity quality"] = k.quality
+    if k.progress is not None:
+        head["progress"] = str(k.progress)
+    head.update(k.extra)
+    parts = []
+    for name, heading, _ in WEEK_SECTIONS:
+        text = getattr(k, name).strip()
+        if text:
+            parts += [f"## {heading}", text]
+    if k.assessment:
+        lines = []
+        for n, row in enumerate(k.assessment, 1):
+            line = f"{n}. {row.trade}".rstrip()
+            lines.append(f"{line} | {row.grade}" if row.grade else line)
+        parts += ["## Trades", "\n".join(lines)]
+    return mdfile.dump(head, "\n\n".join(parts))
+
+
+def text_to_week(text):
+    head, body = mdfile.parse(text)
+    known = {key for _, key in WEEK_KEYS}
+    trades = _number(head.get("trades"))
+    progress = _number(head.get("progress"))
+    k = Week(
+        week=_text(head.get("week")),
+        grade=_text(head.get("process grade")),
+        pnl=_number(head.get("pnl $")),
+        trades=None if trades is None else int(trades),
+        quality=_text(head.get("opportunity quality")),
+        progress=None if progress is None else int(progress),
+        extra={kk: v for kk, v in head.items() if kk not in known},
+    )
+    sections = _split_sections(body)
+    for name, heading, _ in WEEK_SECTIONS:
+        setattr(k, name, sections.get(heading, "").strip())
+    k.assessment = _parse_assessment(sections.get("Trades", ""))
+    return k
+
+
+def _parse_assessment(text):
+    rows = []
+    for line in text.split("\n"):
+        line = _ROW.sub("", line).strip()
+        if not line:
+            continue
+        trade, _, grade = line.rpartition("|")
+        if not trade:
+            trade, grade = grade, ""
+        rows.append(Graded(trade=trade.strip(), grade=grade.strip()))
+    return rows
+
+
 # --- files -----------------------------------------------------------------
 
 def _write(path, text):
@@ -388,7 +457,7 @@ def _load(problems, path, convert, root=None):
         return None
 
 
-JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, PLANS, REPORTS]
+JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, WEEKS, PLANS, REPORTS]
 
 
 def make_layout(root):
@@ -612,6 +681,48 @@ def delete_card(root, day):
     return target
 
 
+def week_path(root, key):
+    return os.path.join(root, JOURNAL, WEEKS, f"{key}.md")
+
+
+def save_week(root, k):
+    k.check()
+    _write(week_path(root, k.week), week_to_text(k))
+    return k
+
+
+def load_week(root, key):
+    """The card of that week, or None if there is none yet."""
+    path = week_path(root, key)
+    if not os.path.isfile(path):
+        return None
+    return text_to_week(_read(path))
+
+
+def all_weeks(root, problems=None):
+    """Every weekly card, newest first."""
+    base = os.path.join(root, JOURNAL, WEEKS)
+    items = []
+    for name in sorted(os.listdir(base), reverse=True) if os.path.isdir(base) else []:
+        if name.endswith(".md"):
+            k = _load(problems, os.path.join(base, name), text_to_week, root)
+            if k is not None:
+                items.append(k)
+    return items
+
+
+def delete_week(root, key):
+    """To the trash, like the daily card."""
+    path = week_path(root, key)
+    if not os.path.isfile(path):
+        return None
+    target = os.path.join(root, TRASH,
+                          f"week-{key}-{datetime.now():%Y%m%d-%H%M%S}.md")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.move(path, target)
+    return target
+
+
 def delete_trade(root, trade_id):
     """Moves the whole trade directory to the trash, screenshots and all.
 
@@ -765,7 +876,7 @@ def delete_account(root, account_id):
 # id, the others carry their kind in front. The stamp at the end is what lets
 # the same record be deleted twice.
 
-_TRASHED = re.compile(r"^(?:(plan|card|adjustment|account)-)?(.+)-"
+_TRASHED = re.compile(r"^(?:(plan|card|week|adjustment|account)-)?(.+)-"
                       r"(\d{8}-\d{6})(\.md)?$")
 
 
@@ -792,7 +903,8 @@ def _trash_home(root, kind, record_id):
         return trade_dir(root, record_id)
     if kind == "plan":
         return plan_dir(root, record_id)
-    folder = {"card": CARDS, "adjustment": ADJUSTMENTS, "account": ACCOUNTS}[kind]
+    folder = {"card": CARDS, "week": WEEKS,
+              "adjustment": ADJUSTMENTS, "account": ACCOUNTS}[kind]
     return os.path.join(root, JOURNAL, folder, record_id + ".md")
 
 
