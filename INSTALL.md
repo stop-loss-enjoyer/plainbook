@@ -140,7 +140,7 @@ An application shortcut: Chrome → "Save as application" on the journal page, o
 4. With you watching, they opened and closed a test trade with a screenshot
    pasted by Ctrl+V, that all of it worked, and that the files appeared under
    `journal/trades/`.
-5. With you watching, they filled a daily card (**+ Card**) and it opened again
+5. With you watching, they filled a daily card (**+ DRC**) and it opened again
    filled in after saving.
 
 Pasting a screenshot is the one place where browser script does the work: if
