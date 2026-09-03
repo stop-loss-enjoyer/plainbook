@@ -138,6 +138,9 @@ that one. The **Cards** tab lists them, the daily ones in the upper table.
   A / B / C / D / F, but the field is free, so write in whatever scale you use.
 - **P&L** is filled in from the trades closed that day. The field is editable:
   a day can have a tally of its own that differs from the journal's sum.
+- **trades assessment**: numbered lines for the trades of the day and the mark
+  each one earned, the same table as the weekly card below. The field suggests
+  the pairs you closed that day, and an empty line is not saved.
 - Then: focus, process, what went well, errors, best trade, overview.
 
 ## The weekly card
@@ -153,9 +156,9 @@ and both kinds are stored side by side in `journal/cards`.
   are editable: the count you review by is yours, not the journal's.
 - **progress** under the focus is the 1 to 5 of the paper card: how far the
   thing you are working on has moved.
-- **trades assessment**: five lines for the trades of the week and the mark each
-  one earned. The field suggests the pairs you closed that week, and an empty
-  line is not saved.
+- **trades assessment**: the same table as the daily card, for the trades of
+  the week and the mark each one earned. The field suggests the pairs you
+  closed that week, and an empty line is not saved.
 - Then, as on paper: the weekly process, what went well, errors, the best trade,
   what you missed, and the key lesson of the week.
 

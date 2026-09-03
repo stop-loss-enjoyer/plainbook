@@ -117,7 +117,9 @@ def build(root, days=40):
         learned="Waiting for the retest cost nothing and paid twice today.",
         errors="Sized up on the second trade to make the first one back.",
         best="GBPUSD long from the H4 imbalance: planned, sized, held.",
-        overview="A quiet day traded quietly. The plan survived the session."))
+        overview="A quiet day traded quietly. The plan survived the session.",
+        assessment=[Graded("GBPUSD long, H4 imbalance", "A"),
+                    Graded("EURUSD long, second entry", "C")]))
 
     store.save_week(root, Week(
         week=stats.week(today), grade="B", quality="B", progress=3,

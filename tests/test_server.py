@@ -397,6 +397,22 @@ class ServerCase(unittest.TestCase):
         self.assertIn("29.08.2026", html)
         self.assertIn("an even day", html)
 
+    def test_21a_a_daily_card_carries_a_trades_assessment(self):
+        """The paper's numbered lines, same as the weekly card's."""
+        _, html = self.get("/card/2026-08-30")
+        self.assertIn("trades assessment", html)
+        self.post("/card/save", {
+            "date": "2026-08-30", "previous": "2026-08-30", "grade": "A",
+            "focus": "one setup a day",
+            "assess_trade": ["EURUSD long", "", "XAU short", "", ""],
+            "assess_grade": ["A", "", "C", "", ""]})
+        k = store.load_card(self.root, datetime(2026, 8, 30))
+        # the empty rows of the paper table are not records
+        self.assertEqual([(r.trade, r.grade) for r in k.assessment],
+                         [("EURUSD long", "A"), ("XAU short", "C")])
+        _, html = self.get("/card/2026-08-30")
+        self.assertIn('value="XAU short"', html)
+
     def test_22_changing_the_date_moves_the_card(self):
         self.post("/card/save", {
             "date": "2026-08-27", "previous": "2026-08-29", "grade": "B",
@@ -1226,6 +1242,11 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn('href="/week/2026-W35"', html)
         self.assertIn("<mark>US100 on Thursday</mark>", html)
+
+    def test_68a_search_finds_a_trade_in_a_daily_assessment(self):
+        code, html = self.get("/search?q=XAU+short")
+        self.assertEqual(code, 200)
+        self.assertIn('href="/card/2026-08-30"', html)
 
 
 if __name__ == "__main__":

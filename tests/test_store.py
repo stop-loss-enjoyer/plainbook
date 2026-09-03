@@ -249,6 +249,15 @@ class Cards(unittest.TestCase):
             self.assertEqual(again.quality, "")       # not "[]"
             self.assertEqual(again.focus, "pennies")
 
+    def test_a_daily_card_carries_a_trades_assessment(self):
+        """The same table the weekly card has, on the same shared code."""
+        with tempfile.TemporaryDirectory() as root:
+            k = Card(day=datetime(2026, 8, 30), grade="A", focus="pennies",
+                     assessment=[Graded("EURUSD long", "A"), Graded("XAU short", "")])
+            store.save_card(root, k)
+            again = store.load_card(root, datetime(2026, 8, 30))
+            self.assertEqual(again, k)
+
     def test_empty_key_in_an_old_file_still_reads(self):
         """Files already written with empty keys have to keep working."""
         k = store.text_to_card(

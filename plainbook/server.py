@@ -23,7 +23,7 @@ from . import reports, stats, store
 from .balances import Journal
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
                     Plan, RecordError, DIRECTIONS, RESULTS, NARRATIVES,
-                    CARD_SECTIONS, WEEK_SECTIONS, WEEK_ROWS, TRADE_KEYS,
+                    CARD_SECTIONS, WEEK_SECTIONS, ASSESSMENT_ROWS, TRADE_KEYS,
                     PAIR_NOT_SET)
 
 PORT = int(os.environ.get("PLAINBOOK_PORT") or 8778)
@@ -775,7 +775,8 @@ def search_page(q):
             found.append(("plan", f"/plan/{U(k.id)}", plan_label(k),
                           _snippet(texts[3:] + texts[1:2], needle)))
     for c in store.all_cards(ROOT, []):
-        texts = [getattr(c, name) for name, _, _ in CARD_SECTIONS]
+        texts = [getattr(c, name) for name, _, _ in CARD_SECTIONS] \
+            + [row.trade for row in c.assessment]
         if hit(texts):
             found.append(("card", f"/card/{U(c.id)}",
                           f"{c.day:%d.%m.%Y}" + (f" · grade {c.grade}" if c.grade else ""),
@@ -1820,10 +1821,48 @@ def day_from_url(text):
         raise RecordError(f"bad date {text!r}: expected YYYY-MM-DD")
 
 
+def day_trades(j, day):
+    """The trades the day closed: what a new card is offered."""
+    return [t for t in j.trades if not t.is_open and t.closed
+            and t.closed.date() == day.date()]
+
+
 def day_pnl(j, day):
     """What the day gave by closed trades, offered in a new card."""
-    return sum(t.pnl or 0.0 for t in j.trades
-               if not t.is_open and t.closed and t.closed.date() == day.date())
+    return sum(t.pnl or 0.0 for t in day_trades(j, day))
+
+
+def assessment_rows(k, closed):
+    """The table of the paper: numbered lines of a trade and the mark it earned.
+
+    A card written by hand may carry more than the paper's rows, so every row
+    it has is drawn; a row left empty is dropped when the form comes back."""
+    listed = list(k.assessment) + [Graded() for _ in range(ASSESSMENT_ROWS)]
+    options = "".join(f'<option value="{esc(t.pair)} {esc(t.direction)}, '
+                      f'{t.closed:%d.%m}">' for t in closed)
+    body = "".join(
+        f'<tr><td class="muted">{n}.</td>'
+        f'<td><input type="text" name="assess_trade" list="assesstrades" '
+        f'style="width:100%" value="{esc(row.trade)}"></td>'
+        f'<td><input type="text" name="assess_grade" list="grades" '
+        f'style="width:90px" value="{esc(row.grade)}"></td></tr>'
+        for n, row in enumerate(listed[:max(ASSESSMENT_ROWS, len(k.assessment))], 1))
+    return (f'<h3>trades assessment</h3>'
+            f'<datalist id="assesstrades">{options}</datalist>'
+            f'<table><thead><tr><th style="width:24px"></th><th>trade</th>'
+            f'<th style="width:110px">grade</th></tr></thead>'
+            f'<tbody>{body}</tbody></table>')
+
+
+def read_assessment(data):
+    """The rows of the assessment table, the empty ones left out."""
+    grades = data.get("assess_grade", [])
+    rows = []
+    for n, text in enumerate(data.get("assess_trade", [])):
+        grade = grades[n] if n < len(grades) else ""
+        if text.strip() or grade.strip():
+            rows.append(Graded(trade=text.strip(), grade=grade.strip()))
+    return rows
 
 
 def cards_page():
@@ -1886,6 +1925,7 @@ def first_line(text, limit=90):
 def card_page(day):
     j = journal()
     k = store.load_card(ROOT, day)
+    closed = day_trades(j, day)
     is_new = k is None
     if is_new:
         k = Card(day=day, pnl=day_pnl(j, day) or None)
@@ -1921,6 +1961,7 @@ def card_page(day):
 {amount(j, day_pnl(j, day), signed=True)}. The field is yours to override.</p>
 </div>
 <div class="card">{sections}</div>
+<div class="card">{assessment_rows(k, closed)}</div>
 <div class="actions"><button class="btn primary">Save card</button>
 <a class="btn" href="/cards">Cancel</a>{delete}</div>
 </form>"""
@@ -1935,6 +1976,7 @@ def save_card(data):
     k.pnl = float(pnl.replace(",", ".")) if pnl else None
     for name, _, _ in CARD_SECTIONS:
         setattr(k, name, one(data, name))
+    k.assessment = read_assessment(data)
     old = store.load_card(ROOT, day)
     if old is not None and previous and previous != k.id:
         raise RecordError(f"there is a card for {k.id} already: open that one "
@@ -1968,27 +2010,6 @@ def week_trades(j, key):
 
 def week_dates(k):
     return f"{k.monday:%d.%m} - {k.monday + timedelta(days=6):%d.%m.%Y}"
-
-
-def assessment_rows(k, closed):
-    """The table of the paper: five numbered lines of a trade and its mark.
-
-    A card written by hand may carry more, so the rows it has are all drawn;
-    a row left empty is dropped when the form comes back."""
-    listed = list(k.assessment) + [Graded() for _ in range(WEEK_ROWS)]
-    options = "".join(f'<option value="{esc(t.pair)} {esc(t.direction)}, '
-                      f'{t.closed:%d.%m}">' for t in closed)
-    body = "".join(
-        f'<tr><td class="muted">{n}.</td>'
-        f'<td><input type="text" name="assess_trade" list="weektrades" '
-        f'style="width:100%" value="{esc(row.trade)}"></td>'
-        f'<td><input type="text" name="assess_grade" list="grades" '
-        f'style="width:90px" value="{esc(row.grade)}"></td></tr>'
-        for n, row in enumerate(listed[:max(WEEK_ROWS, len(k.assessment))], 1))
-    return (f'<h3>trades assessment</h3><datalist id="weektrades">{options}</datalist>'
-            f'<table><thead><tr><th style="width:24px"></th><th>trade</th>'
-            f'<th style="width:110px">grade</th></tr></thead>'
-            f'<tbody>{body}</tbody></table>')
 
 
 def week_page(key):
@@ -2051,17 +2072,6 @@ yours to override.</p>
 <a class="btn" href="/cards">Cancel</a>{delete}</div>
 </form>"""
     return page(f"Week {k.number}", body, "cards")
-
-
-def read_assessment(data):
-    """The rows of the assessment table, the empty ones left out."""
-    grades = data.get("assess_grade", [])
-    rows = []
-    for n, text in enumerate(data.get("assess_trade", [])):
-        grade = grades[n] if n < len(grades) else ""
-        if text.strip() or grade.strip():
-            rows.append(Graded(trade=text.strip(), grade=grade.strip()))
-    return rows
 
 
 def save_week(data):

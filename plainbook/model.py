@@ -180,6 +180,20 @@ class Plan:
         return self
 
 
+# --- the trades assessment -------------------------------------------------
+# Both report cards end with the same table: the trades of the period and the
+# mark each one earned, on numbered lines, as many as the paper has.
+
+ASSESSMENT_ROWS = 5
+
+
+@dataclass
+class Graded:
+    """One line of the trades assessment: a trade and the mark it earned."""
+    trade: str = ""
+    grade: str = ""
+
+
 # --- daily card ------------------------------------------------------------
 
 CARD_KEYS = [
@@ -214,6 +228,7 @@ class Card:
     errors: str = ""
     best: str = ""
     overview: str = ""
+    assessment: list = field(default_factory=list)   # [Graded]
     extra: dict = field(default_factory=dict)
 
     @property
@@ -223,7 +238,7 @@ class Card:
     @property
     def is_empty(self):
         return not any(getattr(self, name).strip()
-                       for name, _, _ in CARD_SECTIONS)
+                       for name, _, _ in CARD_SECTIONS) and not self.assessment
 
     def check(self):
         if self.day is None:
@@ -254,16 +269,7 @@ WEEK_SECTIONS = [
     ("lesson", "Key lesson", "key lesson of the week"),
 ]
 
-# rows of the trades assessment, as on paper
-WEEK_ROWS = 5
 _WEEK_ID = re.compile(r"^\d{4}-W\d{2}$")
-
-
-@dataclass
-class Graded:
-    """One line of the trades assessment: a trade and the mark it earned."""
-    trade: str = ""
-    grade: str = ""
 
 
 @dataclass

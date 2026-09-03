@@ -316,6 +316,33 @@ def text_to_plan(text):
     return k
 
 
+# --- the trades assessment: object <-> text ---------------------------------
+# Written the way the paper numbers it: "1. what was traded | grade".
+
+_ROW = re.compile(r"^\s*\d+[.)]\s*")
+
+
+def assessment_to_text(rows):
+    lines = []
+    for n, row in enumerate(rows, 1):
+        line = f"{n}. {row.trade}".rstrip()
+        lines.append(f"{line} | {row.grade}" if row.grade else line)
+    return "\n".join(lines)
+
+
+def text_to_assessment(text):
+    rows = []
+    for line in text.split("\n"):
+        line = _ROW.sub("", line).strip()
+        if not line:
+            continue
+        trade, _, grade = line.rpartition("|")
+        if not trade:
+            trade, grade = grade, ""
+        rows.append(Graded(trade=trade.strip(), grade=grade.strip()))
+    return rows
+
+
 # --- daily card: object <-> text -------------------------------------------
 
 def card_to_text(k):
@@ -335,6 +362,8 @@ def card_to_text(k):
         text = getattr(k, name).strip()
         if text:
             parts += [f"## {heading}", text]
+    if k.assessment:
+        parts += ["## Trades", assessment_to_text(k.assessment)]
     return mdfile.dump(head, "\n\n".join(parts))
 
 
@@ -352,14 +381,11 @@ def text_to_card(text):
     sections = _split_sections(body)
     for name, heading, _ in CARD_SECTIONS:
         setattr(k, name, sections.get(heading, "").strip())
+    k.assessment = text_to_assessment(sections.get("Trades", ""))
     return k
 
 
 # --- weekly card: object <-> text ------------------------------------------
-# The trades assessment is written as the paper numbers it: "1. what | grade".
-
-_ROW = re.compile(r"^\s*\d+[.)]\s*")
-
 
 def week_to_text(k):
     head = {"week": k.week}
@@ -380,11 +406,7 @@ def week_to_text(k):
         if text:
             parts += [f"## {heading}", text]
     if k.assessment:
-        lines = []
-        for n, row in enumerate(k.assessment, 1):
-            line = f"{n}. {row.trade}".rstrip()
-            lines.append(f"{line} | {row.grade}" if row.grade else line)
-        parts += ["## Trades", "\n".join(lines)]
+        parts += ["## Trades", assessment_to_text(k.assessment)]
     return mdfile.dump(head, "\n\n".join(parts))
 
 
@@ -405,21 +427,8 @@ def text_to_week(text):
     sections = _split_sections(body)
     for name, heading, _ in WEEK_SECTIONS:
         setattr(k, name, sections.get(heading, "").strip())
-    k.assessment = _parse_assessment(sections.get("Trades", ""))
+    k.assessment = text_to_assessment(sections.get("Trades", ""))
     return k
-
-
-def _parse_assessment(text):
-    rows = []
-    for line in text.split("\n"):
-        line = _ROW.sub("", line).strip()
-        if not line:
-            continue
-        trade, _, grade = line.rpartition("|")
-        if not trade:
-            trade, grade = grade, ""
-        rows.append(Graded(trade=trade.strip(), grade=grade.strip()))
-    return rows
 
 
 # --- files -----------------------------------------------------------------

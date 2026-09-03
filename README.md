@@ -58,15 +58,14 @@ only question worth asking of a plan.
 
 **A daily card.** The day reviewed on the pattern of a paper Daily Report Card:
 process grade, opportunity quality, focus, what went well, errors, best trade,
-overview. The day's PnL is filled in from the trades you closed, and stays
-editable.
+overview, and a trades assessment where the day's trades get their marks. The
+day's PnL is filled in from the trades you closed, and stays editable.
 
 **A weekly card.** The same on the pattern of a paper Weekly Report Card, one
 per trading week: process grade, opportunity quality, progress on the focus,
 the weekly process, what went well, errors, the best trade and the ones you
-missed, the key lesson, and the five lines of the trades assessment where the
-week's trades get their marks. The PnL and the number of trades come from the
-week you traded, and stay editable.
+missed, the key lesson, and the same trades assessment as the daily card. The
+PnL and the number of trades come from the week you traded, and stay editable.
 
 **Statistics that answer honest questions.** An equity curve per account, the
 distribution of R as two rings, losses and wins each cut by size, slices by

@@ -6,6 +6,11 @@ What changed and why. Newest first.
 
 ### New
 
+- **The daily card carries a trades assessment too.** The same numbered table
+  the weekly card has, on the daily one now: the trades of the day and the
+  mark each one earned, the field suggesting the pairs closed that day. It is
+  the same code and the same file section on both cards, so a search for a
+  trade by name finds it whichever card it was graded on.
 - **The weekly card.** The paper Weekly Report Card as it is, opened by the
   **+ WRC** button next to **+ DRC**: process grade, opportunity quality, the
   progress of the current focus from 1 to 5, the weekly process, what you
