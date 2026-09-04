@@ -116,9 +116,8 @@ to the record with the matching words shown around it.
 account adds up what today has already cost and what the open trades still put
 at risk, turns amber at four fifths of the limit and red when it is reached.
 
-**Streaks.** The run the selection is on now, on the front page; the longest
-runs of wins and of losses on the Statistics tab, counted in the order the
-trades closed.
+**Streaks.** The run the selection is on now and the longest runs of wins
+and of losses, on the Statistics tab, counted in the order the trades closed.
 
 **The selection as CSV.** One button next to the filters writes the filtered
 list into a file for a spreadsheet, with every stored field and the computed

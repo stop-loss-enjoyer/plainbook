@@ -431,21 +431,6 @@ def winrate_tile(name, styles, j, trades):
             f'<div class="sub">{sub}</div></div>')
 
 
-def streak_tile(j, trades):
-    """The run the selection is on now, and the longest runs it has had."""
-    best_win, best_loss, (kind, n) = stats.streaks(j, trades)
-    if not kind:
-        return ('<div class="tile"><div class="name">streak</div>'
-                '<div class="value muted">-</div>'
-                '<div class="sub muted">no decided trades</div></div>')
-    word = ("win" if n == 1 else "wins") if kind == "Win" else \
-           ("loss" if n == 1 else "losses")
-    return (f'<div class="tile"><div class="name">streak</div>'
-            f'<div class="value {"win" if kind == "Win" else "lose"}">{n} {word}'
-            f'</div><div class="sub">longest: {best_win} wins, {best_loss} losses'
-            f'</div></div>')
-
-
 def export_csv(j, trades):
     """The selection as a table for a spreadsheet: every stored field and the
     figures worked out from them, one trade per line."""
@@ -494,7 +479,7 @@ def home_page(q):
              + f'<div class="tile"><div class="name">total R</div>'
              f'<div class="value">{s.sum_r:+.2f}</div>'
              f'<div class="sub">EV {s.average_r:+.2f} R</div></div>'
-             + streak_tile(j, trades) + '</div>')
+             '</div>')
     today = datetime.now().strftime("%Y-%m-%d")
     # Building a report belongs on the Reports tab, where the form for it is.
     # The header is for what is written before the market, not after it.

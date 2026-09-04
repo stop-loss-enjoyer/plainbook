@@ -1013,9 +1013,10 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(e.exception.code, 404)
         e.exception.close()
 
-    def test_61_the_streak_is_on_the_front_page_and_the_statistics(self):
+    def test_61_the_streak_is_on_the_statistics_and_not_the_front_page(self):
+        # the first rows of the list already show the run; the tile said it twice
         _, html = self.get("/")
-        self.assertIn('<div class="name">streak</div>', html)
+        self.assertNotIn('<div class="name">streak</div>', html)
         _, html = self.get("/stats")
         self.assertIn("longest run of wins", html)
 

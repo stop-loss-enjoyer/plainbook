@@ -2,6 +2,23 @@
 
 What changed and why. Newest first.
 
+## Unreleased
+
+A sign for the journal, and the front page tidied.
+
+### Changed
+
+- **The journal has a sign**: a sheet of plain text with one candle on it,
+  in the header and on the browser tab. The name next to it is set in the
+  same monospaced face as the figures, in lower case. The tab you are on is
+  underlined in the accent instead of sitting in a grey box.
+- **The streak tile is gone from the front page.** It stood alone on a
+  second row of the summary, with a grey strip beside it, and it said what
+  the first rows of the list already show. The Statistics tab keeps the
+  streaks card as it was.
+- **A place in the summary grid with no tile in it is plain surface**, not a
+  grey block: the grid used to show its own background through the gaps.
+
 ## v1.4.7, 03.09.2026
 
 The trash reads the same on every disk, and two tests that failed on some

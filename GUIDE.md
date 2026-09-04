@@ -191,9 +191,7 @@ and both kinds are stored side by side in `journal/cards`.
 - **Open positions**: what is in the market right now, with the risk in money
   and a Close button.
 - **Summary tiles**: the current period, the size of the selection, the
-  winrates with the **EV** to the right of each, the total R and the **streak**: the run the selection is on now,
-  with the longest runs of wins and of losses under it. Runs are counted in
-  the order the trades closed; a break-even neither extends one nor breaks it.
+  winrates with the **EV** to the right of each, and the total R.
 - **The current period** counts the trades that closed in it, the way a broker
   states a week and the cards count a day. The list under it groups by entry,
   so a trade held over a weekend stands in last week's group and in this

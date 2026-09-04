@@ -10,6 +10,7 @@ been checked for colour blindness on a dark surface.
 import html as _html
 import json
 import math
+from urllib.parse import quote as _quote
 from datetime import timedelta
 
 from . import flags
@@ -39,6 +40,28 @@ WIN_STEPS = ["#2a7d55", "#37996a", "#4ab882", "#66d29c", "#93e6bd"]
 MONO = ('ui-monospace,"JetBrains Mono","CaskaydiaMono Nerd Font",'
         'SFMono-Regular,Menlo,Consolas,monospace')
 
+
+def mark(size=20, ink=INK, accent=ACCENT):
+    """The sign of the journal: a sheet of plain text with one candle on it.
+
+    The sheet is the file every record lives in, the candle is what the file
+    is about. Drawn in two colours of the palette and nothing else, so it
+    sits in the header without asking for attention."""
+    return (f'<svg class="mark" viewBox="0 0 20 20" width="{size}" height="{size}" '
+            f'fill="none" stroke-width="1.6" stroke-linejoin="round" '
+            f'stroke-linecap="round" aria-hidden="true">'
+            f'<path d="M4.5 2.5h7.5l3.5 3.5v11.5h-11z" stroke="{ink}"/>'
+            f'<path d="M12 2.5V6h3.5" stroke="{ink}"/>'
+            f'<path d="M10 6.8v1.8M10 13.8v1.8" stroke="{accent}" stroke-width="1.3"/>'
+            f'<rect x="8" y="8.6" width="4" height="5.2" rx=".7" fill="{accent}"/>'
+            f'</svg>')
+
+
+# the tab icon is the same sign on the page ground, inlined as a data URL:
+# a favicon fetched from a file would be the one request the page makes
+FAVICON = "data:image/svg+xml," + _quote(
+    mark(32).replace('class="mark" ', "").replace("<svg ", f'<svg style="background:{GROUND}" ', 1))
+
 CSS = f"""
 *{{box-sizing:border-box}}
 /* the date picker and the select drop-downs are drawn by the browser itself:
@@ -52,18 +75,24 @@ a{{color:{ACCENT};text-decoration:none}}
 a:hover{{color:#9ab9ff}}
 .wrap{{max-width:1460px;margin:0 auto;padding:0 20px 56px}}
 
-/* header */
-header{{display:flex;align-items:center;gap:22px;flex-wrap:wrap;
+/* header: the sign, the name, the tabs; 48px tall, and the table heads
+   below know that number */
+header{{display:flex;align-items:stretch;gap:18px;flex-wrap:wrap;
  position:sticky;top:0;z-index:8;background:{GROUND};
- border-bottom:1px solid {EDGE};padding:12px 0 10px;margin-bottom:18px}}
-header .logo{{font-weight:600;letter-spacing:.04em;font-size:13px;
- text-transform:uppercase;color:{INK}}}
-header .logo:hover{{color:{ACCENT}}}
-header nav{{display:flex;gap:2px}}
-header nav a{{color:{DIM};padding:4px 9px;border-radius:4px;
- font-size:12px;letter-spacing:.02em}}
-header nav a:hover{{color:{INK2};background:{SURFACE}}}
-header nav a.current{{color:{INK};background:{RAISED}}}
+ border-bottom:1px solid {EDGE};min-height:49px;margin-bottom:18px}}
+header .logo{{display:inline-flex;align-items:center;gap:9px;color:{INK};
+ font:600 15px/1 {MONO};letter-spacing:-.02em;padding-right:4px}}
+header .logo .mark{{display:block}}
+header .logo:hover{{color:{INK}}}
+header .logo:hover .mark path,header .logo:hover .mark rect{{stroke:{ACCENT}}}
+header .logo:hover .mark rect{{fill:{ACCENT}}}
+header .logo:hover .mark path[stroke="{ACCENT}"]{{stroke:{ACCENT}}}
+header nav{{display:flex;gap:2px;align-items:stretch}}
+header nav a{{display:inline-flex;align-items:center;color:{DIM};padding:0 10px;
+ font-size:12px;letter-spacing:.02em;border-bottom:2px solid transparent;
+ margin-bottom:-1px}}
+header nav a:hover{{color:{INK2}}}
+header nav a.current{{color:{INK};border-bottom-color:{ACCENT}}}
 header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 
 /* buttons */
@@ -102,15 +131,19 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 .switch a:hover{{color:{INK};background:{SURFACE}}}
 .switch a.current{{color:{INK};background:{RAISED};font-weight:600}}
 
-/* tiles */
+/* tiles. Each tile draws its own right and bottom line and hangs 1px over
+   the neighbour, so the frame clips the last ones: a place in the grid with
+   no tile in it is plain surface, not a grey block */
 .tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(184px,1fr));
- gap:1px;background:{EDGE};border:1px solid {EDGE};border-radius:5px;
+ background:{SURFACE};border:1px solid {EDGE};border-radius:5px;
  overflow:hidden;margin-bottom:16px}}
 /* accounts are not stretched across the screen: there are two of them, and a
    full-width strip would read as an empty table */
 .tiles.narrow{{display:flex;flex-wrap:wrap;width:fit-content;max-width:100%}}
 .tiles.narrow .tile{{min-width:236px;flex:0 0 auto}}
-.tile{{background:{SURFACE};padding:11px 14px 12px}}
+.tile{{background:{SURFACE};padding:12px 15px 13px;
+ border-right:1px solid {EDGE};border-bottom:1px solid {EDGE};
+ margin:0 -1px -1px 0}}
 .tile .name{{color:{DIM};font-size:10px;text-transform:uppercase;
  letter-spacing:.09em}}
 .tile .value{{font:600 22px/1.15 {MONO};margin-top:5px;
@@ -360,11 +393,12 @@ def page(title, body, tab="journal", header_right="", notice="", said=""):
         for code, href, name in links)
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>{"Plainbook" if title == "Journal"
-          else "Plainbook: " + esc(title)}</title><style>{CSS}</style>
+          else "Plainbook: " + esc(title)}</title>
+<link rel="icon" href="{FAVICON}"><style>{CSS}</style>
 <script>{HOVER}{PAGE_SCRIPT}</script></head><body>
 {flags.SPRITE}{said}
 <div class="wrap">
-<header><a href="/" class="logo" title="the journal">Plainbook</a><nav>{nav}</nav>
+<header><a href="/" class="logo" title="the journal">{mark(22)}plainbook</a><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
 {notice}{body}
 </div>
