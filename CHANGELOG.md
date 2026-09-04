@@ -29,6 +29,11 @@ A sign for the journal, and the front page tidied.
   dot, and the dashed line steps with it, so a deposit is not read as a big
   win and a withdrawal does not paint the account red; the tip says what it
   was.
+- **A trade is duplicated on as many accounts as you like.** The block on
+  the new trade form used to offer one other account; it lists every live
+  account now, each with a tick and a risk of its own, and the risk starts
+  at that of your last trade on the account. The account the trade itself
+  is on is not offered.
 - **The curve can be read by trade.** A switch above the picture puts one
   step per closed trade instead of the calendar, so a quiet month no longer
   stretches the line and a busy day no longer squeezes it.

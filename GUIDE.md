@@ -36,7 +36,7 @@ who was right. In hindsight an idea always looks tidier than it was.
 - **risk, %**: the risk as a percent of the current computed balance of the
   account. What that is in money shows on the trade page once it is saved. The field starts at the risk of your last
   trade on that account and follows the account until you type a figure
-  yourself; the duplicate's risk follows its own account the same way.
+  yourself; a duplicate's risk starts at the last trade of its own account.
 - **entry**: date and time of entry; clicking the field opens a calendar.
 - **plan**: the trading plan this trade follows, picked from the plans you have
   written. Left at "-" if the trade belongs to none.
@@ -50,13 +50,14 @@ another one when the idea rests on several timeframes.
 on the clipboard goes in: a shot from TradingView, a cut of the screen. To take
 a screenshot out, press the cross in its top right corner.
 
-**Duplicate on another account** is for the same position taken twice, for
-example on the exchange and on a prop account. Open the block, pick the second
-account and the risk it carries there, and **Open trade** writes two trades: the
-one you filled in, and a copy of it on that account. They carry the same pair,
+**Duplicate on other accounts** is for the same position taken on several
+accounts, for example on the exchange and on two prop accounts. Open the block:
+every live account has a row, except the one the trade itself is on. Tick the
+accounts and set the risk each carries, and **Open trade** writes the trade you
+filled in and a copy of it on every ticked account. They carry the same pair,
 direction, style, entry, idea text and screenshots, and differ only in the
 account and the risk, so each is measured against its own balance. After that
-they are two ordinary trades: each is closed with its own result and PnL.
+they are ordinary trades: each is closed with its own result and PnL.
 
 **Open trade** saves it. The position counts as open until it is closed.
 

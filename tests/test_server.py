@@ -612,12 +612,18 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/report/2026-07")
         self.assertNotIn("write it in the browser", html)
 
-    def test_35_a_trade_is_duplicated_on_a_second_account(self):
-        """One form, two trades: the same idea, another account, another risk."""
+    def test_35_a_trade_is_duplicated_on_the_ticked_accounts(self):
+        """One form, three trades: the same idea, an account and a risk each."""
         self.post("/account/new", {"id": "prop-100k", "name": "prop 100k",
                                    "start": "100000", "currency": "USD"})
+        self.post("/account/new", {"id": "prop-50k", "name": "prop 50k",
+                                   "start": "50000", "currency": "USD"})
         _, html = self.get("/new")
-        self.assertIn("Duplicate on another account", html)
+        self.assertIn("Duplicate on other accounts", html)
+        # every live account has a row, the trade's own is taken away on screen
+        self.assertIn('data-account="prop-100k"', html)
+        self.assertIn('data-account="prop-50k"', html)
+        self.assertIn('data-account="broker"', html)
         token = self.form_token(html)
         shot = self.paste_shot(token, "idea-1")
         before = {t.id for t in store.all_trades(self.root)}
@@ -627,16 +633,19 @@ class ServerCase(unittest.TestCase):
             "risk": "2", "entry": "2026-08-30T09:00", "idea_tf_1": "H4",
             "idea_text_1": "range high, selling the sweep",
             "file_idea-1": shot["file"],
-            "dup_account": "prop-100k", "dup_risk": "0.5"})
+            "dup": ["prop-100k", "prop-50k"],
+            "dup_risk_prop-100k": "0.5", "dup_risk_prop-50k": "0.25",
+            "dup_risk_broker": "9"})
         self.assertEqual(code, 200)
         fresh = [t for t in store.all_trades(self.root) if t.id not in before]
-        self.assertEqual(len(fresh), 2)
+        self.assertEqual(len(fresh), 3)
         origin = next(t for t in fresh if t.account == "broker")
-        copy = next(t for t in fresh if t.account == "prop-100k")
+        copies = {t.account: t for t in fresh if t.account != "broker"}
         self.assertEqual(self.landed(where), origin.id)  # opens the one entered
         self.assertEqual(origin.risk, 2)
-        self.assertEqual(copy.risk, 0.5)
-        for t in (origin, copy):
+        self.assertEqual(copies["prop-100k"].risk, 0.5)
+        self.assertEqual(copies["prop-50k"].risk, 0.25)
+        for t in fresh:
             self.assertEqual(t.pair, "GBPUSD")
             self.assertEqual(t.direction, "short")
             self.assertEqual(t.idea[0].text, "range high, selling the sweep")
@@ -644,23 +653,17 @@ class ServerCase(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(
                 store.shots_dir(self.root, t.id), "idea-01-01.png")))
 
-    def test_36_a_duplicate_on_the_same_account_is_refused(self):
+    def test_36_a_tick_on_the_trades_own_account_writes_nothing_twice(self):
         _, html = self.get("/new")
         token = self.form_token(html)
         before = len(store.all_trades(self.root))
-        data = urllib.parse.urlencode({
+        code, _ = self.post("/new", {
             "token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
             "direction": "long", "style": "swing", "risk": "1",
             "entry": "2026-08-30T11:00", "idea_text_1": "no",
-            "dup_account": "broker", "dup_risk": "1"}).encode()
-        req = urllib.request.Request(self.url("/new"), data=data)
-        try:
-            urllib.request.urlopen(req)
-            self.fail("two trades on one account went through")
-        except urllib.error.HTTPError as e:
-            self.assertEqual(e.code, 400)
-            e.close()
-        self.assertEqual(len(store.all_trades(self.root)), before)
+            "dup": "broker", "dup_risk_broker": "1"})
+        self.assertEqual(code, 200)
+        self.assertEqual(len(store.all_trades(self.root)), before + 1)
 
     def test_37_the_trade_form_lists_are_edited_on_the_accounts_tab(self):
         """Styles, timeframes and execution formats belong to the owner."""

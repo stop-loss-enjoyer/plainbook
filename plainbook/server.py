@@ -1006,8 +1006,44 @@ function follow_account(selectName, inputName){
   });
 }
 follow_account('account', 'risk');
-follow_account('dup_account', 'dup_risk');
+// the account of the trade itself is not offered a copy: its row goes away
+// when it is picked above and comes back when another is
+function hide_own_row(){
+  const own = document.querySelector('[name=account]').value;
+  document.querySelectorAll('.dup-row').forEach(row => {
+    row.hidden = row.dataset.account === own;
+  });
+}
+document.querySelector('[name=account]').addEventListener('change', hide_own_row);
+hide_own_row();
 """
+
+
+def duplicate_block(accounts, risks, names):
+    """The same position taken on several accounts is entered once. Every
+    live account gets a row: tick it and the journal writes a copy there, with
+    the idea and the screenshots of the trade and a risk of its own, which is
+    the only thing that differs in real life too. The row of the account the
+    trade itself is on is hidden by the script and ignored by the server."""
+    rows = "".join(
+        f'<tr class="dup-row" data-account="{esc(a)}"><td>'
+        f'<label style="display:flex;align-items:center;gap:8px;margin:0;'
+        f'text-transform:none;letter-spacing:0;font-size:13px;color:inherit">'
+        f'<input type="checkbox" name="dup" value="{esc(a)}"> '
+        f'{esc(names.get(a) or a)}</label></td>'
+        f'<td class="num"><input type="number" name="dup_risk_{esc(a)}" step="any" '
+        f'min="0.01" style="width:90px" value="{risks.get(a, 1.0):g}"></td></tr>'
+        for a in accounts)
+    return f"""
+<details class="fold" style="margin-top:14px">
+<summary>Duplicate on other accounts
+<span class="caption">same idea and screenshots, a risk of its own on each</span></summary>
+<table style="width:auto"><thead><tr><th>account</th><th class="num">risk, %</th></tr></thead>
+<tbody>{rows}</tbody></table>
+<p class="caption" style="margin:8px 0 0">Tick an account and the journal writes
+a copy of this trade there, with the risk set on its row. The risk starts at
+that of your last trade on the account.</p>
+</details>"""
 
 
 def trade_form(t=None, token=""):
@@ -1057,20 +1093,8 @@ def trade_form(t=None, token=""):
     # The same position taken on two accounts is entered once. The copy repeats
     # the idea and the screenshots and differs only in the account and the risk,
     # which is the only thing that differs in real life too.
-    duplicate = "" if editing else f"""
-<details class="fold" style="margin-top:14px">
-<summary>Duplicate on another account
-<span class="caption">same idea and screenshots, its own risk</span></summary>
-<div class="fields">
-<div class="field"><label>account</label>
-{select("dup_account", accounts, "", empty="-")}</div>
-<div class="field"><label>risk, %</label>
-<input type="number" name="dup_risk" step="any" min="0.01" style="width:90px"
- value="1"></div>
-</div>
-<p class="caption" style="margin:8px 0 0">Pick an account and the journal writes
-two trades: this one, and a copy on that account with the risk set here.</p>
-</details>"""
+    duplicate = "" if editing else duplicate_block(
+        accounts, risks, {a: j.accounts[a].name for a in accounts})
     # For a closed trade the exit and the conclusions are edited here too,
     # or editing the idea would wipe their screenshots: the shots folder is
     # rewritten from whatever the form sent.
@@ -1379,18 +1403,24 @@ def build_trade(data, token, account="", risk=None):
 
 
 def create_trade(data):
-    """One trade, or two when an account for a duplicate was picked.
+    """One trade, and a copy on every other account that was ticked.
 
-    The copy is written before the drafts are swept, so both trades get the
-    screenshots that were pasted into the form."""
+    The copies are written before the drafts are swept, so every trade gets
+    the screenshots that were pasted into the form. A tick on the account of
+    the trade itself is ignored: that trade is already being written."""
     token = one(data, "token")
-    twin = one(data, "dup_account")
-    if twin and twin == one(data, "account"):
-        raise RecordError("the duplicate needs an account of its own")
+    j = journal()
+    twins = []
+    for a in data.get("dup", []):
+        if a == one(data, "account") or a in twins:
+            continue
+        if a not in j.accounts:
+            raise RecordError(f"no account {a} to duplicate on")
+        twins.append(a)
     t = build_trade(data, token)
-    if twin:
-        risk = one(data, "dup_risk")
-        build_trade(data, token, account=twin,
+    for a in twins:
+        risk = one(data, f"dup_risk_{a}")
+        build_trade(data, token, account=a,
                     risk=float(risk.replace(",", ".")) if risk else t.risk)
     drop_draft(token)
     drop_cache()
