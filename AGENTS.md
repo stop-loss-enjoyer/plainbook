@@ -71,6 +71,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `tools/check_public.py` | the guard that keeps records out of the repository |
 | `tools/check_journal.py` | loads every record the way the server does and names the ones that do not read |
 | `tools/demo_journal.py` | an invented journal for screenshots and for looking at a change |
+| `tools/import_csv.py` | old trades brought in from a CSV table (a Notion export, a spreadsheet), written as the interface writes them |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
 reports, balances, store → model → mdfile`. Nothing points back up. If you find

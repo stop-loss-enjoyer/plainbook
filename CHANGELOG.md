@@ -34,6 +34,13 @@ A sign for the journal, and the front page tidied.
   account now, each with a tick and a risk of its own, and the risk starts
   at that of your last trade on the account. The account the trade itself
   is on is not offered.
+- **Old trades can be brought in from a table.** `tools/import_csv.py`
+  reads the CSV that Notion or a spreadsheet exports, takes the names of the
+  columns as options, checks every row before writing anything and writes
+  the trades the way the interface would, with their screenshots when the
+  table names the files. A second run skips what is already there. The
+  summary prints counts and sums only. INSTALL.md gained the step where the
+  person is asked whether there is a history to bring in.
 - **The curve can be read by trade.** A switch above the picture puts one
   step per closed trade instead of the calendar, so a quiet month no longer
   stretches the line and a busy day no longer squeezes it.

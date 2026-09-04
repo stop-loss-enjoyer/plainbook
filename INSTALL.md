@@ -147,5 +147,23 @@ Pasting a screenshot is the one place where browser script does the work: if
 something breaks, it usually breaks there. Check it by hand, because the tests go
 around the browser on that path.
 
+## Moving old trades in
+
+Once the check is done, ask them one question: did they keep trades somewhere
+before, in Notion, in a spreadsheet, in another app, and do they want that
+history here, so the statistics count from the first day? "No" is a fine
+answer, and the journal starts with what they enter from now on. "Yes" is the
+job of `tools/import_csv.py`: they export the old journal as CSV, you map its
+columns to the fields of a trade, the tool writes the trades the way the
+interface would, and the balance is then reconciled with the broker on the
+Accounts tab. Run `python3 tools/import_csv.py --help` for the columns it takes,
+and mind the one difference from step 6 above: for an import, the start balance
+of an account is the balance it had before the first old trade, not the balance
+today, and the difference to today is written as a correction afterwards.
+
+You need the header line of their table, nothing more. Do not read the rows,
+and do not ask for them: the tool prints only counts and sums, and that is
+what you check against the old journal.
+
 When you are done, read [CLAUDE.md](CLAUDE.md), the rules for living with the
 journal afterwards.
