@@ -20,8 +20,8 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import stats, store
-from plainbook.model import (Account, Card, Graded, IdeaBlock, Plan, Trade,
-                             Week)
+from plainbook.model import (Account, Adjustment, Card, Graded, IdeaBlock,
+                             Plan, Trade, Week)
 
 ACCOUNTS = [Account(id="broker", name="broker", start_balance=10000),
             Account(id="prop-100k", name="prop 100k", start_balance=100000)]
@@ -108,6 +108,13 @@ def build(root, days=40):
         direction="short", style="EMT", entry_tf="H1", risk=1.0,
         opened=open_day, opened_time=True, plan=plan.id,
         idea=[IdeaBlock(tf="H1", text=IDEAS[0])]))
+
+    # one deposit half way, so that the equity curve has a hollow dot and a
+    # step in its base line to show
+    topped = start + timedelta(days=days // 2)
+    store.save_adjustment(root, Adjustment(
+        id=f"{topped:%Y-%m-%d}-deposit-broker", account="broker", kind="deposit",
+        amount=300, day=topped.replace(hour=0, minute=0), comment="top up"))
 
     store.save_card(root, Card(
         day=today, grade="B", quality="B", pnl=174.0,

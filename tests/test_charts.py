@@ -106,6 +106,44 @@ class EquityTipCase(unittest.TestCase):
         self.assertIn('"sign": "€"', svg)
 
 
+class EquityAxesCase(unittest.TestCase):
+    def test_the_ticks_are_round(self):
+        from plainbook.html import count_step, date_ticks, nice_step
+        self.assertEqual(nice_step(1877), 500)
+        self.assertEqual(nice_step(90), 20)
+        self.assertEqual(count_step(16), 5)
+        self.assertEqual(count_step(160), 50)
+        # a few weeks tick on Mondays, a year ticks on the first of the month
+        ticks = date_ticks(datetime(2026, 8, 5), datetime(2026, 9, 4))
+        self.assertEqual([d.weekday() for d, _ in ticks], [0, 0, 0, 0])
+        self.assertEqual(ticks[0][1], "10.08")
+        ticks = date_ticks(datetime(2025, 10, 3), datetime(2026, 9, 4))
+        self.assertTrue(all(d.day == 1 for d, _ in ticks))
+        self.assertLessEqual(len(ticks), 8)
+        self.assertEqual(ticks[0][1], "11.2025")
+
+    def test_by_trade_an_adjustment_takes_no_step(self):
+        from plainbook.html import equity_svg
+        from plainbook.model import Adjustment
+        deposit = Adjustment(id="a", account="acc", kind="deposit", amount=50,
+                             day=datetime(2026, 7, 2))
+        pts = [(datetime(2026, 7, 1), 100.0, "start"),
+               (datetime(2026, 7, 1), 110.0, None),
+               (datetime(2026, 7, 2), 160.0, deposit),
+               (datetime(2026, 7, 3), 150.0, None)]
+        svg = equity_svg([("acc", "#fff", pts)], base=100.0, axis="trade")
+        # the deposit shares the x of the trade before it and is marked
+        self.assertIn('"trade 1 ', svg)
+        self.assertIn("deposit +50", svg)
+        self.assertIn('r="3.5"', svg)
+        # the end label: 150, and the deposit is not a result, so +0 from 150
+        self.assertIn("+0</text>", svg)
+        self.assertIn('stroke-dasharray="3 4"', svg)
+        # the tip: 110 is +10 from the start, 160 is +10 from the raised base
+        self.assertIn("110, '', 10]".replace("'", '"'), svg)
+        self.assertIn('160, "deposit +50", 10]', svg)
+
+
 class RSplitCase(unittest.TestCase):
     def setUp(self):
         self.accounts = {"broker": Account(id="broker", start_balance=10000)}

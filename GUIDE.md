@@ -256,6 +256,19 @@ above picks a single account and applies to the tables below as well. Archived
 accounts are not drawn: the account is done with and there is nothing left to
 watch. Their trades stay in every figure underneath.
 
+The dashed line across the picture is the balance the curve starts from: the
+opening balance of the account, or the balance it entered the first month of
+the filter with. The wash under the curve is green above that line and red
+below it, so which side of the start the account is on is read before a single
+number is. A hollow dot on the curve is money that moved outside a trade: a
+deposit, a withdrawal, a fee. The dashed line steps with it, up at a deposit
+and down at a withdrawal, so the wash stays what the trading did and taking
+money out does not paint the account red. The numbers at the end of the line
+are the balance now and how far it is from that line. The switch on the right reads the curve
+**by date** or **by trade**, one step per closed trade, which is how an equity
+curve is usually looked at: the calendar stretches a quiet month and squeezes a
+busy day, and by trade every trade takes the same room.
+
 The line is drawn softly, but it never invents a high or a low: the curve is
 bent only between the points it has. A peak on the picture is a peak that
 happened. Trades closed on the same day are laid out across that day in the

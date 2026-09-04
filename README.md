@@ -69,7 +69,8 @@ the weekly process, what went well, errors, the best trade and the ones you
 missed, the key lesson, and the same trades assessment as the daily card. The
 PnL and the number of trades come from the week you traded, and stay editable.
 
-**Statistics that answer honest questions.** An equity curve per account, the
+**Statistics that answer honest questions.** An equity curve per account, by
+date or by trade, coloured against the balance it started from, the
 distribution of R as two rings, losses and wins each cut by size, slices by
 style, pair and account with the EV of every row, and a monthly or quarterly report built on a button,
 with the figures recomputed and your conclusions kept. A report carries the

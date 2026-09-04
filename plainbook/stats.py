@@ -164,26 +164,39 @@ def equity(journal, account_id=None, trades=None, since=None):
     balance the account had in August, not at the day it was opened. From
     `since` on only the chosen trades move the line, so a selection by style
     or by pair draws what those trades alone did to the account."""
-    if trades is None and since is None:
-        return journal.equity(account_id)
+    return [(day, balance) for day, balance, what in
+            equity_events(journal, account_id, trades, since) if what != "start"]
+
+
+def equity_events(journal, account_id=None, trades=None, since=None):
+    """The equity walk with a word on what moved each point.
+
+    Every point is (date, balance, what): `what` is None for a trade, the
+    Adjustment for money that moved outside a trade, "start" for the opening
+    balance placed before the first event, or "since" for the balance the
+    period was entered with. The chart marks the adjustments, so that a
+    deposit is not read as a big win; the balances are the ones of `equity`."""
     chosen = None if trades is None else {t.id for t in trades}
     start = sum(acc.start_balance for a, acc in journal.accounts.items()
                 if account_id in (None, a))
-    events = [(c.day, c.amount) for c in journal.adjustments
+    events = [(c.day, c.amount, c) for c in journal.adjustments
               if account_id in (None, c.account)]
-    events += [(t.closed, t.pnl or 0.0) for t in journal.trades
+    events += [(t.closed, t.pnl or 0.0, None) for t in journal.trades
                if not t.is_open and t.closed
                and (chosen is None or t.id in chosen
                     or (since is not None and t.closed < since))
                and account_id in (None, t.account)]
     events.sort(key=lambda e: e[0])
     points, b = [], start
-    for day, amount in events:
-        if since is not None and day >= since and not points:
-            points.append((since, b))    # what the period was entered with
+    for day, amount, what in events:
+        if not points:
+            if since is None:
+                points.append((day, b, "start"))
+            elif day >= since:
+                points.append((since, b, "since"))
         b += amount
         if since is None or day >= since:
-            points.append((day, b))
+            points.append((day, b, what))
     return points
 
 

@@ -18,6 +18,20 @@ A sign for the journal, and the front page tidied.
   streaks card as it was.
 - **A place in the summary grid with no tile in it is plain surface**, not a
   grey block: the grid used to show its own background through the gaps.
+- **The equity curve says which side of the start it is on.** A dashed line
+  marks the balance the curve starts from, and the wash under the curve is
+  green above that line and red below it. The scale is in round numbers
+  (10 000, 10 500) instead of the edges of the data, the dates are Mondays or
+  the first of the month instead of four arbitrary days, and the end of the
+  line carries the balance and its distance from the start instead of the
+  name that already stands above the picture.
+- **Money that moved outside a trade is marked on the curve** with a hollow
+  dot, and the dashed line steps with it, so a deposit is not read as a big
+  win and a withdrawal does not paint the account red; the tip says what it
+  was.
+- **The curve can be read by trade.** A switch above the picture puts one
+  step per closed trade instead of the calendar, so a quiet month no longer
+  stretches the line and a busy day no longer squeezes it.
 
 ## v1.4.7, 03.09.2026
 

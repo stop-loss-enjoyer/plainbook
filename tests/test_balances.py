@@ -218,6 +218,25 @@ class StreaksAndPeriods(unittest.TestCase):
         points = stats.equity(j, "broker", [j.trades[2]], since)
         self.assertEqual([b for _, b in points], [11500, 11800])
 
+    def test_equity_events_say_what_moved_each_point(self):
+        from plainbook import stats
+        j = Journal(self.accounts, [
+            trade("t1", (2026, 7, 1), pnl=500, result="Win", closed=(2026, 7, 2)),
+            trade("t2", (2026, 8, 1), pnl=-200, result="Lose", closed=(2026, 8, 2)),
+        ], [Adjustment(id="a", account="broker", kind="deposit", amount=1000,
+                       day=datetime(2026, 7, 15))])
+        points = stats.equity_events(j, "broker")
+        # the opening balance stands before the first event, on its day
+        self.assertEqual(points[0], (datetime(2026, 7, 2), 10000, "start"))
+        self.assertEqual([b for _, b, _ in points], [10000, 10500, 11500, 11300])
+        self.assertEqual([w for _, _, w in points][1:],
+                         [None, j.adjustments[0], None])
+        # the balances are the ones of equity, whatever the tags say
+        self.assertEqual(stats.equity(j, "broker"), j.equity("broker"))
+        since = datetime(2026, 8, 1)
+        self.assertEqual(stats.equity_events(j, "broker", None, since)[0],
+                         (since, 11500, "since"))
+
     def test_the_currency_is_the_accounts_own_or_the_shared_one(self):
         accounts = {"a": Account(id="a", currency="USD"),
                     "b": Account(id="b", currency="EUR"),

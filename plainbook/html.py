@@ -577,81 +577,268 @@ def spread_days(points):
     return out
 
 
-def equity_svg(series, width=980, height=260, cid="equity", sign="$"):
-    """Equity lines with hovering. series: [(name, colour, [(date, value)])].
-    `sign` is the currency the tip names next to a balance.
+def nice_step(span, target=5):
+    """A round step for the ticks of an axis: 1, 2, 2.5 or 5 times a power
+    of ten, the largest that gives about `target` steps over the span."""
+    if span <= 0:
+        return 1.0
+    raw = span / target
+    mag = 10 ** math.floor(math.log10(raw))
+    for m in (1, 2, 2.5, 5, 10):
+        if m * mag >= raw:
+            return m * mag
+    return 10 * mag
+
+
+def count_step(n, target=6):
+    """The same for a count of trades, where 2.5 makes no sense."""
+    if n <= 0:
+        return 1
+    raw = n / target
+    mag = 10 ** math.floor(math.log10(raw))
+    for m in (1, 2, 5, 10):
+        if m * mag >= raw:
+            return max(1, int(m * mag))
+    return max(1, int(10 * mag))
+
+
+def _next_month(d):
+    return (d.replace(day=1) + timedelta(days=32)).replace(day=1)
+
+
+def date_ticks(x0, x1):
+    """Where the calendar puts the ticks of a time axis: every day over a few
+    days, Mondays over a few weeks, the first of the month otherwise, and no
+    more than eight of them.
+
+    Returns [(datetime, label)]. The labels are dates with no year while the
+    ticks are days, and month and year once they are months."""
+    days = (x1 - x0).days
+    midnight = x0.replace(hour=0, minute=0, second=0, microsecond=0)
+    if days <= 10:
+        d = midnight if midnight >= x0 else midnight + timedelta(days=1)
+        step = timedelta(days=1)
+    elif days <= 70:
+        d = midnight + timedelta(days=(7 - midnight.weekday()) % 7)
+        step = timedelta(days=7)
+    else:
+        d = midnight.replace(day=1)
+        if d < x0:
+            d = _next_month(d)
+        months = []
+        while d <= x1:
+            months.append(d)
+            d = _next_month(d)
+        k = max(1, math.ceil(len(months) / 8))
+        return [(m, m.strftime("%m.%Y")) for i, m in enumerate(months) if i % k == 0]
+    ticks = []
+    while d <= x1:
+        ticks.append((d, d.strftime("%d.%m")))
+        d += step
+    if len(ticks) > 8:
+        k = math.ceil(len(ticks) / 8)
+        ticks = [t for i, t in enumerate(ticks) if i % k == 0]
+    return ticks
+
+
+def _what(tag):
+    """The words for a point that is not a trade: what moved the money."""
+    if tag in (None, "start", "since"):
+        return ""
+    amount = getattr(tag, "amount", 0.0)
+    return f"{getattr(tag, 'kind', 'adjustment')} {money(amount, signed=True)}"
+
+
+def equity_svg(series, width=980, height=260, cid="equity", sign="$",
+               base=None, base_word="from start", axis="date"):
+    """An equity line with hovering. series: [(name, colour, points)], a point
+    being (date, value) or (date, value, what) as `stats.equity_events` gives
+    them. `sign` is the currency the tip names next to a balance.
+
+    `base` is the balance the account started from (or entered the period
+    with): a dashed line across the picture, and the wash under the curve is
+    green above it and red below it, so which side of the start the account
+    is on is read before a single number is. Money that moved outside a
+    trade moves the line with it: a deposit steps it up, a withdrawal steps
+    it down, so the wash and the figure at the end of the curve are what the
+    trading did and a withdrawal does not paint the account red. Without a
+    base the first point serves as one.
+
+    `axis` is "date" or "trade": on the calendar, or one step per closed
+    trade, which is how an equity curve is usually read. Money that moved
+    outside a trade takes no step of its own there and stands as a vertical
+    edge, marked with a hollow dot in both modes.
 
     Only like quantities share a picture: accounts go on one chart, the total
     on its own. There are never two scales in one image.
     """
-    series = [(name, colour, spread_days(pts))
-              for name, colour, pts in series if len(pts) > 1]
-    if not series:
+    drawn = []
+    for name, colour, pts in series:
+        pts = [(p[0], p[1], p[2] if len(p) > 2 else None) for p in pts]
+        if len(pts) < 2:
+            continue
+        if axis == "trade":
+            # an adjustment moves the balance, not the count: it shares the x
+            # of the trade before it, and the step is upright
+            xs, n = [], 0
+            for day, value, what in pts:
+                if what is None:
+                    n += 1
+                xs.append(n)
+        else:
+            spread = spread_days([(d, v) for d, v, _ in pts])
+            xs = [d for d, _ in spread]
+        drawn.append((name, colour, pts, xs))
+    if not drawn:
         return '<p class="muted">Nothing to plot yet.</p>'
-    pad = (56, 14, 26, 92)                        # left, top, bottom, right
-    every = [(d, v) for _, _, pts in series for d, v in pts]
-    x0, x1 = min(d for d, _ in every), max(d for d, _ in every)
-    y0, y1 = min(v for _, v in every), max(v for _, v in every)
+    if base is None:
+        base = drawn[0][2][0][1]
+
+    # the base of every point: the start, plus what was put in or taken out
+    # by then, so that the distance from it is what the trading did
+    bases = []
+    for _, _, pts, _ in drawn:
+        b, per_point = base, []
+        for _, _, what in pts:
+            b += getattr(what, "amount", 0.0) if _what(what) else 0.0
+            per_point.append(b)
+        bases.append(per_point)
+
+    # the labels at the end of the line decide how much room the right keeps
+    last_value = drawn[-1][2][-1][1]
+    end_labels = [money(last_value), money(last_value - bases[-1][-1], signed=True)]
+    pad_right = max(60, int(max(len(t) for t in end_labels) * 6.4) + 16)
+    pad = (56, 14, 26, pad_right)                 # left, top, bottom, right
+    every = ([v for _, _, pts, _ in drawn for _, v, _ in pts]
+             + [b for per_point in bases for b in per_point])
+    y0, y1 = min(every), max(every)
     if y1 == y0:
         y1 = y0 + 1
     gap = (y1 - y0) * 0.06
     y0, y1 = y0 - gap, y1 + gap
+    all_x = [x for _, _, _, xs in drawn for x in xs]
+    x0, x1 = min(all_x), max(all_x)
     pw, ph = width - pad[0] - pad[3], height - pad[1] - pad[2]
-    span = max((x1 - x0).total_seconds(), 1)
 
-    def X(d):
-        return pad[0] + pw * (d - x0).total_seconds() / span
+    if axis == "trade":
+        span = max(x1 - x0, 1)
+
+        def X(x):
+            return pad[0] + pw * (x - x0) / span
+    else:
+        span = max((x1 - x0).total_seconds(), 1)
+
+        def X(d):
+            return pad[0] + pw * (d - x0).total_seconds() / span
 
     def Y(v):
         return pad[1] + ph * (1 - (v - y0) / (y1 - y0))
 
+    top, bottom = pad[1], pad[1] + ph
     parts = [f'<rect width="{width}" height="{height}" fill="{SURFACE}"/>']
-    for i in range(5):                            # the grid stays in the back
-        v = y0 + (y1 - y0) * i / 4
+    # the grid stays in the back, on round numbers
+    step = nice_step(y1 - y0)
+    v = math.ceil(y0 / step) * step
+    while v <= y1:
         y = Y(v)
         parts.append(f'<line x1="{pad[0]}" y1="{y:.1f}" x2="{width-pad[3]}" '
                      f'y2="{y:.1f}" stroke="{GRID}" stroke-width="1"/>')
         parts.append(f'<text x="{pad[0]-6}" y="{y+3:.1f}" fill="{DIM}" '
                      f'font-size="10" text-anchor="end">{money(v)}</text>')
-    # over a short stretch the month and the year would repeat, so show days
-    fmt = "%d.%m" if (x1 - x0).days < 150 else "%m.%Y"
-    for i in range(4):
-        d = x0 + (x1 - x0) * (i / 3)
-        parts.append(f'<text x="{X(d):.1f}" y="{height-8}" fill="{DIM}" '
-                     f'font-size="10" text-anchor="middle">{d.strftime(fmt)}</text>')
+        v += step
+    if axis == "trade":
+        step = count_step(x1 - x0)
+        ticks = [(n, str(n)) for n in range(math.ceil(x0 / step) * step,
+                                            int(x1) + 1, step)]
+    else:
+        ticks = date_ticks(x0, x1)
+    for at, label in ticks:
+        x = X(at)
+        parts.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{bottom}" '
+                     f'stroke="{GRID}" stroke-width="1"/>')
+        parts.append(f'<text x="{x:.1f}" y="{height-8}" fill="{DIM}" '
+                     f'font-size="10" text-anchor="middle">{label}</text>')
 
     data = []
-    for k, (name, colour, pts) in enumerate(series):
-        screen = [(X(dt), Y(v)) for dt, v in pts]
+    left, right = pad[0], width - pad[3]
+    for k, (name, colour, pts, xs) in enumerate(drawn):
+        screen = [(X(x), Y(v)) for x, (_, v, _) in zip(xs, pts)]
         d = smooth_path(screen)
-        # a wash under the line instead of a second line: it gives the curve a
-        # body without adding a colour or a border to look at
-        fade = f"{cid}-fade-{k}"
+        # the base line, stepping where money moved: the steps as (x, from, to)
+        steps = [(screen[i][0], Y(bases[k][i - 1]), Y(bases[k][i]))
+                 for i in range(1, len(pts)) if bases[k][i] != bases[k][i - 1]]
+        by_first, by_last = Y(bases[k][0]), Y(bases[k][-1])
+        back = "".join(f"L{x:.1f},{to:.1f} L{x:.1f},{frm:.1f} "
+                       for x, frm, to in reversed(steps))
+        # The wash between the curve and the base line, in the colour of the
+        # side it is on. The same area is painted twice and each coat is
+        # clipped to its half of the picture, above the base or below it; the
+        # coat fades towards the base, so the further the account has gone
+        # from where it started, the more of the colour there is.
+        area = (f"{d} L{screen[-1][0]:.1f},{by_last:.1f} {back}"
+                f"L{screen[0][0]:.1f},{by_first:.1f} Z")
+        above = (f"M{left},{top} L{right},{top} L{right},{by_last:.1f} {back}"
+                 f"L{left},{by_first:.1f} Z")
+        below = (f"M{left},{bottom} L{right},{bottom} L{right},{by_last:.1f} {back}"
+                 f"L{left},{by_first:.1f} Z")
         parts.append(
-            f'<defs><linearGradient id="{fade}" x1="0" y1="0" x2="0" y2="1">'
-            f'<stop offset="0" stop-color="{colour}" stop-opacity="0.20"/>'
-            f'<stop offset="1" stop-color="{colour}" stop-opacity="0"/>'
-            f'</linearGradient></defs>')
-        parts.append(f'<path d="{d} L{screen[-1][0]:.1f},{pad[1]+ph:.1f} '
-                     f'L{screen[0][0]:.1f},{pad[1]+ph:.1f} Z" '
-                     f'fill="url(#{fade})" stroke="none"/>')
+            f'<defs>'
+            f'<linearGradient id="{cid}-up-{k}" gradientUnits="userSpaceOnUse" '
+            f'x1="0" y1="{top}" x2="0" y2="{by_last:.1f}">'
+            f'<stop offset="0" stop-color="{GOOD}" stop-opacity="0.26"/>'
+            f'<stop offset="1" stop-color="{GOOD}" stop-opacity="0.04"/>'
+            f'</linearGradient>'
+            f'<linearGradient id="{cid}-down-{k}" gradientUnits="userSpaceOnUse" '
+            f'x1="0" y1="{by_last:.1f}" x2="0" y2="{bottom}">'
+            f'<stop offset="0" stop-color="{BAD}" stop-opacity="0.04"/>'
+            f'<stop offset="1" stop-color="{BAD}" stop-opacity="0.26"/>'
+            f'</linearGradient>'
+            f'<clipPath id="{cid}-above-{k}"><path d="{above}"/></clipPath>'
+            f'<clipPath id="{cid}-below-{k}"><path d="{below}"/></clipPath>'
+            f'</defs>')
+        parts.append(f'<path d="{area}" fill="url(#{cid}-up-{k})" stroke="none" '
+                     f'clip-path="url(#{cid}-above-{k})"/>')
+        parts.append(f'<path d="{area}" fill="url(#{cid}-down-{k})" stroke="none" '
+                     f'clip-path="url(#{cid}-below-{k})"/>')
+        # the base line goes over the wash and under the curve
+        forward = "".join(f"L{x:.1f},{frm:.1f} L{x:.1f},{to:.1f} "
+                          for x, frm, to in steps)
+        parts.append(f'<path d="M{left},{by_first:.1f} {forward}L{right},{by_last:.1f}" '
+                     f'fill="none" stroke="{DIM}" stroke-width="1" '
+                     f'stroke-dasharray="3 4"/>')
         parts.append(f'<path d="{d}" fill="none" stroke="{colour}" stroke-width="2" '
                      f'stroke-linejoin="round" stroke-linecap="round" '
                      f'shape-rendering="geometricPrecision"/>')
-        dt, v = pts[-1]
-        parts.append(f'<circle cx="{X(dt):.1f}" cy="{Y(v):.1f}" r="3" fill="{colour}"/>')
-        parts.append(f'<text x="{X(dt)+7:.1f}" y="{Y(v)+3:.1f}" fill="{INK2}" '
-                     f'font-size="10">{esc(name)}</text>')
+        # money that moved outside a trade: a hollow dot, so a deposit is not
+        # read as a big win
+        for (sx, sy), (_, _, what) in zip(screen, pts):
+            if _what(what):
+                parts.append(f'<circle cx="{sx:.1f}" cy="{sy:.1f}" r="3.5" '
+                             f'fill="{SURFACE}" stroke="{INK2}" stroke-width="1.5">'
+                             f'<title>{esc(_what(what))}</title></circle>')
+        ex, ey = screen[-1]
+        parts.append(f'<circle cx="{ex:.1f}" cy="{ey:.1f}" r="3" fill="{colour}"/>')
+        delta = pts[-1][1] - bases[k][-1]
+        parts.append(f'<text x="{ex+8:.1f}" y="{ey+3:.1f}" fill="{INK2}" '
+                     f'font-size="10" font-family="{MONO}">{money(pts[-1][1])}</text>')
+        parts.append(f'<text x="{ex+8:.1f}" y="{ey+15:.1f}" '
+                     f'fill="{GOOD if delta > 0 else BAD if delta < 0 else INK2}" '
+                     f'font-size="10" font-family="{MONO}">'
+                     f'{money(delta, signed=True)}</text>')
         data.append({"name": name, "colour": colour, "sign": sign,
-                     "points": [[round(X(dt), 1), round(Y(v), 1),
-                                 dt.strftime("%d.%m.%Y"), round(v)]
-                                for dt, v in pts]})
+                     "base_word": base_word,
+                     "points": [[round(sx, 1), round(sy, 1),
+                                 (f"trade {x} · " if axis == "trade" and what is None
+                                  else "") + day.strftime("%d.%m.%Y"),
+                                 round(v), _what(what), round(v - b)]
+                                for (sx, sy), x, (day, v, what), b
+                                in zip(screen, xs, pts, bases[k])]})
 
-    parts.append(f'<line id="{cid}-ray" x1="0" y1="{pad[1]}" x2="0" '
-                 f'y2="{pad[1]+ph}" stroke="{AXIS}" stroke-width="1" '
+    parts.append(f'<line id="{cid}-ray" x1="0" y1="{top}" x2="0" '
+                 f'y2="{bottom}" stroke="{AXIS}" stroke-width="1" '
                  f'visibility="hidden"/>')
     parts.append(f'<g id="{cid}-dots"></g>')
-    parts.append(f'<rect id="{cid}-catcher" x="{pad[0]}" y="{pad[1]}" '
+    parts.append(f'<rect id="{cid}-catcher" x="{pad[0]}" y="{top}" '
                  f'width="{pw}" height="{ph}" fill="transparent"/>')
     svg = (f'<svg id="{cid}" viewBox="0 0 {width} {height}" width="100%" '
            f'preserveAspectRatio="xMidYMid meet" role="img" '
@@ -688,8 +875,12 @@ function hover_chart(cid){
       for (const p of s.points) { const dd = Math.abs(p[0] - x);
         if (dd < d) { d = dd; best = p; } }
       if (!best) continue;
-      lines.push(s.name + ': ' +
-        String(best[3]).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ') + ' ' + s.sign);
+      const fmt = n => String(n).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ');
+      lines.push(s.name + ': ' + fmt(best[3]) + ' ' + s.sign);
+      const away = best[5];
+      lines.push((away < 0 ? '-' : '+') + fmt(Math.abs(away)) + ' ' + s.sign +
+                 ' ' + s.base_word);
+      if (best[4]) lines.push(best[4]);
       at = best;
       const c = document.createElementNS(NS, 'circle');
       c.setAttribute('cx', best[0]); c.setAttribute('cy', best[1]);

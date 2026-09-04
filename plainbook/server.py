@@ -586,7 +586,7 @@ def trade_page(trade_id):
 
 # --- statistics ------------------------------------------------------------
 
-def account_tabs(j, q, selected):
+def account_tabs(j, q, selected, right=""):
     """The account switch above the chart. It reuses the account filter, so the
     choice also applies to the tables below.
 
@@ -607,7 +607,8 @@ def account_tabs(j, q, selected):
                            if params else "")
         cls = "btn primary" if code == selected else "btn"
         parts.append(f'<a class="{cls}" href="{href}">{esc(name)}</a>')
-    return '<p style="margin:0 0 10px">' + " ".join(parts) + "</p>"
+    return ('<div class="card-head" style="margin-bottom:10px"><span>'
+            + " ".join(parts) + f'</span><span class="right">{right}</span></div>')
 
 
 def ring(title, rows, steps, kind):
@@ -668,10 +669,41 @@ def streaks_card(j, trades):
             f'</p></div>')
 
 
+def axis_switch(q, current):
+    """The two readings of an equity curve: on the calendar, or one step per
+    closed trade."""
+    parts = []
+    for code, name in (("date", "By date"), ("trade", "By trade")):
+        params = {k: v[:] for k, v in q.items()}
+        params["axis"] = [code]
+        href = "/stats?" + urllib.parse.urlencode(params, doseq=True)
+        parts.append(f'<a class="{"current" if code == current else ""}" '
+                     f'href="{href}">{name}</a>')
+    return '<div class="switch">' + "".join(parts) + "</div>"
+
+
+def equity_chart(j, account, trades, since, axis, height, cid):
+    """The curve of one account, from its start or from the month the filter
+    begins at, with the base the wash is coloured against."""
+    points = stats.equity_events(j, account, trades, since)
+    if not points:
+        return ""
+    base = points[0][1]
+    return H.equity_svg([(j.accounts[account].name or account,
+                          H.SERIES[sorted(j.accounts).index(account) % len(H.SERIES)],
+                          points)],
+                        height=height, cid=cid, sign=H.sign(j.currency(account)),
+                        base=base, axis=axis,
+                        base_word="since the period began" if since else "from start")
+
+
 def stats_page(q):
     j = journal()
     trades = apply_filters(j, q)
     selected = (q.get("account") or [""])[0]
+    axis = (q.get("axis") or ["date"])[0]
+    if axis not in ("date", "trade"):
+        axis = "date"
     # with a month filter the curve begins at the balance the account entered
     # that month with, not at the day the account was opened
     since_key = (q.get("from") or [""])[0]
@@ -686,31 +718,32 @@ def stats_page(q):
            'first month on: it shows what those trades alone did to the '
            'account, over the balance everything before them had built.'
            if filtered or since else '')
+    legend = ('The dashed line is the balance the curve starts from; the wash '
+              'is green above it and red below it. A hollow dot is money that '
+              'moved outside a trade, a deposit, a withdrawal, a fee, and the '
+              'line steps with it.')
     if selected and selected in j.accounts:
-        points = stats.equity(j, selected, trades, since)
         name = j.accounts[selected].name or selected
+        chart = equity_chart(j, selected, trades, since, axis, 300, "acc")
         charts = (f'<div class="card"><h2>Equity: {esc(name)}</h2>'
-                  f'{account_tabs(j, q, selected)}'
-                  f'{H.equity_svg([(name, H.SERIES[0], points)], height=300, cid="acc", sign=H.sign(j.currency(selected)))}'
-                  + (f'<p class="caption">{how.strip()}</p>' if how else '')
-                  + '</div>')
+                  f'{account_tabs(j, q, selected, axis_switch(q, axis))}'
+                  f'{chart or "<p class=\'muted\'>Nothing to plot yet.</p>"}'
+                  f'<p class="caption">{legend}{how}</p></div>')
     else:
         cards = ""
         for i, a in enumerate(sorted(j.accounts)):
             if j.accounts[a].archived:
                 continue
-            points = stats.equity(j, a, trades, since)
-            if not points:
-                continue
-            name = j.accounts[a].name or a
-            cards += (f'<h3>{esc(name)}</h3>'
-                      f'{H.equity_svg([(name, H.SERIES[i % len(H.SERIES)], points)], height=190, cid=f"acc-{i}", sign=H.sign(j.currency(a)))}')
+            chart = equity_chart(j, a, trades, since, axis, 190, f"acc-{i}")
+            if chart:
+                cards += f'<h3>{esc(j.accounts[a].name or a)}</h3>{chart}'
         charts = (f'<div class="card"><h2>Equity by account</h2>'
-                  f'{account_tabs(j, q, "")}'
+                  f'{account_tabs(j, q, "", axis_switch(q, axis))}'
                   f'{cards or "<p class=\'muted\'>Nothing to plot yet.</p>"}'
                   f'<p class="caption">Each account has its own scale, which is '
                   f'why they are drawn separately. Archived accounts are not '
-                  f'drawn; their trades stay in the figures below.{how}</p></div>')
+                  f'drawn; their trades stay in the figures below. {legend}{how}'
+                  f'</p></div>')
 
     slices = ""
     for heading, key, show in (("By style", lambda t: t.style, esc),
