@@ -142,8 +142,8 @@ def read_rows(args):
         reader = csv.DictReader(f)
         header = reader.fieldnames or []
         for option in ("pair", "direction", "style", "entry", "exit", "result",
-                       "pnl", "risk", "entry_tf", "idea", "note", "id",
-                       "pictures", "account_column"):
+                       "pnl", "risk", "entry_tf", "idea", "conclusions", "note",
+                       "id", "pictures", "account_column"):
             column = getattr(args, option)
             if column and column not in header:
                 raise SystemExit(f"no column {column!r} in the table; "
@@ -205,6 +205,7 @@ def build(row, args, accounts):
         opened=opened, opened_time=opened_time,
         result=result, pnl=pnl, closed=closed, closed_time=closed_time,
         note=(row.get(args.note) or "").strip() if args.note else "",
+        conclusions=(row.get(args.conclusions) or "").strip() if args.conclusions else "",
         notion_id=(row.get(args.id) or "").strip() if args.id else "")
     idea = (row.get(args.idea) or "").strip() if args.idea else ""
     if idea:
@@ -257,7 +258,9 @@ def main(argv=None):
                          ("exit", "the exit date (the entry column, for a Notion range)"),
                          ("result", "Win, Lose or BE"), ("pnl", "the PnL in money"),
                          ("risk", "the risk in percent"), ("entry-tf", "the entry timeframe"),
-                         ("idea", "the idea text"), ("note", "a note"),
+                         ("idea", "the idea text"),
+                         ("conclusions", "the conclusions written after the exit"),
+                         ("note", "a note"),
                          ("id", "an id of the row, kept as the notion id"),
                          ("pictures", "file names of the screenshots")):
         p.add_argument(f"--{option}", metavar="COLUMN", help=text)

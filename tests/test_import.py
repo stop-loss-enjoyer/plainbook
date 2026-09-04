@@ -24,14 +24,14 @@ PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
 
 HEADER = ["Name", "Account", "Pair", "Direction", "Style", "Date", "Result",
-          "PnL", "Risk", "TF", "Idea", "Files", "Notion id"]
+          "PnL", "Risk", "TF", "Idea", "Files", "Notion id", "Lessons"]
 ROWS = [
     ["Trade 1", "Bybit", "EUR/USD", "Long", "swing", "August 3, 2026 9:15 AM → August 4, 2026 6:00 PM",
-     "Win", "$1,250.50", "1%", "H4", "sweep of the high", "one.png (https://x/one.png)", "n1"],
+     "Win", "$1,250.50", "1%", "H4", "sweep of the high", "one.png (https://x/one.png)", "n1", "held it to the target"],
     ["Trade 2", "Bybit", "GBPUSD", "sell", "EMT", "2026-08-05 10:00", "Loss", "-300", "", "H1",
-     "", "", "n2"],
+     "", "", "n2", ""],
     ["Trade 3", "FTMO 100k", "XAUUSD", "short", "EMT prop", "06.08.2026", "Break even", "", "0.5",
-     "", "", "", "n3"],
+     "", "", "", "n3", ""],
 ]
 
 
@@ -64,6 +64,7 @@ class ImportCase(unittest.TestCase):
                 "--entry", "Date", "--exit", "Date", "--result", "Result",
                 "--pnl", "PnL", "--risk", "Risk", "--entry-tf", "TF",
                 "--idea", "Idea", "--id", "Notion id", "--pictures", "Files",
+                "--conclusions", "Lessons",
                 "--pictures-dir", os.path.join(self.root, "export")] + list(extra)
         out = io.StringIO()
         with redirect_stdout(out):
@@ -91,6 +92,7 @@ class ImportCase(unittest.TestCase):
         self.assertEqual(one.risk, 1.0)
         self.assertEqual(one.idea[0].tf, "H4")
         self.assertEqual(one.idea[0].text, "sweep of the high")
+        self.assertEqual(one.conclusions, "held it to the target")
         # the picture found under the export folder, at any depth
         self.assertEqual(one.idea[0].images, ["shots/idea-01-01.png"])
         self.assertTrue(os.path.exists(os.path.join(

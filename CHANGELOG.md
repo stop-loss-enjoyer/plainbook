@@ -44,8 +44,11 @@ from a table.
   columns as options, checks every row before writing anything and writes
   the trades the way the interface would, with their screenshots when the
   table names the files. A second run skips what is already there. The
-  summary prints counts and sums only. INSTALL.md gained the step where the
-  person is asked whether there is a history to bring in.
+  summary prints counts and sums only, and a column can go into the
+  conclusions of a trade. INSTALL.md gained the step where the person is
+  asked whether there is a history to bring in, and the order of an import
+  through a Notion connection, which brings the page texts and the pictures
+  tied to the right trade.
 - **The page says which version this is**, in small print beside the name
   in the header.
 

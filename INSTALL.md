@@ -165,5 +165,41 @@ You need the header line of their table, nothing more. Do not read the rows,
 and do not ask for them: the tool prints only counts and sums, and that is
 what you check against the old journal.
 
+### With a Notion connection
+
+An agent that has Notion connected can take the trades straight from the
+database, and that path brings what a CSV export cannot: the text of every
+page and its pictures, tied to the right trade. It also means the agent reads
+the records, so say that plainly before starting and go on only with their
+consent; afterwards, never retell what was in a trade. The order that worked:
+
+1. **The schema first.** Fetch the database and its properties. Every select
+   property (account, direction, style, result, timeframe) stores an id per
+   option: fetch the name of each id and write the table down, never guess a
+   name from the id. Map the accounts to the ids of the journal's accounts,
+   the results to Win, Lose and BE, the directions to long and short.
+2. **All the rows.** Query the database to the last page and keep the rows
+   as they came, in a working folder outside `journal/` and outside the code.
+   The number of rows must equal the number of trades they see in Notion.
+3. **The pages.** For every row fetch the page body: the idea, the
+   conclusions. Download the pictures the moment a page is fetched, the file
+   links Notion hands out expire within minutes. One file per page and one
+   folder of pictures per page, named by the Notion id.
+4. **A table for the tool.** Build one CSV from the rows: a column per field
+   the tool takes, the page body in the idea and conclusions columns, the
+   Notion id in the id column, the picture file names in a column and their
+   folder as `--pictures-dir`. Then it is the same `tools/import_csv.py`, the
+   dry run, the summary, the real run. Do not write the trade files yourself:
+   the tool checks every row the way the interface does, and a second run
+   skips what is already in.
+5. **The check.** Counts and the sum of PnL per account against Notion, then
+   trade by trade: if Notion kept an R for each trade, compare it with the R
+   the journal computed. Every R off by the same factor means a wrong start
+   balance; one R off means one row. Finish with the balance on the front page
+   against the broker, corrected on the Accounts tab.
+6. **The working folder** with the downloaded rows and pages is their records
+   too. Keep it beside the data, never beside the code, or delete it once the
+   check is done and they agree.
+
 When you are done, read [CLAUDE.md](CLAUDE.md), the rules for living with the
 journal afterwards.
