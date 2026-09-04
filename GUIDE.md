@@ -265,10 +265,10 @@ number is. A hollow dot on the curve is money that moved outside a trade: a
 deposit, a withdrawal, a fee. The dashed line steps with it, up at a deposit
 and down at a withdrawal, so the wash stays what the trading did and taking
 money out does not paint the account red. The numbers at the end of the line
-are the balance now and how far it is from that line. The switch on the right reads the curve
-**by date** or **by trade**, one step per closed trade, which is how an equity
-curve is usually looked at: the calendar stretches a quiet month and squeezes a
-busy day, and by trade every trade takes the same room.
+are the balance now and how far it is from that line. The switch on the right
+reads the curve **by date** or **by trade**, one step per closed trade, which is
+how an equity curve is usually looked at: the calendar stretches a quiet month
+and squeezes a busy day, and by trade every trade takes the same room.
 
 The line is drawn softly, but it never invents a high or a low: the curve is
 bent only between the points it has. A peak on the picture is a peak that

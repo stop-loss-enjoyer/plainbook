@@ -2,9 +2,11 @@
 
 What changed and why. Newest first.
 
-## Unreleased
+## v1.4.8, 04.09.2026
 
-A sign for the journal, and the front page tidied.
+A sign for the journal, an equity curve that says which side of its start it
+is on, a trade duplicated on any number of accounts, and old trades brought in
+from a table.
 
 ### Changed
 
@@ -29,6 +31,9 @@ A sign for the journal, and the front page tidied.
   dot, and the dashed line steps with it, so a deposit is not read as a big
   win and a withdrawal does not paint the account red; the tip says what it
   was.
+- **The curve can be read by trade.** A switch above the picture puts one
+  step per closed trade instead of the calendar, so a quiet month no longer
+  stretches the line and a busy day no longer squeezes it.
 - **A trade is duplicated on as many accounts as you like.** The block on
   the new trade form used to offer one other account; it lists every live
   account now, each with a tick and a risk of its own, and the risk starts
@@ -43,9 +48,6 @@ A sign for the journal, and the front page tidied.
   person is asked whether there is a history to bring in.
 - **The page says which version this is**, in small print beside the name
   in the header.
-- **The curve can be read by trade.** A switch above the picture puts one
-  step per closed trade instead of the calendar, so a quiet month no longer
-  stretches the line and a busy day no longer squeezes it.
 
 ## v1.4.7, 03.09.2026
 
