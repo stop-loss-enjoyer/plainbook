@@ -13,7 +13,7 @@ import math
 from urllib.parse import quote as _quote
 from datetime import timedelta
 
-from . import flags
+from . import __version__, flags
 
 # --- palette ---------------------------------------------------------------
 GROUND = "#0a0a0b"         # page background
@@ -83,6 +83,10 @@ header{{display:flex;align-items:stretch;gap:18px;flex-wrap:wrap;
 header .logo{{display:inline-flex;align-items:center;gap:9px;color:{INK};
  font:600 15px/1 {MONO};letter-spacing:-.02em;padding-right:4px}}
 header .logo .mark{{display:block}}
+/* the version, beside the name and in the way of nobody: a person asking
+   for help can say which one they have the moment the page opens */
+header .logo .ver{{font:500 10px/1 {MONO};color:{DIM};letter-spacing:0;
+ margin-top:3px}}
 header .logo:hover{{color:{INK}}}
 header .logo:hover .mark path,header .logo:hover .mark rect{{stroke:{ACCENT}}}
 header .logo:hover .mark rect{{fill:{ACCENT}}}
@@ -398,7 +402,7 @@ def page(title, body, tab="journal", header_right="", notice="", said=""):
 <script>{HOVER}{PAGE_SCRIPT}</script></head><body>
 {flags.SPRITE}{said}
 <div class="wrap">
-<header><a href="/" class="logo" title="the journal">{mark(22)}plainbook</a><nav>{nav}</nav>
+<header><a href="/" class="logo" title="the journal">{mark(22)}plainbook<span class="ver">{__version__}</span></a><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
 {notice}{body}
 </div>

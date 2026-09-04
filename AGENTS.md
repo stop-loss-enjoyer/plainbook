@@ -211,7 +211,9 @@ In this order, every time:
   subject line, a blank line, then the reasoning. **In English**: a commit
   message is published text, sitting next to every file on the repository page.
 - **`CHANGELOG.md` gets a line** for anything a user would notice, phrased as
-  what changed for them.
+  what changed for them. When a version is released, its heading goes in here
+  and `__version__` in `plainbook/__init__.py` is raised to the same number:
+  that is the figure the front page shows.
 - **`GUIDE.md` gets updated** when the interface changes. It is the owner's
   manual; an out-of-date manual is worse than none.
 - **Comments explain the reason**, never the mechanics. `# closewindow does not

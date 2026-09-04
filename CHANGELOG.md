@@ -41,6 +41,8 @@ A sign for the journal, and the front page tidied.
   table names the files. A second run skips what is already there. The
   summary prints counts and sums only. INSTALL.md gained the step where the
   person is asked whether there is a history to bring in.
+- **The page says which version this is**, in small print beside the name
+  in the header.
 - **The curve can be read by trade.** A switch above the picture puts one
   step per closed trade instead of the calendar, so a quiet month no longer
   stretches the line and a busy day no longer squeezes it.

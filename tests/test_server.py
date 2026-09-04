@@ -665,6 +665,11 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(len(store.all_trades(self.root)), before + 1)
 
+    def test_36b_the_front_page_says_which_version_this_is(self):
+        from plainbook import __version__
+        _, html = self.get("/")
+        self.assertIn(f'<span class="ver">{__version__}</span>', html)
+
     def test_37_the_trade_form_lists_are_edited_on_the_accounts_tab(self):
         """Styles, timeframes and execution formats belong to the owner."""
         _, html = self.get("/new")
