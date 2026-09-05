@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 """End to end: open a trade, paste a screenshot, close it, edit it."""
 import importlib
+import io
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import threading
@@ -17,7 +19,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import stats, store
-from plainbook.model import Account
+from plainbook.model import Account, Playbook, Setup, Rule, Trade
 
 # a one-pixel PNG, enough to exercise the whole screenshot path
 PNG = bytes.fromhex(
@@ -846,6 +848,462 @@ class ServerCase(unittest.TestCase):
         self.assertIn('href="/reports"', header)      # the tab is still there
         # and the form that builds a report lives on the Reports tab
         self.assertIn('action="/report/build"', self.get("/reports")[1])
+
+    def test_44a_the_playbooks_tab_asks_until_a_playbook_is_written(self):
+        _, html = self.get("/playbooks")
+        header = re.findall(r'<header.*?</header>', html, re.S)[0]
+        self.assertIn('class="current attention"', header)
+        self.assertIn("No playbooks yet", html)
+        store.save_playbook(self.root, Playbook(
+            id="pull", name="Pullback", styles=["swing"], version="1.0",
+            block=40, intro="Trend only.",
+            setups=[Setup(name="A: reaction", text="The first reaction is in.",
+                          rules=[Rule(1, "Level on D1"), Rule(2, "Target 1R away")])],
+            filters=[Rule(3, "An hour to the news")],
+            limits=[("risk", "1 %")]))
+        try:
+            _, html = self.get("/playbooks")
+            header = re.findall(r'<header.*?</header>', html, re.S)[0]
+            self.assertNotIn("attention", header)
+            self.assertIn('href="/playbook/pull"', html)
+            self.assertIn("0 / 40", html)
+            self.assertEqual(self.S.block_bar(Playbook(id="x", block=40), 45).count("block 2: <b>5 / 40</b>"), 1)
+            self.assertIn("next review at <b>80</b>", self.S.block_bar(Playbook(id="x", block=40), 45))
+            self.assertIn("block 1: <b>40 / 40</b>", self.S.block_bar(Playbook(id="x", block=40), 40))
+            self.assertNotIn("in all", self.S.block_bar(Playbook(id="x", block=40), 40))
+            status, html = self.get("/playbook/pull")
+            self.assertEqual(status, 200)
+            for piece in ('class="pb-name">Pullback', "A: reaction",
+                          "Target 1R away", "An hour to the news",
+                          '<span class="n">3</span>', 'class="limits"'):
+                self.assertIn(piece, html)
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                self.get("/playbook/nope")
+            self.assertEqual(caught.exception.code, 404)
+        finally:
+            shutil.rmtree(store.playbook_dir(self.root, "pull"))
+
+    def test_44b_a_playbook_is_written_revised_by_version_and_deleted(self):
+        _, html = self.get("/playbook/new")
+        self.assertIn('name="setup_rule_1"', html)
+        fields = {"name": "Pullback", "status": "experiment", "version": "1.0",
+                  "since": "2026-08-15", "block": "40", "styles": "swing",
+                  "intro": "Trend only.", "setups": "2",
+                  "setup_name_1": "A: reaction", "setup_about_1": "The first reaction.",
+                  "setup_rule_1": ["Level on D1", "- [ ] Target 2R away", "", ""],
+                  "setup_rule_1_detail": ["The level is a fractal on D1", "", "",
+                                          "Words left empty: the rule is the words"],
+                  "setup_name_2": "", "setup_about_2": "", "setup_rule_2": [""],
+                  "filter": ["An hour to the news", "No other\nposition open"],
+                  "limit_kind": ["risk", "max per week", "other", "max hold", "other"],
+                  "limit_name": ["", "", "trades per move", "", "no name"],
+                  "limit_value": ["1", "3", "5", "", ""],
+                  "notes": "## Math\n\nBreak-even at 33%."}
+        _, where = self.post("/playbook/new", fields)
+        self.assertEqual(self.landed(where), "pullback")
+        p = store.load_playbook(self.root, "pullback")
+        self.assertEqual([r.text for r in p.rules],
+                         ["Level on D1", "Target 2R away",
+                          "Words left empty: the rule is the words",
+                          "An hour to the news", "No other position open"])
+        self.assertEqual(p.rules[0].detail, "The level is a fractal on D1")
+        self.assertEqual(len(p.setups), 1)          # the empty block is dropped
+        self.assertEqual(p.limits, [("risk", "1"), ("max per week", "3"),
+                                    ("trades per move", "5")])
+        self.assertEqual(p.sections, [("Math", "Break-even at 33%.")])
+        self.assertEqual(p.block, 40)
+        _, html = self.get("/playbook/pullback")
+        self.assertIn("Target 2R away", html)
+        self.assertIn('href="/playbook/pullback/edit"', html)
+        # the same name again gets its own folder
+        self.post("/playbook/new", dict(fields, name="Pullback"))
+        self.assertTrue(os.path.isdir(store.playbook_dir(self.root, "pullback-2")))
+        shutil.rmtree(store.playbook_dir(self.root, "pullback-2"))
+
+        # with no trade under the rules yet they are a draft: edited freely
+        _, html = self.get("/playbook/pullback/edit")
+        self.assertIn('value="Pullback"', html)
+        self.assertIn("Target 2R away", html)
+        self.assertIn('<option value="risk" selected>', html)
+        self.assertIn('name="limit_name" value="trades per move"', html)
+        _, html = self.get("/playbook/pullback")
+        self.assertIn("risk per trade<b>1 %</b>", html)
+        self.assertIn("trades per move<b>5</b>", html)
+        draft = dict(fields, setups="1", setup_rule_1=["Level on D1", "Target 2R away, or none"])
+        self.post("/playbook/pullback/edit", draft)
+        self.assertEqual(store.load_playbook(self.root, "pullback").rules[1].text,
+                         "Target 2R away, or none")
+        self.assertEqual(store.playbook_versions(self.root, "pullback"), [])
+        self.post("/playbook/pullback/edit", fields)
+
+        # a trade tied to the playbook without a checklist holds nothing
+        loose = Trade(id="2031-01-05-01-eurusd", account="broker", pair="EURUSD",
+                      direction="long", style="swing", opened=datetime(2031, 1, 5),
+                      playbook="pullback", playbook_version="1.0")
+        store.save_trade(self.root, loose)
+        self.S.drop_cache()
+        self.post("/playbook/pullback/edit", draft)
+        self.assertEqual(store.playbook_versions(self.root, "pullback"), [])
+        self.post("/playbook/pullback/edit", fields)
+        _, html = self.get(f"/trade/{loose.id}")
+        self.assertIn("rules not ticked", html)
+        shutil.rmtree(store.trade_dir(self.root, loose.id))
+
+        # once a trade was ticked against the number, rules rewritten under
+        # the same number are refused with the form back
+        held = Trade(id="2031-01-06-01-eurusd", account="broker", pair="EURUSD",
+                     direction="long", style="swing", opened=datetime(2031, 1, 6),
+                     playbook="pullback", playbook_version="1.0", setup="A: reaction",
+                     deviations=[2])
+        store.save_trade(self.root, held)
+        self.S.drop_cache()
+        _, html = self.get("/playbook/pullback")
+        self.assertIn("1 / 40", html)                 # the trade counts in the block
+        self.assertIn(f'href="/trade/{held.id}"', html)
+        _, html = self.get(f"/trade/{held.id}")
+        self.assertIn('href="/playbook/pullback"', html)
+        self.assertIn("rules not met: 2", html)
+        changed = dict(fields, setups="1", setup_rule_1=["Level on D1", "Target 3R away"])
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.post("/playbook/pullback/edit", changed)
+        self.assertEqual(caught.exception.code, 400)
+        html = caught.exception.read().decode("utf-8")
+        self.assertIn('class="notice"', html)
+        self.assertIn("Target 3R away", html)         # what was typed is kept
+        self.assertEqual([r.text for r in store.load_playbook(self.root, "pullback").rules][1],
+                         "Target 2R away")
+        self.assertIn("The level is a fractal on D1", html)
+        # with a new number the old rules are kept under versions/
+        self.post("/playbook/pullback/edit", dict(changed, version="1.1"))
+        p = store.load_playbook(self.root, "pullback")
+        self.assertEqual(p.version, "1.1")
+        self.assertEqual(p.rules[1].text, "Target 3R away")
+        self.assertEqual(store.playbook_versions(self.root, "pullback"), ["1.0"])
+        old = store.load_playbook_version(self.root, "pullback", "1.0")
+        self.assertEqual(old.rules[1].text, "Target 2R away")
+        _, html = self.get("/playbook/pullback")
+        self.assertIn('href="/playbook/pullback/version/1.0"', html)
+        _, html = self.get("/playbook/pullback/version/1.0")
+        self.assertIn("Target 2R away", html)
+        # the search looks into the playbook too
+        _, html = self.get("/search?q=Target+3R")
+        self.assertIn('href="/playbook/pullback"', html)
+        # the intro edited under the same number is fine: the rules did not move
+        self.post("/playbook/pullback/edit", dict(changed, version="1.1", intro="Trend, only."))
+        self.assertEqual(store.load_playbook(self.root, "pullback").intro, "Trend, only.")
+        self.assertEqual(store.playbook_versions(self.root, "pullback"), ["1.0"])
+
+        shutil.rmtree(store.trade_dir(self.root, held.id))
+        self.S.drop_cache()
+
+        # a review is added from the page, dated, with a screenshot, and an
+        # edit of the playbook afterwards keeps it
+        _, html = self.get("/playbook/pullback")
+        self.assertIn('action="/playbook/pullback/review"', html)
+        token = self.form_token(html)
+        shot = self.paste_shot(token, "review")
+        self.post("/playbook/pullback/review",
+                  {"token": token, "review": "Block one: the target rule leaked.",
+                   "file_review": shot["file"]})
+        p = store.load_playbook(self.root, "pullback")
+        self.assertIn("**", p.review)
+        self.assertIn("Block one", p.review)
+        self.assertIn("![](shots/review-01.png)", p.review)
+        _, html = self.get("/playbook/pullback")
+        self.assertIn("Block one", html)
+        self.assertIn('src="/playbook-shot/pullback/review-01.png"', html)
+        self.assertEqual(self.get("/playbook-shot/pullback/review-01.png", as_text=False)[1], PNG)
+        self.post("/playbook/pullback/edit", dict(changed, version="1.1", intro="Kept."))
+        self.assertIn("Block one", store.load_playbook(self.root, "pullback").review)
+
+        self.post("/playbook/pullback/delete", {})
+        self.assertFalse(os.path.exists(store.playbook_dir(self.root, "pullback")))
+        trashed = [name for name in os.listdir(os.path.join(self.root, ".trash"))
+                   if name.startswith("playbook-pullback")]
+        self.assertEqual(len(trashed), 1)
+        # the trash knows what it holds, and restores it to the playbooks
+        self.assertIn(("playbook", "pullback"),
+                      [(kind, rid) for _, kind, rid, _ in store.trash_list(self.root)])
+        self.assertEqual(store.restore(self.root, trashed[0]), ("playbook", "pullback"))
+        self.assertTrue(os.path.isfile(os.path.join(store.playbook_dir(self.root, "pullback"),
+                                                    "playbook.md")))
+        self.post("/playbook/pullback/delete", {})
+
+    def test_44c_a_trade_is_ticked_against_a_playbook(self):
+        store.save_playbook(self.root, Playbook(
+            id="pull", name="Pullback", styles=["swing"], version="1.0",
+            setups=[Setup(name="A", rules=[Rule(1, "Level on D1", "A fractal level"),
+                                           Rule(2, "Target 2R away")]),
+                    Setup(name="B", rules=[Rule(3, "Trend on D1")])],
+            filters=[Rule(4, "An hour to the news")],
+            management=[Rule(5, "Stop never moved against"), Rule(6, "Closed by Friday")]))
+        try:
+            _, html = self.get("/new")
+            self.assertIn('name="playbook"', html)
+            self.assertIn('data-playbook="pull"', html)
+            self.assertIn('id="met-pull-4"', html)
+            self.assertNotIn('class="frame"', html)          # no limits, no frame
+            book = store.load_playbook(self.root, "pull")
+            book.limits = [("risk", "1"), ("open at once", "1")]
+            book.block = 2
+            store.save_playbook(self.root, book)
+            _, html = self.get("/new")
+            self.assertIn('open now <b>0</b> of 1', html)
+            self.assertIn('data-risk="1"', html)
+            # ticked: rules 1 and 4, so 2 is the deviation; setup B is not held to
+            trade_id = self.open_trade(playbook="pull", setup_pull="A",
+                                       met_pull=["1", "4"], ticked="1",
+                                       why_pull_2="target 1.6R, took it anyway",
+                                       why_pull_1="ignored: the box is ticked")
+            t = store.load_trade(self.root, trade_id)
+            self.assertEqual((t.playbook, t.playbook_version, t.setup, t.deviations),
+                             ("pull", "1.0", "A", [2]))
+            self.assertEqual(t.reasons, {2: "target 1.6R, took it anyway"})
+            # the CSV carries the playbook columns in line with its header
+            import csv as _csv
+            rows = list(_csv.reader(io.StringIO(self.get("/export.csv")[1])))
+            head, mine = rows[0], next(r for r in rows[1:] if r[0] == trade_id)
+            self.assertEqual(len(head), len(mine))
+            self.assertEqual(mine[head.index("playbook")], "pull")
+            self.assertEqual(mine[head.index("deviations")], "2")
+            self.assertEqual(mine[head.index("reasons")], "2: target 1.6R, took it anyway")
+            self.assertEqual(mine[head.index("R")], "")           # still open
+            _, html = self.get(f"/trade/{trade_id}")
+            self.assertIn('class="rules ticked"', html)
+            self.assertIn('<li class="no"><span class="n">2</span>', html)
+            self.assertIn('<li class="ok"><span class="n">4</span>', html)
+            self.assertIn('<span class="reason">target 1.6R, took it anyway</span>', html)
+            self.assertNotIn("Trend on D1", html)
+            _, html = self.get(f"/edit/{trade_id}")
+            self.assertIn('name="why_pull_2" value="target 1.6R, took it anyway"', html)
+            self.assertIn('name="why_pull_1" value="" placeholder="why not: the fact, not the verdict" hidden', html)
+            # the management rules stand as a plain list while it is open
+            _, html = self.get(f"/trade/{trade_id}")
+            self.assertIn("Ticked when the trade is closed", html)
+            self.assertNotIn('id="met-pull-5"', html)
+            self.assertNotIn('name="held_pull"', html)
+            # the edit form draws the boxes as they were ticked
+            _, html = self.get(f"/edit/{trade_id}")
+            self.assertIn('id="met-pull-1" name="met_pull" value="1" checked', html)
+            self.assertIn('id="met-pull-2" name="met_pull" value="2">', html)
+            # a setup the playbook does not have is refused, a nameless playbook too
+            self.refused("/new", {"token": self.form_token(self.get("/new")[1]), "blocks": "1",
+                                  "account": "broker", "pair": "EURUSD", "direction": "long",
+                                  "style": "swing", "risk": "1", "entry": "2026-08-29T15:00",
+                                  "playbook": "pull", "setup_pull": "Z"})
+            self.refused("/playbook/new", {"token": "", "name": "  ", "version": "1.0",
+                                           "status": "active"})
+            self.refused("/playbook/new", {"token": "", "name": "Two", "version": "1.0",
+                                           "status": "active", "setups": "2",
+                                           "setup_name_1": "A", "setup_rule_1": ["one"],
+                                           "setup_name_2": "", "setup_rule_2": ["two"]})
+            # a trade with no box ticked at all records every rule as not met
+            bare = self.open_trade(playbook="pull", setup_pull="B", entry="2026-08-29T15:00")
+            self.assertEqual(store.load_trade(self.root, bare).deviations, [3, 4])
+            # a trade tied later, never ticked, stays so when edited elsewhere
+            loose = store.load_trade(self.root, bare)
+            loose.deviations = None
+            store.save_trade(self.root, loose)
+            self.S.drop_cache()
+            _, html = self.get(f"/trade/{bare}")
+            self.assertIn("not ticked", html)
+            _, html = self.get(f"/edit/{bare}")
+            token = self.form_token(html)
+            fields = {"token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
+                      "direction": "long", "style": "swing", "entry_tf": "H4", "risk": "1",
+                      "entry": "2026-08-29T15:00", "idea_tf_1": "H4", "idea_text_1": "edited",
+                      "playbook": "pull", "setup_pull": "B", "ticked": "0"}
+            self.post(f"/edit/{bare}", fields)
+            self.assertIsNone(store.load_trade(self.root, bare).deviations)
+            self.post(f"/edit/{bare}", dict(fields, ticked="1", met_pull=["3"]))
+            self.assertEqual(store.load_trade(self.root, bare).deviations, [4])
+            # and the playbook now holds its version: the rules ask for a number
+            self.S.drop_cache()
+            _, html = self.get("/playbook/pull")
+            self.assertIn(f'href="/trade/{trade_id}"', html)
+            # two open trades are past the limit, and the frame says so in red
+            _, html = self.get("/new")
+            self.assertIn('<span class="over">open now <b>2</b> of 1</span>', html)
+            # two trades make a full block: the tab asks, the page says so, and
+            # a review written on the page settles it
+            _, html = self.get("/")
+            self.assertIn('href="/playbooks" class="attention"', html)
+            _, html = self.get("/playbook/pull")
+            self.assertIn("block 1 is complete", html)
+            self.assertIn("review due", self.get("/playbooks")[1])
+            token = self.form_token(html)
+            self.post("/playbook/pull/review", {"token": token, "review": "Block one: fine."})
+            self.S.drop_cache()
+            _, html = self.get("/")
+            self.assertNotIn("attention", re.findall(r'<header.*?</header>', html, re.S)[0])
+            # the statistics put the playbooks first, with the setups beneath
+            # the close form ticks the management rules; 5 held, 6 not
+            _, html = self.get(f"/close/{trade_id}")
+            self.assertIn('id="held-pull-5"', html)
+            self.assertIn('id="exit-checklist"', html)
+            self.post(f"/close/{trade_id}", {"token": self.form_token(html),
+                                             "result": "Win", "pnl": "200",
+                                             "exit": "2026-08-30T10:00",
+                                             "held_pull": ["5"],
+                                             "why_pull_6": "held over the weekend"})
+            t = store.load_trade(self.root, trade_id)
+            self.assertEqual((t.deviations, t.exit_deviations), ([2], [6]))
+            # the reason of the entry stays, the reason of the close is added
+            self.assertEqual(t.reasons, {2: "target 1.6R, took it anyway",
+                                         6: "held over the weekend"})
+            self.S.drop_cache()
+            _, html = self.get("/playbook/pull")
+            self.assertIn("Reasons given", html)
+            self.assertIn("held over the weekend", html)
+            _, html = self.get(f"/trade/{trade_id}")
+            self.assertIn('<li class="no"><span class="n">6</span>', html)
+            self.assertIn('<li class="ok"><span class="n">5</span>', html)
+            self.assertIn("1 rule not held", html)
+            # editing the closed trade without touching the list keeps it;
+            # touching it records it
+            _, html = self.get(f"/edit/{trade_id}")
+            self.assertIn('id="held-pull-5" name="held_pull" value="5" checked', html)
+            token = self.form_token(html)
+            fields = {"token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
+                      "direction": "long", "style": "swing", "entry_tf": "H4", "risk": "1",
+                      "entry": "2026-08-29T14:30", "idea_tf_1": "H4", "idea_text_1": "edited",
+                      "playbook": "pull", "setup_pull": "A", "met_pull": ["1", "4"],
+                      "why_pull_2": "target 1.6R, took it anyway",     # the form sends it back
+                      "closed": "1", "result": "Win", "pnl": "200", "exit": "2026-08-30T10:00",
+                      "ticked_exit": "1", "held_pull": ["5", "6"]}
+            self.post(f"/edit/{trade_id}", fields)
+            t = store.load_trade(self.root, trade_id)
+            self.assertEqual(t.exit_deviations, [])
+            self.assertEqual(t.reasons, {2: "target 1.6R, took it anyway"})   # 6 is held now
+            self.S.drop_cache()
+            _, html = self.get("/playbook/pull")
+            self.assertIn("held to the end <b>1</b>", html)
+            self.assertIn('<th class="num">held</th>', html)
+            self.S.drop_cache()
+            _, html = self.get("/stats")
+            self.assertLess(html.index("By playbook"), html.index("Equity"))
+            self.assertIn('href="/playbook/pull"', html)
+            self.assertIn('<tr class="sub"><td>A</td>', html)
+            self.assertIn(f'>{stats.NO_PLAYBOOK}</td>', html)
+            _, html = self.get("/playbook/pull")
+            self.assertIn("What a rule costs", html)
+            self.assertIn("kept every rule", html)
+            self.post("/report/build", {"what": "month", "period_month": "2026-08"})
+            _, html = self.get("/report/2026-08")
+            self.assertIn("By playbook", html)
+            self.assertIn('href="/playbook/pull"', html)
+            for tid in (trade_id, bare):
+                shutil.rmtree(store.trade_dir(self.root, tid))
+        finally:
+            shutil.rmtree(store.playbook_dir(self.root, "pull"))
+            self.S.drop_cache()
+
+    def test_44d_the_checklist_survives_the_playbook_and_the_version_moving(self):
+        store.save_playbook(self.root, Playbook(
+            id="pull", name="Pullback", styles=["swing"], version="1.0",
+            setups=[Setup(name="A", rules=[Rule(1, "Level on D1"), Rule(2, "Target 2R away")])],
+            filters=[Rule(3, "An hour to the news")],
+            management=[Rule(4, "Stop never moved")]))
+        store.save_playbook(self.root, Playbook(
+            id="other", name="Other", styles=["swing"], version="2.0",
+            setups=[Setup(rules=[Rule(1, "One")])], management=[Rule(2, "Held"), Rule(3, "Closed")]))
+        try:
+            trade_id = self.open_trade(playbook="pull", setup_pull="A", met_pull=["1", "3"],
+                                       ticked="1", why_pull_2="early")
+            _, html = self.get(f"/close/{trade_id}")
+            self.post(f"/close/{trade_id}", {"token": self.form_token(html), "result": "Win",
+                                             "pnl": "100", "exit": "2026-08-30T10:00",
+                                             "held_pull": ["4"]})
+            self.S.drop_cache()
+            base = {"blocks": "1", "account": "broker", "pair": "EURUSD", "direction": "long",
+                    "style": "swing", "entry_tf": "H4", "risk": "1", "entry": "2026-08-29T14:30",
+                    "idea_tf_1": "H4", "idea_text_1": "edited", "closed": "1",
+                    "result": "Win", "pnl": "100", "exit": "2026-08-30T10:00"}
+
+            # 4: moved to another playbook, the old ticks at the close go with it
+            _, html = self.get(f"/edit/{trade_id}")
+            self.post(f"/edit/{trade_id}", dict(base, token=self.form_token(html),
+                                                 playbook="other", ticked="1", met_other=["1"]))
+            t = store.load_trade(self.root, trade_id)
+            self.assertEqual((t.playbook, t.playbook_version, t.deviations), ("other", "2.0", []))
+            self.assertIsNone(t.exit_deviations)
+            self.assertEqual(t.reasons, {})
+            # and back, ticked afresh
+            _, html = self.get(f"/edit/{trade_id}")
+            self.post(f"/edit/{trade_id}", dict(base, token=self.form_token(html),
+                                                 playbook="pull", setup_pull="A", ticked="1",
+                                                 met_pull=["1", "3"], why_pull_2="early",
+                                                 ticked_exit="1", held_pull=["4"]))
+            t = store.load_trade(self.root, trade_id)
+            self.assertEqual((t.deviations, t.exit_deviations, t.reasons), ([2], [], {2: "early"}))
+
+            # 2: a new number with the rules untouched freezes the old rules
+            self.S.drop_cache()
+            _, html = self.get("/playbook/pull/edit")
+            fields = {"name": "Pullback", "status": "experiment", "version": "1.1", "styles": "swing",
+                      "setups": "1", "setup_name_1": "A", "setup_rule_1": ["Level on D1", "Target 2R away"],
+                      "filter": ["An hour to the news"], "management": ["Stop never moved"]}
+            self.post("/playbook/pull/edit", fields)
+            self.assertEqual(store.playbook_versions(self.root, "pull"), ["1.0"])
+            # the rules change under 1.1 freely, nobody ticked 1.1; 1.0 keeps its text
+            self.post("/playbook/pull/edit", dict(fields, setup_rule_1=["Level on W", "Target 2R away"]))
+            _, html = self.get(f"/trade/{trade_id}")
+            self.assertIn("Level on D1", html)
+            self.assertNotIn("Level on W", html)
+
+            # 3: an attached trade ticked after the move takes the version it was held to
+            loose = Trade(id="2031-02-02-01-eurusd", account="broker", pair="EURUSD",
+                          direction="long", style="swing", opened=datetime(2031, 2, 2),
+                          playbook="pull", playbook_version="1.0")
+            store.save_trade(self.root, loose)
+            self.S.drop_cache()
+            _, html = self.get(f"/edit/{loose.id}")
+            self.assertIn("Level on D1", html)                # drawn from the frozen 1.0
+            self.post(f"/edit/{loose.id}", {"token": self.form_token(html), "blocks": "1",
+                                            "account": "broker", "pair": "EURUSD",
+                                            "direction": "long", "style": "swing", "risk": "1",
+                                            "entry": "2031-02-02T10:00", "playbook": "pull",
+                                            "setup_pull": "A", "ticked": "1", "met_pull": ["1", "2", "3"]})
+            t = store.load_trade(self.root, loose.id)
+            self.assertEqual((t.playbook_version, t.deviations), ("1.0", []))
+            shutil.rmtree(store.trade_dir(self.root, loose.id))
+
+            # 1: the playbook deleted, an edit of the trade keeps its checklist
+            self.post("/playbook/pull/delete", {})
+            self.S.drop_cache()
+            _, html = self.get(f"/edit/{trade_id}")
+            self.assertIn('<option value="pull" selected>', html)
+            self.post(f"/edit/{trade_id}", dict(base, token=self.form_token(html),
+                                                 playbook="pull", idea_text_1="a fix"))
+            t = store.load_trade(self.root, trade_id)
+            self.assertEqual((t.playbook, t.deviations, t.exit_deviations, t.reasons),
+                             ("pull", [2], [], {2: "early"}))
+            _, html = self.get(f"/trade/{trade_id}")
+            self.assertEqual(self.get(f"/trade/{trade_id}")[0], 200)
+
+            # 5: a reserved heading in the notes or a review is refused
+            self.refused("/playbook/other/edit", {"name": "Other", "status": "active", "version": "2.0",
+                                                  "setups": "1", "setup_rule_1": ["One"],
+                                                  "notes": "## Filters\n\n- [ ] typed in the notes"})
+            self.refused("/playbook/other/edit", {"name": "Other", "status": "active", "version": "2.0",
+                                                  "setups": "1", "setup_rule_1": ["One"],
+                                                  "intro": "## Markets\n\nall"})
+            _, html = self.get("/playbook/other")
+            self.refused("/playbook/other/review", {"token": self.form_token(html),
+                                                    "review": "## Management\n\n- [ ] x"})
+            self.assertEqual([r.text for r in store.load_playbook(self.root, "other").filters], [])
+            # 6: bold marks typed into the few words do not tear the rule apart
+            self.post("/playbook/other/edit", {"name": "Other", "status": "active", "version": "2.0",
+                                               "setups": "1", "setup_rule_1": ["**One** thing"],
+                                               "setup_rule_1_detail": ["the whole rule"]})
+            r = store.load_playbook(self.root, "other").rules[0]
+            self.assertEqual((r.text, r.detail), ("One thing", "the whole rule"))
+            shutil.rmtree(store.trade_dir(self.root, trade_id))
+        finally:
+            for pid in ("pull", "other"):
+                if os.path.isdir(store.playbook_dir(self.root, pid)):
+                    shutil.rmtree(store.playbook_dir(self.root, pid))
+            self.S.drop_cache()
 
     def test_45_a_plan_is_deleted_into_the_trash(self):
         plan_id = ServerCase.plan_id

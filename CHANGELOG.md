@@ -2,6 +2,77 @@
 
 What changed and why. Newest first.
 
+## v1.5.0, 05.09.2026
+
+Playbooks: the rules of a way of trading as a record, a checklist before
+every trade and at its close, and the price of every rule in R. The
+server starts on Python 3.10 again.
+
+### Added
+
+- **A Playbooks tab.** A playbook is one way of trading written down as
+  rules: what has to be true before a trade is opened. **+ Playbook** writes
+  one: the header, the setups with their rules a line each, the filters, the
+  limits and notes. The page shows the rules numbered, the limits and how far
+  the current block has come. Until a trade is ticked against a version its
+  rules are a draft and change freely; after that, rules revised under a new
+  number keep the old ones under *Earlier versions*, and the form refuses
+  rules rewritten under the same number. The tab is drawn amber while the journal has no
+  playbook. The page lists the trades opened under the playbook
+  and counts them against the block. `tools/attach_playbook.py` ties the
+  trades a playbook was already being traded by to it: the ones of its
+  styles from its *counts from* date.
+- **A trade is opened under a playbook.** The form has a *playbook* field
+  next to *plan*; picking one sets the style and opens the checklist: the
+  setup, its rules and the filters, a box each with the few words of the
+  rule and the whole rule behind a question mark. The trade opens with any
+  boxes ticked, and the rules left unticked are recorded with it. Its page
+  shows the rules with a tick or a cross, in the version it was ticked
+  against. The page of a playbook ends with *Review*: a dated entry each
+  time, with screenshots, where a block is taken apart.
+- **The figures of a playbook.** Statistics opens with *By playbook*, a
+  row per playbook with its setups beneath it and a *clean* column, the
+  share of ticked trades that met every rule; the reports carry the same
+  table. The page of a playbook shows the figures by setup and *What a rule
+  costs*: the trades that broke each rule and what they brought, against
+  the trades that kept every rule, over the ticked trades of the current
+  version.
+- **Management rules, ticked at the close.** A playbook has a third list
+  of rules, how the position is held: the stop not moved, held to the
+  target, closed by Friday. The form that closes a trade shows them under
+  the outcome, and the rules left unticked are recorded apart from the ones
+  of the entry. The page of a trade shows both lists; the tables get a
+  *held* column next to *clean*, and *What a rule costs* holds the
+  management rules too.
+- **A why under every rule not met.** A box left empty, at the entry or at
+  the close, opens a line for the reason: the fact, not the verdict. It
+  stands under the cross on the page of the trade, and the page of the
+  playbook folds out the reasons given for each rule, a line per trade.
+- **The frame.** Above the checklist of a new trade the limits of the
+  playbook stand against the journal: trades this week and month, the R of
+  the week against the loss limit, positions open, the risk typed against
+  its cap, red where the trade would go past a limit. Nothing is refused.
+- **A block asks for its review.** When a playbook's trades make a full
+  block with no review written for it, the Playbooks tab turns amber and
+  the page says which block is complete. A dated entry in *Review* settles
+  it.
+
+- **The Trash card on the Accounts tab is folded.** It grows with every
+  deleted record and is wanted rarely; the card shows the count and
+  opens on a click.
+
+### Fixed
+
+- **The server did not start on Python 3.10 and 3.11.** Three f-strings
+  held a backslash inside their expression part, which those versions
+  refuse; 1.4.8 had the same three. The README promises 3.10, and the suite
+  now runs on it.
+- **The CSV export had six empty-headed columns** and its figures shifted
+  under the wrong headings once a trade carried a playbook. The rows carry
+  the playbook columns now, in line with the header.
+- **A deleted playbook could not be put back where it came from:** the
+  Trash card took it for a trade. It is restored to the playbooks.
+
 ## v1.4.8, 04.09.2026
 
 A sign for the journal, an equity curve that says which side of its start it

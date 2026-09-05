@@ -59,7 +59,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 
 | file | owns |
 |---|---|
-| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`, `Week`, `Plan`; the vocabularies a journal starts with; the checks |
+| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`, `Week`, `Plan`, `Playbook`; the vocabularies a journal starts with; the checks |
 | `plainbook/mdfile.py` | the markdown header format, and only that |
 | `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash, the owner's lists of pairs and words |
 | `plainbook/balances.py` | balances and R, computed by replaying history |
@@ -71,6 +71,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `tools/check_public.py` | the guard that keeps records out of the repository |
 | `tools/check_journal.py` | loads every record the way the server does and names the ones that do not read |
 | `tools/demo_journal.py` | an invented journal for screenshots and for looking at a change |
+| `tools/attach_playbook.py` | ties the trades a playbook was already traded by to it: its styles, from its `since` date |
 | `tools/import_csv.py` | old trades brought in from a CSV table (a Notion export, a spreadsheet), written as the interface writes them |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
@@ -132,6 +133,16 @@ data. Each one is followed by what it prevents.
     totals of its groups go by the entry. *Prevents:* a report whose result in
     money and balance change disagree by the trades that ran across its edge,
     which is what they did before 1.4.6.
+
+12. **A trade's `deviations` is None or a list, and the two mean different
+    things.** None: the trade was tied to its playbook without a checklist
+    (the key is absent from the file). A list, empty included: the rules
+    were ticked, and these are the ones not met (the key stands, empty for
+    a clean trade). `exit_deviations` works the same for the management
+    rules, ticked at the close. Only ticked trades hold a playbook's version
+    and take part in the cost of a rule. *Prevents:* a trade attached later counting
+    as clean, and a screenshot fix turning "not ticked" into "every rule
+    broken".
 
 ## 5. Recipes
 
@@ -198,8 +209,15 @@ In this order, every time:
    `chromium --headless --screenshot=/tmp/page.png --window-size=1400,1000 http://localhost:8778/`
 4. If you touched the paste-a-screenshot path, drive it in a real browser. It is
    the one place where browser script does the work, and it is the one place
-   that has broken twice.
-5. Restart the server and load the page you changed.
+   that has broken twice. The playbook forms are scripted too (the checklist,
+   the rule rows, the limits); `node tools/browser_check.mjs` drives them in a
+   headless Chromium against a demo journal, see the top of that file.
+5. Run the suite on the oldest Python the README promises when you can:
+   `mise install python@3.10` gives one, then
+   `~/.local/share/mise/installs/python/3.10.*/bin/python3 -m unittest discover -s tests`.
+   The system Python is newer than most users', and 3.12 accepts f-strings
+   that 3.10 refuses.
+6. Restart the server and load the page you changed.
 
 ## 7. Conventions
 
@@ -247,6 +265,16 @@ and none of them was obvious from the code.
   `page()` function in the same routine, and every route that had both died
   with an UnboundLocalError. *Lesson:* a wrapper takes the name of what it
   wraps only when nothing else in the file has it.
+- **An f-string that only newer Pythons read.** Three f-strings held a
+  backslash inside their expression part, a quoted HTML snippet after `or`,
+  and the server did not start on Python 3.10 or 3.11 for two releases: the
+  system Python was 3.14 and CI had never run. *Lesson:* a string with a
+  quote in it goes into a variable first; and step 5 above exists.
+- **A handler named like a field.** A select named `limit_kind` called
+  `limit_kind(this)` on change, and nothing happened: inside a form an inline
+  handler looks names up in the form's fields before the page's functions,
+  so the call went to the select itself. *Lesson:* a function called from an
+  inline handler must not share a name with any field of that form.
 - **A test that trusted the order of a folder.** Two tests took the first
   record of their kind in the trash. The server tests share one journal, so a
   record of an earlier test was there too, deleted within the same second and

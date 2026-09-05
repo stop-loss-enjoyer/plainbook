@@ -22,6 +22,7 @@ from . import html as H
 from . import reports, stats, store
 from .balances import Journal
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
+                    Playbook, Setup, Rule, PLAYBOOK_STATUSES, LIMITS,
                     Plan, RecordError, DIRECTIONS, RESULTS, NARRATIVES,
                     CARD_SECTIONS, WEEK_SECTIONS, ASSESSMENT_ROWS, TRADE_KEYS,
                     PAIR_NOT_SET)
@@ -108,7 +109,23 @@ def page(title, body, tab="journal", header_right="", problems=()):
                   f'out of every figure until the file is fixed. '
                   f'<span class="caption">python3 tools/check_journal.py checks '
                   f'the whole journal the same way.</span><ul>{rows}</ul></div>')
-    return H.page(title, body, tab, header_right, notice, said_box())
+    return H.page(title, body, tab, header_right, notice, said_box(),
+                  attention=tabs_asking())
+
+
+def tabs_asking():
+    """The tabs drawn amber: the ones that wait for the owner.
+
+    A journal with no playbook yet asks for one, because the rules are what
+    the trade form will hold the trades against. A block that has run its
+    course will ask for its review here as well, once trades carry a playbook."""
+    books = store.all_playbooks(ROOT, [])
+    if not books:
+        return {"playbooks"}
+    j = journal()
+    if any(stats.review_due(p, len(playbook_trades(j, p.id))) for p in books):
+        return {"playbooks"}
+    return set()
 
 
 # --- filters ---------------------------------------------------------------
@@ -447,6 +464,10 @@ def export_csv(j, trades):
                     t.result or "", "" if t.pnl is None else f"{t.pnl:g}",
                     store._date_to_text(t.closed, t.closed_time),
                     t.note, t.plan,
+                    t.playbook, t.playbook_version, t.setup,
+                    "" if t.deviations is None else " ".join(map(str, t.deviations)),
+                    "" if t.exit_deviations is None else " ".join(map(str, t.exit_deviations)),
+                    "; ".join(f"{n}: {why}" for n, why in sorted(t.reasons.items())),
                     "" if r is None else f"{r:.4f}",
                     f"{c.balance_at_entry:.2f}", f"{c.risk_money:.2f}",
                     j.currency(t.account)])
@@ -504,6 +525,57 @@ def home_page(q):
 
 # --- trade page ------------------------------------------------------------
 
+def ticked_rules(p, t):
+    """The rules the trade was held to, each marked met or not, or a line
+    saying nobody ticked them."""
+    rules = checklist_rules(p, t.setup)
+    head = (f'<p class="pb-meta"><a href="/playbook/{U(p.id)}">{esc(playbook_label(p))}</a>'
+            f' <b>{esc(p.version)}</b>'
+            + (f' · <b>{esc(t.setup)}</b>' if t.setup else "") + '</p>')
+    if t.deviations is None:
+        entry = ('<p class="muted">The rules were not ticked for this trade: '
+                 'it was tied to the playbook later. Edit the trade to '
+                 'tick them.</p>')
+    elif not rules:
+        entry = '<p class="muted">The playbook has no rules to hold it to.</p>'
+    else:
+        entry = marked_rules(rules, t.deviations, "met", t.reasons)
+    return head + entry + management_rules(p, t)
+
+
+def marked_rules(rules, broken, word, reasons=None):
+    """The rules with a tick or a cross each, the reason given under a
+    cross, and the count under them."""
+    broken = set(broken)
+    reasons = reasons or {}
+    rows = "".join(
+        f'<li class="{"no" if r.number in broken else "ok"}">'
+        f'<span class="n">{r.number}</span><span>{esc(r.text)}'
+        + (f'<span class="detail">{esc(r.detail)}</span>' if r.detail else "")
+        + (f'<span class="reason">{esc(reasons[r.number])}</span>'
+           if r.number in broken and r.number in reasons else "")
+        + '</span></li>' for r in rules)
+    count = len(broken)
+    line = (f"every rule {word}" if not count else
+            f"{count} rule{'s' if count != 1 else ''} not {word}")
+    return f'<ol class="rules ticked">{rows}</ol><p class="caption">{line}</p>'
+
+
+def management_rules(p, t):
+    """The management part of the checklist: a plain list to keep in mind
+    while the position is open, ticks and crosses once it is closed."""
+    if not p.management:
+        return ""
+    head = '<h3>Management</h3>'
+    if t.is_open:
+        return (head + '<p class="caption">Ticked when the trade is closed.</p>'
+                + rules_list(p.management))
+    if t.exit_deviations is None:
+        return head + ('<p class="muted">The management rules were not ticked at '
+                       'the close. Edit the trade to tick them.</p>')
+    return head + marked_rules(p.management, t.exit_deviations, "held", t.reasons)
+
+
 def outcome_warning(t):
     """A result that disagrees with the sign of the PnL is nearly always a slip
     of the hand. It is said on the page and not refused by the form, because
@@ -545,8 +617,25 @@ def trade_page(trade_id):
         table += (f'<tr><td class="muted">plan</td><td>'
                   f'<a href="/plan/{U(t.plan)}">{esc(plan_title(t.plan))}</a>'
                   f'</td></tr>')
+    if t.playbook:
+        words = [esc(playbook_title(t.playbook))]
+        if t.playbook_version:
+            words.append(esc(t.playbook_version))
+        if t.setup:
+            words.append(esc(t.setup))
+        deviated = (" · rules not ticked" if t.deviations is None else
+                    f' · rules not met: {", ".join(str(n) for n in t.deviations)}'
+                    if t.deviations else " · every rule met")
+        table += (f'<tr><td class="muted">playbook</td><td>'
+                  f'<a href="/playbook/{U(t.playbook)}">{" · ".join(words)}</a>'
+                  f'{deviated}</td></tr>')
     if t.note:
         table += f'<tr><td class="muted">note</td><td>{esc(t.note)}</td></tr>'
+    checklist = ""
+    if t.playbook:
+        p = playbook_of_trade(t)
+        if p is not None:
+            checklist = f'<div class="card"><h2>Checklist</h2>{ticked_rules(p, t)}</div>'
 
     idea = ""
     for block in t.idea:
@@ -575,6 +664,7 @@ def trade_page(trade_id):
     body = (f'<div class="card{" is-open" if t.is_open else ""}">'
             f'<h2>{esc(t.id)}</h2>{outcome_warning(t)}'
             f'<table class="props">{table}</table></div>'
+            + checklist
             + (f'<div class="card"><h2>Idea</h2>{idea}</div>' if idea else "")
             + (f'<div class="card"><h2>Exit moment</h2>'
                f'<div class="shots">{exit_shots}</div></div>' if exit_shots else "")
@@ -697,6 +787,12 @@ def equity_chart(j, account, trades, since, axis, height, cid):
                         base_word="since the period began" if since else "from start")
 
 
+# Kept out of the f-strings below: an expression part with a backslash in it
+# is a syntax error before Python 3.12, and 3.10 is what the README promises.
+NOTHING_TO_PLOT = "<p class='muted'>Nothing to plot yet.</p>"
+EMPTY_CELL = "<span class='muted'>-</span>"
+
+
 def stats_page(q):
     j = journal()
     trades = apply_filters(j, q)
@@ -727,7 +823,7 @@ def stats_page(q):
         chart = equity_chart(j, selected, trades, since, axis, 300, "acc")
         charts = (f'<div class="card"><h2>Equity: {esc(name)}</h2>'
                   f'{account_tabs(j, q, selected, axis_switch(q, axis))}'
-                  f'{chart or "<p class=\'muted\'>Nothing to plot yet.</p>"}'
+                  f'{chart or NOTHING_TO_PLOT}'
                   f'<p class="caption">{legend}{how}</p></div>')
     else:
         cards = ""
@@ -739,7 +835,7 @@ def stats_page(q):
                 cards += f'<h3>{esc(j.accounts[a].name or a)}</h3>{chart}'
         charts = (f'<div class="card"><h2>Equity by account</h2>'
                   f'{account_tabs(j, q, "", axis_switch(q, axis))}'
-                  f'{cards or "<p class=\'muted\'>Nothing to plot yet.</p>"}'
+                  f'{cards or NOTHING_TO_PLOT}'
                   f'<p class="caption">Each account has its own scale, which is '
                   f'why they are drawn separately. Archived accounts are not '
                   f'drawn; their trades stay in the figures below. {legend}{how}'
@@ -767,9 +863,47 @@ def stats_page(q):
                    f'</div>')
 
     body = (filter_form(j, q).replace('action="/"', 'action="/stats"')
+            + by_playbook_card(j, trades)
             + charts
             + r_rings(j, trades) + streaks_card(j, trades) + slices)
     return page("Statistics", body, "stats")
+
+
+def by_playbook_card(j, trades):
+    """The playbooks first: a row each with its setups under it, and the
+    trades taken under none last. Nothing when no trade names a playbook."""
+    rows = stats.by_playbook(j, trades)
+    if not any(pid != stats.NO_PLAYBOOK for pid, _, _ in rows):
+        return ""
+    names = {b.id: playbook_label(b) for b in store.all_playbooks(ROOT, [])}
+    body = ""
+    for pid, s, c in rows:
+        if pid == stats.NO_PLAYBOOK:
+            body += (f'<tr><td class="muted">{stats.NO_PLAYBOOK}</td>{figures_cells(s)}'
+                     f'<td class="num">{H.money(s.sum_pnl, signed=True)}</td>'
+                     f'<td class="num">-</td><td class="num">-</td></tr>')
+            continue
+        body += (f'<tr><td><a href="/playbook/{U(pid)}">{esc(names.get(pid, pid))}</a></td>'
+                 f'{figures_cells(s)}<td class="num">{H.money(s.sum_pnl, signed=True)}</td>'
+                 f'{clean_cell(c)}{held_cell(c)}</tr>')
+        own = [t for t in trades if t.playbook == pid]
+        setups = stats.by_setup(j, own)
+        if len(setups) > 1 or (setups and setups[0][0] != "-"):
+            for name, ss, cc in setups:
+                body += (f'<tr class="sub"><td>{esc(name)}</td>{figures_cells(ss)}'
+                         f'<td class="num">{H.money(ss.sum_pnl, signed=True)}</td>'
+                         f'{clean_cell(cc)}{held_cell(cc)}</tr>')
+    return (f'<div class="card"><h2>By playbook</h2><table><thead><tr><th></th>'
+            f'{figures_head()}<th class="num">Σ {H.sign(j.currency())}</th>'
+            f'<th class="num">clean</th><th class="num">held</th></tr></thead>'
+            f'<tbody>{body}</tbody></table>'
+            f'<p class="caption">Closed trades, by the playbook they were opened '
+            f'under, with its setups beneath it. Clean is the share of ticked '
+            f'trades that met every rule at the entry; held, the share that kept '
+            f'every management rule to the close. A trade tied to a playbook '
+            f'later, never ticked, is counted but says nothing about the rules. '
+            f'WR and EV as everywhere: WR without break-evens, EV over every '
+            f'closed trade.</p></div>')
 
 
 # --- search ----------------------------------------------------------------
@@ -796,12 +930,13 @@ def search_page(q):
     form = (f'<form method="get" action="/search" class="filters">'
             f'<div style="flex:1"><label>a word or a phrase</label>'
             f'<input type="text" name="q" value="{esc(needle)}" style="width:100%" '
-            f'autofocus placeholder="from an idea, a conclusion, a plan or a card">'
+            f'autofocus placeholder="from an idea, a conclusion, a plan, a playbook or a card">'
             f'</div><div><button class="btn primary">Find</button></div></form>')
     if not needle:
         body = (f'<div class="card"><h2>Search</h2>{form}<p class="caption">'
-                f'Looks through the text of every trade, plan and card: the '
-                f'ideas, the conclusions, the notes, the analysis, the reviews. '
+                f'Looks through the text of every trade, plan, playbook and card: '
+                f'the ideas, the conclusions, the notes, the analysis, the rules, '
+                f'the reviews. '
                 f'Case does not matter.</p></div>')
         return page("Search", body, "search")
 
@@ -824,6 +959,15 @@ def search_page(q):
         if hit(texts):
             found.append(("plan", f"/plan/{U(k.id)}", plan_label(k),
                           _snippet(texts[3:] + texts[1:2], needle)))
+    for b in store.all_playbooks(ROOT, []):
+        texts = [b.id, b.name, b.intro, b.review] \
+            + [r.text + " " + r.detail for r in b.rules] \
+            + [x.name + " " + x.text for x in b.setups] \
+            + [text for _, text in b.sections]
+        if hit(texts):
+            found.append(("playbook", f"/playbook/{U(b.id)}",
+                          f"{playbook_label(b)} {b.version}".strip(),
+                          _snippet(texts[2:], needle)))
     for c in store.all_cards(ROOT, []):
         texts = [getattr(c, name) for name, _, _ in CARD_SECTIONS] \
             + [row.trade for row in c.assessment]
@@ -965,6 +1109,10 @@ def plan_shots_base(plan_id):
     return f"/plan-shot/{U(plan_id)}"
 
 
+def playbook_shots_base(playbook_id):
+    return f"/playbook-shot/{U(playbook_id)}"
+
+
 def dropzone(name, hint, shots=()):
     return (f'<div class="dropzone" data-zone="{esc(name)}">{"".join(shots)}'
             f'<div class="hint">{esc(hint)}</div></div>')
@@ -1046,6 +1194,180 @@ that of your last trade on the account.</p>
 </details>"""
 
 
+def playbook_of_trade(t):
+    """The playbook a trade was ticked against: the version it names when
+    that version is kept, else the current one. None when it is gone."""
+    if not t.playbook or not store.safe_dir_name(t.playbook):
+        return None
+    try:
+        p = store.load_playbook(ROOT, t.playbook)
+    except (OSError, ValueError):
+        return None
+    if t.playbook_version and t.playbook_version != p.version:
+        for label in store.playbook_versions(ROOT, t.playbook):
+            try:
+                kept = store.load_playbook_version(ROOT, t.playbook, label)
+            except (OSError, ValueError):
+                continue
+            if kept.version == t.playbook_version:
+                return kept
+    return p
+
+
+def checklist_rules(p, setup):
+    """The rules a trade is held to: those of its setup, then the filters. A
+    playbook whose setups have no names has one, and every trade takes it."""
+    named = any(x.name for x in p.setups)
+    rules = []
+    for x in p.setups:
+        if not named or x.name == setup:
+            rules.extend(x.rules)
+    return rules + list(p.filters)
+
+
+def check_row(pid, r, met, field="met", reason=""):
+    """One rule of the checklist: the box, the few words, the whole rule
+    behind the question mark, and a line for why the rule was not met, shown
+    when the box is empty. `field` is `met` at the entry, `held` at the
+    close."""
+    why = (f'<button type="button" class="why" title="the whole rule" '
+           f'onclick="show_why(this)">?</button>'
+           f'<div class="detail" hidden>{esc(r.detail)}</div>' if r.detail else "")
+    return (f'<div class="check"><input type="checkbox" id="{field}-{esc(pid)}-{r.number}" '
+            f'name="{field}_{esc(pid)}" value="{r.number}"{" checked" if met else ""}>'
+            f'<label for="{field}-{esc(pid)}-{r.number}"><span class="n">{r.number}</span>'
+            f'{esc(r.text)}</label>{why}'
+            f'<input type="text" class="why-in" name="why_{esc(pid)}_{r.number}" '
+            f'value="{esc(reason)}" placeholder="why not: the fact, not the verdict"'
+            f'{" hidden" if met else ""}></div>')
+
+
+def exit_checklist(t):
+    """The management rules of the trade's playbook, ticked at the close, or
+    nothing when there is no playbook or it has no such rules. The boxes of a
+    closed trade stand as they were ticked."""
+    p = playbook_of_trade(t) if t.playbook else None
+    if p is None or not p.management:
+        return ""
+    met = (set() if t.exit_deviations is None else
+           {r.number for r in p.management} - set(t.exit_deviations))
+    rows = "".join(check_row(p.id, r, r.number in met, "held", t.reasons.get(r.number, ""))
+                   for r in p.management)
+    note = ("" if t.is_open or t.exit_deviations is not None else
+            '<p class="caption">The management rules were not ticked when this '
+            'trade was closed. Tick them now and the trade records them; leave '
+            'them alone and it stays as it is.</p>')
+    return (f'<div class="card" id="exit-checklist"><h2>Management</h2>'
+            f'<input type="hidden" name="ticked_exit" value="0" id="ticked-exit">'
+            f'<div class="checklist" data-playbook="{esc(p.id)}">'
+            f'<h3>{esc(playbook_label(p))} {esc(p.version)}</h3>{note}'
+            f'<p class="about caption">How the position was held, whatever the setup.</p>'
+            f'{rows}<p class="caption tally"></p></div></div>')
+
+
+# The close form and the form of a closed trade tick the management rules;
+# the count under the list and the touch mark are the same as at the entry.
+EXIT_SCRIPT = """
+(function(){
+  const card = document.getElementById('exit-checklist');
+  if (!card) return;
+  const block = card.querySelector('.checklist');
+  function count(){
+    const boxes = [...block.querySelectorAll('input[type=checkbox]')];
+    const met = boxes.filter(b => b.checked).length;
+    block.querySelector('.tally').textContent = met === boxes.length ? 'every rule held'
+      : met + ' of ' + boxes.length + ' rules held, ' + (boxes.length - met) + ' not';
+  }
+  card.addEventListener('change', e => {
+    document.getElementById('ticked-exit').value = '1';
+    if (e.target.type === 'checkbox') {
+      const why = e.target.closest('.check').querySelector('.why-in');
+      why.hidden = e.target.checked;
+      if (!why.hidden) why.focus();
+    }
+    count();
+  });
+  count();
+})();
+"""
+
+
+def checklist_block(p, t=None):
+    """The checklist of one playbook in the trade form, drawn hidden and shown
+    by the script when the playbook is picked. For a trade being edited the
+    boxes stand as they were ticked."""
+    own = t is not None and t.playbook == p.id
+    met = (set() if not own or t.deviations is None else
+           {r.number for r in p.rules} - set(t.deviations))
+    named = any(x.name for x in p.setups)
+    chosen = t.setup if own else ""
+    if named and chosen not in [x.name for x in p.setups]:
+        chosen = p.setups[0].name
+    setups = ""
+    if named:
+        radios = "".join(
+            f'<label class="radio"><input type="radio" name="setup_{esc(p.id)}" '
+            f'value="{esc(x.name)}"{" checked" if x.name == chosen else ""}> '
+            f'{esc(x.name)}</label>' for x in p.setups)
+        setups = f'<div class="setups">{radios}</div>'
+    reasons = t.reasons if own else {}
+    groups = ""
+    for x in p.setups:
+        rows = "".join(check_row(p.id, r, r.number in met, reason=reasons.get(r.number, ""))
+                       for r in x.rules)
+        shown = not named or x.name == chosen
+        groups += (f'<div class="setup-rules" data-setup="{esc(x.name)}"'
+                   f'{"" if shown else " hidden"}>{rows}</div>')
+    if p.filters:
+        rows = "".join(check_row(p.id, r, r.number in met, reason=reasons.get(r.number, ""))
+                       for r in p.filters)
+        groups += f'<div class="filter-rules"><h3>Filters</h3>{rows}</div>'
+    note = ""
+    if own and t.deviations is None:
+        note = ('<p class="caption">The rules were not ticked for this trade. '
+                'Tick them now and the trade records them; leave them alone '
+                'and it stays as it is.</p>')
+    style = esc(p.styles[0]) if p.styles else ""
+    frame = "" if t is not None else frame_html(p)
+    return (f'<div class="checklist" data-playbook="{esc(p.id)}" data-style="{style}"'
+            f'{"" if own else " hidden"}>'
+            f'<h3>{esc(playbook_label(p))} {esc(p.version)}</h3>{frame}{note}{setups}{groups}'
+            f'<p class="caption tally"></p></div>')
+
+
+def frame_html(p):
+    """The limits of the playbook against the journal now, in one line above
+    the checklist: what the week and the month already hold, what is open,
+    and the risk typed in the form against the cap. Red where the trade
+    being opened would go past a limit; nothing is refused."""
+    rows = stats.frame(journal(), p)
+    limits = dict(p.limits)
+    cells = ""
+    for what, value, limit, reached in rows:
+        shown = f"{value:+.2f}" if what == "R this week" else f"{value:.0f}"
+        cap = f"{limit:+.0f}" if what == "R this week" else f"{limit:.0f}"
+        cells += (f'<span class="{"over" if reached else ""}">{esc(what)} '
+                  f'<b>{shown}</b> of {cap}</span>')
+    risk = stats._figure(limits, "risk")
+    if risk is not None:
+        cells += (f'<span data-risk="{risk:g}">risk <b class="risk-now">-</b> '
+                  f'of {risk:g}%</span>')
+    if not cells:
+        return ""
+    return f'<div class="frame">{cells}</div>'
+
+
+def block_notice(p, count):
+    """A line on the page when a block has run its course and waits for its
+    review; the tab is amber for the same reason."""
+    if not stats.review_due(p, count):
+        return ""
+    number = count // p.block
+    return (f'<p class="pb-meta over">block {number} is complete: <b>write its '
+            f'review</b> below, then revise the rules under a new number if '
+            f'they change.</p>')
+
+
 def trade_form(t=None, token=""):
     """One form for opening and for editing: the fields are the same."""
     j = journal()
@@ -1079,6 +1401,22 @@ def trade_form(t=None, token=""):
     plan_ids = [k.id for k in plans]
     plan_names = {k.id: plan_label(k) for k in plans}
 
+    # the playbooks offered are the ones in use; the one a trade being edited
+    # was ticked against is drawn as it was then, retired or revised since
+    books = [b for b in store.all_playbooks(ROOT, []) if b.offered]
+    if editing and t.playbook:
+        own = playbook_of_trade(t)
+        if own is not None:
+            books = [own] + [b for b in books if b.id != own.id]
+    book_ids = [b.id for b in books]
+    book_names = {b.id: f"{playbook_label(b)} {b.version}".strip() for b in books}
+    # a playbook deleted since is still the trade's: the menu keeps its id,
+    # or the form would post an empty choice and wipe the checklist
+    if editing and t.playbook and t.playbook not in book_ids:
+        book_ids.append(t.playbook)
+        book_names[t.playbook] = f"{t.playbook} {t.playbook_version}".strip()
+    checklists = "".join(checklist_block(b, t if editing else None) for b in books)
+
     if editing and t.idea:
         blocks = ""
         for i, b in enumerate(t.idea, 1):
@@ -1103,6 +1441,7 @@ def trade_form(t=None, token=""):
         closing = f"""<input type="hidden" name="closed" value="1">
 <div class="card"><h2>Outcome</h2>
 {outcome_fields(t)}</div>
+{exit_checklist(t)}
 <div class="card"><h2>Exit moment</h2>
 {dropzone("exit", "click here and press Ctrl+V",
           [shot_in_zone(shots_base(t.id), s, "have_exit") for s in t.exit_images])}</div>
@@ -1140,9 +1479,17 @@ def trade_form(t=None, token=""):
 <div class="field"><label>plan</label>
 {select("plan", plan_ids, t.plan if editing else "", empty="-",
         labels=plan_names, style="max-width:270px")}</div>
+<div class="field"><label>playbook</label>
+{select("playbook", book_ids, t.playbook if editing else "", empty="-",
+        labels=book_names)}</div>
 </div>
 <p class="caption" style="margin:8px 0 0">execution: {checkboxes}</p>
 {duplicate}
+</div>
+<div class="card" id="checklist-card"{"" if editing and t.playbook else " hidden"}>
+<h2>Checklist</h2>
+<input type="hidden" name="ticked" value="0" id="ticked">
+{checklists}
 </div>
 <div id="blocks">{blocks}</div>
 <template id="block-template">{block_inside("__N__")}</template>
@@ -1153,7 +1500,73 @@ def trade_form(t=None, token=""):
 </form>
 <script>{FORM_SCRIPT}</script>
 <script>document.body.dataset.token = {json.dumps(token)};
-init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}"""
+init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}
+<script>{CHECKLIST_SCRIPT}</script><script>{EXIT_SCRIPT}</script>"""
+
+
+# The checklist follows the playbook picked in the form: one block per
+# playbook is on the page, the chosen one is shown, and within it the rules
+# of the chosen setup. The count under it says how many of the rules in
+# sight are ticked, and any touch of the block marks the trade as ticked.
+CHECKLIST_SCRIPT = """
+function tally(block){
+  const boxes = [...block.querySelectorAll('input[type=checkbox]')]
+    .filter(b => !b.closest('[hidden]'));
+  const met = boxes.filter(b => b.checked).length;
+  const out = block.querySelector('.tally');
+  if (!boxes.length) { out.textContent = ''; return; }
+  out.textContent = met === boxes.length ? 'every rule met'
+    : met + ' of ' + boxes.length + ' rules met, ' + (boxes.length - met) + ' not';
+}
+function show_playbook(){
+  const sel = document.querySelector('[name=playbook]');
+  const card = document.getElementById('checklist-card');
+  card.hidden = !sel.value;
+  document.querySelectorAll('#checklist-card .checklist').forEach(block => {
+    block.hidden = block.dataset.playbook !== sel.value;
+    if (!block.hidden) tally(block);
+  });
+}
+function pick_playbook(){
+  show_playbook();
+  const block = document.querySelector('#checklist-card .checklist:not([hidden])');
+  const style = document.querySelector('[name=style]');
+  if (block && block.dataset.style && style &&
+      [...style.options].some(o => o.value === block.dataset.style))
+    style.value = block.dataset.style;
+}
+function show_why(button){
+  const detail = button.nextElementSibling;
+  detail.hidden = !detail.hidden;
+}
+function follow_risk(){
+  const risk = parseFloat(document.querySelector('[name=risk]').value);
+  document.querySelectorAll('#checklist-card .checklist:not([hidden]) [data-risk]').forEach(cell => {
+    const cap = parseFloat(cell.dataset.risk);
+    cell.querySelector('.risk-now').textContent = isNaN(risk) ? '-' : risk + '%';
+    cell.classList.toggle('over', !isNaN(risk) && risk > cap);
+  });
+}
+document.querySelector('[name=risk]').addEventListener('input', follow_risk);
+document.querySelector('[name=playbook]').addEventListener('change', follow_risk);
+follow_risk();
+document.querySelector('[name=playbook]').addEventListener('change', pick_playbook);
+document.getElementById('checklist-card').addEventListener('change', e => {
+  document.getElementById('ticked').value = '1';
+  if (e.target.type === 'checkbox') {
+    const why = e.target.closest('.check').querySelector('.why-in');
+    why.hidden = e.target.checked;
+    if (!why.hidden) why.focus();
+  }
+  const block = e.target.closest('.checklist');
+  if (e.target.type === 'radio')
+    block.querySelectorAll('.setup-rules').forEach(g => {
+      g.hidden = g.dataset.setup !== e.target.value;
+    });
+  tally(block);
+});
+show_playbook();
+"""
 
 
 def outcome_fields(t):
@@ -1187,6 +1600,7 @@ def close_form(t, token):
 {outcome_fields(t)}
 <p class="caption">Risk was {t.risk:g}% = {amount(journal(), journal().computed[t.id].risk_money, t.account)}.
 R is calculated automatically.</p></div>
+{exit_checklist(t)}
 <div class="card"><h2>Exit moment</h2>
 {dropzone("exit", "click here and press Ctrl+V", exit_shots)}</div>
 <div class="card"><h2>Conclusions</h2>
@@ -1196,7 +1610,8 @@ R is calculated automatically.</p></div>
 <a class="btn" href="/trade/{U(t.id)}">Cancel</a></div>
 </form>
 <script>{FORM_SCRIPT}</script>
-<script>document.body.dataset.token = {json.dumps(token)};init_zones();</script>"""
+<script>document.body.dataset.token = {json.dumps(token)};init_zones();</script>
+<script>{EXIT_SCRIPT}</script>"""
 
 
 # --- screenshot drafts -----------------------------------------------------
@@ -1343,7 +1758,98 @@ def one(data, key, default=""):
     return (data.get(key) or [default])[0].strip()
 
 
-def apply_fields(t, data):
+def apply_playbook(t, data, editing):
+    """The playbook, the setup and the rules not met, from the form.
+
+    A new trade records the checklist as it stands, ticked or not: the boxes
+    left empty are the deviations, and leaving them all empty is a decision
+    too. A trade being edited that was never ticked (tied to the playbook
+    later) keeps that state unless the checklist was touched, so that fixing
+    a screenshot does not turn "not ticked" into "every rule broken"."""
+    pid = one(data, "playbook")
+    if not pid:
+        t.playbook = t.playbook_version = t.setup = ""
+        t.deviations = t.exit_deviations = None
+        t.reasons = {}
+        return
+    same = editing and t.playbook == pid
+    if same:
+        p = playbook_of_trade(t)
+        if p is None:
+            return                  # the playbook is gone: the trade keeps its record
+    else:
+        if not store.safe_dir_name(pid):
+            raise RecordError(f"bad playbook {pid!r}")
+        try:
+            p = store.load_playbook(ROOT, pid)
+        except (OSError, ValueError):
+            p = None
+        if p is None:
+            raise RecordError(f"no playbook {pid!r}")
+        # another playbook: what was ticked under the old one says nothing
+        # about this one, at the entry or at the close
+        t.exit_deviations = None
+        t.reasons = {}
+    t.playbook = pid
+    t.setup = one(data, f"setup_{pid}")
+    names = [x.name for x in p.setups if x.name]
+    if names and t.setup not in names:
+        raise RecordError("pick the setup the trade is taken under: " + ", ".join(names))
+    if same and t.deviations is None and one(data, "ticked") != "1":
+        return
+    # the ticks are read against the rules the form drew, so the trade names
+    # that version from now on: an attached trade ticked after a revision
+    # moves to the version it was actually held to
+    t.playbook_version = p.version
+    met = set()
+    for x in data.get(f"met_{pid}", []):
+        try:
+            met.add(int(x))
+        except ValueError:
+            pass
+    t.deviations = [r.number for r in checklist_rules(p, t.setup) if r.number not in met]
+    keep_reasons(t, data, pid, t.deviations, {r.number for r in p.management})
+
+
+def keep_reasons(t, data, pid, broken, others):
+    """The reasons typed under the rules not met: rewritten for the list
+    just read, kept for the other list (`others` are its rule numbers)."""
+    kept = {n: why for n, why in t.reasons.items() if n in others}
+    for n in broken:
+        why = " ".join(one(data, f"why_{pid}_{n}").split())
+        if why:
+            kept[n] = why
+    t.reasons = kept
+
+
+def apply_management(t, data, editing):
+    """The management rules ticked at the close. A trade closed with no box
+    ticked records every rule as not held, the same as at the entry; a
+    closed trade being edited keeps "not ticked" unless the list was
+    touched."""
+    if not t.playbook:
+        t.exit_deviations = None
+        return
+    p = playbook_of_trade(t)
+    if p is None:
+        return                      # the playbook is gone: the trade keeps its record
+    if not p.management:
+        t.exit_deviations = None
+        return
+    if editing and t.exit_deviations is None and one(data, "ticked_exit") != "1":
+        return
+    held = set()
+    for x in data.get(f"held_{p.id}", []):
+        try:
+            held.add(int(x))
+        except ValueError:
+            pass
+    t.exit_deviations = [r.number for r in p.management if r.number not in held]
+    keep_reasons(t, data, p.id, t.exit_deviations,
+                 {r.number for r in checklist_rules(p, t.setup)})
+
+
+def apply_fields(t, data, editing=False):
     entry = datetime.strptime(one(data, "entry"), "%Y-%m-%dT%H:%M")
     t.account = one(data, "account")
     # EURUSD and eurusd are one pair, so the filters and the tables see one
@@ -1353,6 +1859,7 @@ def apply_fields(t, data):
     t.entry_tf = one(data, "entry_tf")
     t.execution = data.get("execution", [])
     t.plan = one(data, "plan")
+    apply_playbook(t, data, editing)
     if t.account not in journal(True).accounts:
         raise RecordError(f"no account {t.account!r}")
     risk = one(data, "risk")
@@ -1429,10 +1936,11 @@ def create_trade(data):
 
 def edit_trade(t, data):
     token = one(data, "token")
-    apply_fields(t, data)
+    apply_fields(t, data, editing=True)
     editing_close = one(data, "closed") == "1"
     if editing_close:
         apply_outcome(t, data)
+        apply_management(t, data, editing=True)
     # checked before anything on the disk moves: a folder renamed for a record
     # that is then refused would be a folder whose file names another id
     t.check()
@@ -1520,6 +2028,7 @@ def apply_outcome(t, data):
 def close_trade(t, data):
     token = one(data, "token")
     apply_outcome(t, data)
+    apply_management(t, data, editing=False)
     conclusions = one(data, "conclusions")
     folder = store.trade_dir(ROOT, t.id)
     zones = {f"idea-{i}": [os.path.join(folder, s) for s in b.images]
@@ -1919,6 +2428,747 @@ def add_update(k, data):
     if token:
         drop_draft(token)
     return k
+
+
+# --- playbooks -------------------------------------------------------------
+# The standing rules of a way of trading, as a record. Written once, revised
+# by version, and picked in the form of a trade later on.
+
+def playbook_label(p):
+    return p.name or p.id
+
+
+def playbook_title(playbook_id):
+    """The name of a playbook for a link. One deleted later leaves its id."""
+    if not store.safe_dir_name(playbook_id):
+        return playbook_id
+    try:
+        return playbook_label(store.load_playbook(ROOT, playbook_id))
+    except (OSError, ValueError):
+        return playbook_id
+
+
+def status_chip(p):
+    return f'<span class="chip {esc(p.status)}">{esc(p.status)}</span>'
+
+
+def playbook_meta(p):
+    """Version, first counted day and styles in one dim line."""
+    bits = []
+    if p.version:
+        bits.append(f"version <b>{esc(p.version)}</b>")
+    if p.since:
+        bits.append(f"counts from <b>{p.since:%d.%m.%Y}</b>")
+    if p.styles:
+        bits.append("styles <b>" + esc(", ".join(p.styles)) + "</b>")
+    return f'<p class="pb-meta">{" · ".join(bits)}</p>' if bits else ""
+
+
+def block_bar(p, done):
+    """How far the current block of trades has come: `done` of `p.block`.
+    Nothing when the playbook has no block."""
+    if not p.block:
+        return ""
+    within = done % p.block if done < p.block or done % p.block else p.block
+    number = done // p.block + (1 if done % p.block or not done else 0)
+    width = 100 * within / p.block
+    total = (f' · <b>{done}</b> trades in all, next review at <b>{number * p.block}</b>'
+             if done > p.block else "")
+    return (f'<p class="pb-meta">block {number}: <b>{within} / {p.block}</b> trades{total}</p>'
+            f'<div class="block-bar"><i style="width:{width:.0f}%"></i></div>')
+
+
+def rules_list(rules):
+    return ('<ol class="rules">' + "".join(
+        f'<li><span class="n">{r.number}</span><span>{esc(r.text)}'
+        + (f'<span class="detail">{esc(r.detail)}</span>' if r.detail else "")
+        + '</span></li>' for r in rules) + '</ol>')
+
+
+def playbook_rules(p):
+    """The setups and the filters as they will be ticked in the trade form."""
+    out = ""
+    for s in p.setups:
+        about = (f'<p class="about">{inline(" ".join(s.text.split()))}</p>'
+                 if s.text.strip() else "")
+        out += (f'<div class="setup">{f"<h3>{esc(s.name)}</h3>" if s.name else ""}'
+                f'{about}{rules_list(s.rules)}</div>')
+    if p.filters:
+        out += (f'<div class="setup"><h3>Filters</h3>'
+                f'<p class="about">Checked whatever the setup.</p>'
+                f'{rules_list(p.filters)}</div>')
+    if p.management:
+        out += (f'<div class="setup"><h3>Management</h3>'
+                f'<p class="about">Checked when the trade is closed.</p>'
+                f'{rules_list(p.management)}</div>')
+    return out or '<p class="muted">No rules written yet.</p>'
+
+
+def paragraphs(text):
+    """Prose from a file, where a line break is just where the line was
+    wrapped: paragraphs are cut at blank lines, a `### ` line is a heading,
+    lines starting with `- ` make a list."""
+    out = []
+    for chunk in re.split(r"\n\s*\n", text.strip()):
+        lines = [x.strip() for x in chunk.split("\n") if x.strip()]
+        if not lines:
+            continue
+        if all(x.startswith(("- ", "* ")) for x in lines):
+            out.append("<ul>" + "".join(f"<li>{inline(x[2:])}</li>" for x in lines) + "</ul>")
+        elif lines[0].startswith("### ") and len(lines) == 1:
+            out.append(f"<h3>{esc(lines[0][4:])}</h3>")
+        else:
+            out.append(f"<p>{inline(' '.join(lines))}</p>")
+    return "".join(out)
+
+
+def playbooks_page():
+    problems = []
+    books = store.all_playbooks(ROOT, problems)
+    right = '<a class="btn primary" href="/playbook/new">+ Playbook</a>'
+    if not books:
+        body = ('<div class="card"><h2>Playbooks</h2>'
+                '<p class="pb-text">A playbook is one way of trading written '
+                'down as rules: what has to be true before a trade is opened. '
+                'When a trade is opened, the playbook is picked in its form and '
+                'the rules are ticked one by one. A rule left unticked stays '
+                'with the trade, and the statistics then say what every rule '
+                'is worth in R.</p>'
+                '<p class="muted">No playbooks yet. The button above writes '
+                'the first one: the rules, a line each.</p></div>')
+        return page("Playbooks", body, "playbooks", right, problems)
+    j = journal()
+    rows = ""
+    for p in books:
+        href = f"/playbook/{U(p.id)}"
+        trades = playbook_trades(j, p.id)
+        s = stats.summary(j, trades)
+        cells = [(esc(playbook_label(p)), ""), (status_chip(p), ""),
+                 (esc(p.version) or "-", "num"),
+                 (esc(", ".join(p.styles)) or "-", ""),
+                 (str(len(p.rules)), "num"),
+                 (str(len(trades)), "num"),
+                 ((f"{len(trades)} / {p.block}"
+                   + (' <span class="over">review due</span>'
+                      if stats.review_due(p, len(trades)) else ""))
+                  if p.block else "-", "num"),
+                 ("-" if not s.trades else f"{s.sum_r:+.2f}",
+                  f"num {sum_class(s.sum_r)}"),
+                 ("-" if not s.trades else f"{s.average_r:+.2f}", "num"),
+                 (clean_cell(stats.compliance(trades))[len('<td class="num">'):-5], "num"),
+                 (f"{p.since:%d.%m.%Y}" if p.since else "-", "")]
+        rows += ("<tr>" + "".join(link_cell(href, inner, cls)
+                                  for inner, cls in cells) + "</tr>")
+    body = (f'<div class="card"><h2>Playbooks</h2>'
+            f'<table><thead><tr><th>name</th><th>status</th>'
+            f'<th class="num">version</th><th>styles</th><th class="num">rules</th>'
+            f'<th class="num">trades</th><th class="num">block</th>'
+            f'<th class="num">Σ R</th><th class="num">EV</th><th class="num">clean</th>'
+            f'<th>counts from</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table>'
+            f'<p class="caption">A playbook is picked in the form of a trade, '
+            f'and its rules are ticked there. A rule left unticked stays with '
+            f'the trade, so that the statistics can say what the rule is worth.'
+            f'</p></div>')
+    return page("Playbooks", body, "playbooks", right, problems)
+
+
+def playbook_trades(j, playbook_id):
+    """Every trade opened under the playbook, whatever the version."""
+    return [t for t in j.trades if t.playbook == playbook_id]
+
+
+def playbook_trades_card(j, trades):
+    if not trades:
+        return ('<div class="card"><h2>Trades of this playbook</h2>'
+                '<p class="muted">No trade has been opened under it yet. The '
+                'playbook is picked in the form of a trade.</p></div>')
+    rows = "".join(trade_row(j, t) for t in
+                   sorted(trades, key=lambda t: t.opened, reverse=True))
+    return (f'<div class="card"><h2>Trades of this playbook</h2>'
+            f'<table><thead><tr><th>date</th><th>account</th><th>pair</th>'
+            f'<th>direction</th><th>style</th><th>TF</th>'
+            f'<th class="num">risk</th><th>result</th>'
+            f'<th class="num">PnL {H.sign(j.currency())}</th><th class="num">R</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table>'
+            f'<p class="caption">{esc(plan_result(j, trades))}</p></div>')
+
+
+def figures_head():
+    return ('<th class="num">trades</th><th class="num">WR</th>'
+            '<th class="num">Σ R</th><th class="num">EV</th>')
+
+
+def figures_cells(s):
+    return (f'<td class="num">{s.trades}</td>'
+            f'<td class="num">{s.wr:.1f}%</td>'
+            f'<td class="num {sum_class(s.sum_r)}">{s.sum_r:+.2f}</td>'
+            f'<td class="num">{s.average_r:+.2f}</td>')
+
+
+def clean_cell(c):
+    """The share of ticked trades that met every rule, '-' when none was
+    ticked, and the count of unticked ones in grey after it."""
+    share = "-" if c.clean_share is None else f"{c.clean_share:.0f}%"
+    tail = (f' <span class="muted">({c.unticked} not ticked)</span>'
+            if c.unticked else "")
+    return f'<td class="num">{share}{tail}</td>'
+
+
+def held_cell(c):
+    """The share of closed trades that held every management rule."""
+    share = "-" if c.held_share is None else f"{c.held_share:.0f}%"
+    tail = (f' <span class="muted">({c.held_unticked} not ticked)</span>'
+            if c.held_unticked and c.held_ticked else "")
+    return f'<td class="num">{share}{tail}</td>'
+
+
+def compliance_line(c):
+    """One line in words: how many went through the checklists and how."""
+    bits = []
+    if c.ticked:
+        bits.append(f"at the entry <b>{c.clean}</b> met every rule, <b>{c.deviated}</b> broke one or more")
+    if c.unticked:
+        bits.append(f"<b>{c.unticked}</b> not ticked")
+    if c.held_ticked:
+        bits.append(f"held to the end <b>{c.held}</b>, broke a management rule <b>{c.held_broken}</b>")
+    return f'<p class="pb-meta">{" · ".join(bits)}</p>' if bits else ""
+
+
+def setups_card(j, p, trades):
+    rows = stats.by_setup(j, trades)
+    if len(rows) < 2 and not (rows and rows[0][0] != "-"):
+        return ""
+    body = "".join(
+        f'<tr><td>{esc(name)}</td>{figures_cells(s)}{clean_cell(c)}{held_cell(c)}</tr>'
+        for name, s, c in rows)
+    return (f'<div class="card"><h2>By setup</h2><table><thead><tr><th></th>'
+            f'{figures_head()}<th class="num">clean</th><th class="num">held</th>'
+            f'</tr></thead><tbody>{body}</tbody></table>'
+            f'<p class="caption">Closed trades. Clean is the share of ticked '
+            f'trades that met every rule at the entry; held, the share that '
+            f'kept every management rule to the close.</p></div>')
+
+
+def rule_costs_card(j, p, trades):
+    """What each rule cost, against the trades that met every rule."""
+    same = [t for t in trades if t.playbook_version == p.version]
+    rows, clean = stats.rule_costs(j, same, p.rules)
+    if not any(n for _, n, _ in rows) and not clean.trades:
+        return ""
+    body = "".join(
+        f'<tr><td><span class="n muted">{r.number}</span> {esc(r.text)}</td>'
+        f'<td class="num">{n}</td>'
+        f'<td class="num {sum_class(s.sum_r)}">{s.sum_r:+.2f}</td>'
+        f'<td class="num">{s.average_r:+.2f}</td></tr>'
+        for r, n, s in rows if n)
+    versus = (f'<tr class="total"><td>kept every rule</td>'
+              f'<td class="num">{clean.trades}</td>'
+              f'<td class="num {sum_class(clean.sum_r)}">{clean.sum_r:+.2f}</td>'
+              f'<td class="num">{clean.average_r:+.2f}</td></tr>')
+    given = ""
+    for r in p.rules:
+        told = [(t, t.reasons[r.number]) for t in same if r.number in t.reasons]
+        if told:
+            items = "".join(
+                f'<li><a href="/trade/{U(t.id)}">{t.opened:%d.%m.%Y}</a> {esc(why)}</li>'
+                for t, why in sorted(told, key=lambda x: x[0].opened, reverse=True))
+            given += (f'<div class="reasons"><b>{r.number}</b> {esc(r.text)}'
+                      f'<ul>{items}</ul></div>')
+    if given:
+        given = (f'<details class="fold" style="margin-top:12px"><summary>Reasons given '
+                 f'<span class="caption">what stood behind each rule not met, in the '
+                 f'trader\'s words</span></summary>{given}</details>')
+    return (f'<div class="card"><h2>What a rule costs</h2><table><thead><tr>'
+            f'<th>rule not met</th><th class="num">trades</th>'
+            f'<th class="num">Σ R</th><th class="num">EV</th></tr></thead>'
+            f'<tbody>{body}{versus}</tbody></table>{given}'
+            f'<p class="caption">Ticked trades of version {esc(p.version)}, the '
+            f'entry rules and the management rules in one table. A trade that '
+            f'broke several rules stands in each of their rows; Σ R and EV are '
+            f'over the closed ones. The last row is the measure: what the trades '
+            f'that kept every rule, at the entry and to the close, brought.</p></div>')
+
+
+def playbook_page(playbook_id):
+    if not store.safe_dir_name(playbook_id):
+        return None
+    try:
+        p = store.load_playbook(ROOT, playbook_id).check()
+    except (OSError, RecordError):
+        return None
+    j = journal()
+    trades = playbook_trades(j, p.id)
+    intro = paragraphs(p.intro)
+    s = stats.summary(j, trades)
+    figures = ""
+    if s.trades:
+        figures = (f'<p class="pb-meta">closed <b>{s.trades}</b> · WR <b>{s.wr:.0f}%</b>'
+                   f' · Σ R <b class="{sum_class(s.sum_r)}">{s.sum_r:+.2f}</b>'
+                   f' · EV <b>{s.average_r:+.2f}</b> · {amount(j, s.sum_pnl, signed=True)}</p>')
+    head = (f'<div class="card"><div class="card-head">'
+            f'<h1 class="pb-name">{esc(playbook_label(p))}</h1>{status_chip(p)}'
+            f'</div>{playbook_meta(p)}{block_bar(p, len(trades))}'
+            f'{block_notice(p, len(trades))}{figures}'
+            f'{compliance_line(stats.compliance(trades))}'
+            + (f'<div class="pb-intro">{intro}</div>' if intro else "")
+            + '</div>')
+    rules = f'<div class="card"><h2>Rules</h2>{playbook_rules(p)}</div>'
+    limits = ""
+    if p.limits:
+        items = "".join(f'<div>{esc(label)}<b>{esc(value)}</b></div>'
+                        for label, value in limit_lines(p))
+        limits = f'<div class="card"><h2>Limits</h2><div class="limits">{items}</div></div>'
+    rest = "".join(
+        f'<div class="card"><h2>{esc(heading)}</h2>'
+        f'<div class="pb-text">{paragraphs(text)}</div></div>'
+        for heading, text in p.sections)
+    base = playbook_shots_base(p.id)
+    token = new_token()
+    entries = (f'<div class="shots">{with_shots(p.review, base)}</div>'
+               if p.review.strip() else
+               '<p class="muted">No review yet. A block is reviewed here: what '
+               'the trades said, what changes for the next block, with the '
+               'charts that show it.</p>')
+    review_form = (f'<form method="post" action="/playbook/{U(p.id)}/review" '
+                   f'style="margin-top:12px">'
+                   f'<input type="hidden" name="token" value="{esc(token)}">'
+                   f'<label>add a review</label>'
+                   f'<textarea name="review" placeholder="the block in a few '
+                   f'lines: what held, what leaked, what the next version changes" '
+                   f'required></textarea>'
+                   f'{dropzone("review", "click here and press Ctrl+V to paste a screenshot")}'
+                   f'<div class="actions"><button class="btn">Add</button></div>'
+                   f'</form>')
+    review = (f'<div class="card"><h2>Review</h2>{entries}{review_form}</div>'
+              f'<script>{FORM_SCRIPT}</script>'
+              f'<script>document.body.dataset.token = {json.dumps(token)};'
+              f'init_zones();</script>')
+    kept = store.playbook_versions(ROOT, p.id)
+    versions = ""
+    if kept:
+        items = "".join(
+            f'<li><a href="/playbook/{U(p.id)}/version/{U(v)}">{esc(v)}</a></li>'
+            for v in kept)
+        versions = (f'<div class="card"><h2>Earlier versions</h2>'
+                    f'<ul class="versions">{items}</ul>'
+                    f'<p class="caption">The rules as they were before each '
+                    f'revision. A trade opened under one of them is shown these, '
+                    f'not the current ones.</p></div>')
+    buttons = (f'<a class="btn" href="/playbook/{U(p.id)}/edit">Edit</a>'
+               f'<form method="post" action="/playbook/{U(p.id)}/delete" '
+               f'style="display:inline" onsubmit="return confirm('
+               f'\'Delete playbook {esc(p.id)}? The folder moves to .trash.\')">'
+               f'<button class="btn danger">Delete</button></form>')
+    return page(playbook_label(p),
+                head + setups_card(j, p, trades) + rule_costs_card(j, p, trades)
+                + rules + limits + rest + playbook_trades_card(j, trades)
+                + review + versions,
+                "playbooks", buttons)
+
+
+def playbook_version_page(playbook_id, label):
+    """One frozen version, read only."""
+    if not (store.safe_dir_name(playbook_id) and store.safe_dir_name(label)):
+        return None
+    try:
+        p = store.load_playbook_version(ROOT, playbook_id, label).check()
+    except (OSError, RecordError):
+        return None
+    head = (f'<div class="card"><div class="card-head">'
+            f'<h1 class="pb-name">{esc(playbook_label(p))}</h1>'
+            f'<span class="chip retired">version {esc(p.version or label)}, kept</span>'
+            f'</div>{playbook_meta(p)}'
+            f'<p class="caption">An earlier version. '
+            f'<a href="/playbook/{U(playbook_id)}">The current one</a> is what '
+            f'the trade form offers.</p></div>')
+    rules = f'<div class="card"><h2>Rules</h2>{playbook_rules(p)}</div>'
+    return page(f"{playbook_label(p)} {label}", head + rules, "playbooks")
+
+
+# --- the playbook form -------------------------------------------------------
+# Rules are typed a line each into one field per setup; that is faster than a
+# field per rule, and it is the shape the file has anyway.
+
+def lines_of(text):
+    """A field of lines -> the lines in it, the empty ones left out."""
+    return [line.strip() for line in text.replace("\r", "").split("\n")
+            if line.strip()]
+
+
+def rule_pairs(data, name):
+    """The rule rows of a field -> [(few words, whole rule)]. A box or a dash
+    in front is allowed, so that a rule pasted from the file reads the same;
+    a line break inside becomes a space, a rule is one line in the file. A
+    row with the words empty and the rule written takes the rule as its
+    words; a row with nothing is dropped."""
+    shorts = data.get(name, [])
+    details = data.get(name + "_detail", [])
+    details += [""] * (len(shorts) - len(details))
+    out = []
+    for short, detail in zip(shorts, details):
+        short = short.replace("**", "")     # the file marks the few words in bold
+        short = " ".join(re.sub(r"^\s*[-*]?\s*(\[[ xX]?\])?\s*", "", short).split())
+        detail = " ".join(detail.split())
+        if not short and detail:
+            short, detail = detail, ""
+        if short:
+            out.append((short, detail))
+    return out
+
+
+def rule_rows(name, rules):
+    """A row per rule, numbered in the margin as on the page: the few words
+    the checklist will show, then the whole rule. The numbers are put right
+    by the script, through the whole form, once a rule is added or taken
+    away. A row with nothing in it is dropped when the form is read."""
+    rows = "".join(
+        f'<div class="rule-row"><span class="n"></span>'
+        f'<textarea name="{name}" rows="1" class="short" placeholder="in a few words">{esc(r.text)}</textarea>'
+        f'<textarea name="{name}_detail" rows="1" placeholder="the whole rule, if the words need it">{esc(r.detail)}</textarea>'
+        f'<button type="button" class="x" title="remove the rule" '
+        f'onclick="drop_rule(this)">&times;</button></div>'
+        for r in (rules or [Rule(0, "")]))
+    return (f'<div class="rules-edit" data-name="{name}">{rows}'
+            f'<button type="button" class="btn small" onclick="add_rule(this)">+ rule</button>'
+            f'</div>')
+
+
+def setup_form_block(n, name="", about="", rules=()):
+    return f"""<div class="setup-form" data-n="{n}">
+<div class="fields">
+<div class="field"><label>setup</label>
+<input type="text" name="setup_name_{n}" value="{esc(name)}" placeholder="A: reaction at a higher level" style="width:300px"></div>
+<div class="field" style="flex:1;min-width:260px"><label>what it is</label>
+<input type="text" name="setup_about_{n}" value="{esc(about)}" placeholder="a line on the idea behind it" style="width:100%"></div>
+</div>
+<label>rules: a few words for the checklist, then the whole rule</label>
+{rule_rows(f"setup_rule_{n}", list(rules))}
+</div>"""
+
+
+def limit_row(what="", value=""):
+    """One limit of the form: its kind from the list, or "other" with a name
+    of its own, and the value."""
+    kinds = {key for key, _, _ in LIMITS}
+    other = bool(what) and what not in kinds
+    options = "".join(
+        f'<option value="{esc(key)}"{" selected" if key == what else ""}>{esc(label)}'
+        f'{", " + esc(unit) if unit else ""}</option>' for key, label, unit in LIMITS)
+    options += f'<option value="other"{" selected" if other else ""}>other</option>'
+    return (f'<div class="limit-row">'
+            f'<select name="limit_kind" onchange="pick_limit_kind(this)">{options}</select>'
+            f'<input type="text" name="limit_name" value="{esc(what if other else "")}" '
+            f'placeholder="what is capped"{"" if other else " hidden"}>'
+            f'<input type="text" name="limit_value" value="{esc(value)}" '
+            f'placeholder="value" style="width:110px">'
+            f'<button type="button" class="x" title="remove the limit" '
+            f'onclick="drop_limit(this)">&times;</button></div>')
+
+
+def limit_rows(p):
+    rows = "".join(limit_row(what, value) for what, value in p.limits)
+    return (f'<div class="limits-edit" id="limits">{rows}'
+            f'<template id="limit-template">{limit_row()}</template>'
+            f'<button type="button" class="btn small" onclick="add_limit()">+ limit</button>'
+            f'</div>')
+
+
+def limit_lines(p):
+    """The limits for the page: a known one with its label and unit, another
+    as written."""
+    names = {key: (label, unit) for key, label, unit in LIMITS}
+    out = []
+    for what, value in p.limits:
+        if what in names:
+            label, unit = names[what]
+            out.append((label, f"{value} {unit}".strip()))
+        else:
+            out.append((what, value))
+    return out
+
+
+def notes_text(p):
+    """The free sections back into one field: a `## heading` line starts each."""
+    if len(p.sections) == 1 and p.sections[0][0] == "Notes":
+        return p.sections[0][1]
+    return "\n\n".join(f"## {h}\n\n{t}" for h, t in p.sections)
+
+
+def playbook_form(p=None, token="", notice=""):
+    editing = p is not None and p.id
+    p = p or Playbook(id="", status="experiment", version="1.0", since=datetime.now())
+    styles = "".join(
+        f'<label class="caption" style="display:inline-block;margin-right:10px">'
+        f'<input type="checkbox" name="styles" value="{esc(v)}"'
+        f'{" checked" if v in p.styles else ""}> {esc(v)}</label>'
+        for v in offered("styles", *p.styles))
+    setups = "".join(
+        setup_form_block(i, x.name, x.text, x.rules)
+        for i, x in enumerate(p.setups, 1)) or setup_form_block(1)
+    action = f"/playbook/{U(p.id)}/edit" if editing else "/playbook/new"
+    warn = f'<div class="notice">{notice}</div>' if notice else ""
+    return f"""{warn}<form method="post" action="{action}">
+<input type="hidden" name="token" value="{esc(token)}">
+<input type="hidden" name="setups" value="{max(1, len(p.setups))}" id="setups-count">
+<div class="card"><h2>{"Edit playbook" if editing else "New playbook"}</h2>
+<div class="fields">
+<div class="field"><label>name</label>
+<input type="text" name="name" value="{esc(p.name)}" placeholder="Pullback" style="width:200px" required></div>
+<div class="field"><label>status</label>
+{select("status", PLAYBOOK_STATUSES, p.status)}</div>
+<div class="field"><label>version</label>
+<input type="text" name="version" value="{esc(p.version)}" style="width:70px" required></div>
+<div class="field"><label>counts from</label>
+<input type="date" name="since" value="{f"{p.since:%Y-%m-%d}" if p.since else ""}"
+ onclick="this.showPicker && this.showPicker()"></div>
+<div class="field"><label>block, trades</label>
+<input type="number" name="block" min="1" step="1" style="width:80px"
+ value="{p.block or ""}" placeholder="40"></div>
+</div>
+<p class="caption" style="margin:8px 0 0">styles: {styles}</p>
+<p class="caption">Experiment while the sample is being built, active once the
+rules are trusted, retired when they are not offered any more. The block is
+how many trades make one review; leave it empty if the rules are not reviewed
+by blocks.</p>
+<label style="margin-top:12px">what the playbook is</label>
+<textarea name="intro" placeholder="a few lines: the idea behind the rules, and when they were written">{esc(p.intro)}</textarea>
+</div>
+<div class="card"><h2>Setups</h2>
+<p class="caption" style="margin:0 0 12px">One way of entering per setup, with the
+rules that have to be true for it. A playbook with one way of entering leaves
+the setup name empty.</p>
+<div id="setups">{setups}</div>
+<template id="setup-template">{setup_form_block("__N__")}</template>
+<p><button type="button" class="btn" onclick="add_setup()">+ setup</button></p>
+</div>
+<div class="card"><h2>Filters</h2>
+<p class="caption" style="margin:0 0 8px">Checked before every trade, whatever the setup.</p>
+{rule_rows("filter", p.filters)}
+</div>
+<div class="card"><h2>Management</h2>
+<p class="caption" style="margin:0 0 8px">How the position is held: ticked when
+the trade is closed, not when it is opened. Three to five is a list that gets
+ticked; ten is one that gets skipped.</p>
+{rule_rows("management", p.management)}
+</div>
+<div class="card"><h2>Limits</h2>
+<p class="caption" style="margin:0 0 8px">What the playbook caps. A value is a
+plain number, the unit is in the label, the loss per week is positive. The
+first five kinds are counted above the checklist of a new trade; the longest
+hold, the least RR and "other" are shown as written.</p>
+{limit_rows(p)}
+</div>
+<div class="card"><h2>Notes</h2>
+<textarea name="notes" placeholder="anything else: the markets, the math, what is still being decided">{esc(notes_text(p))}</textarea>
+<p class="caption">Free text. A line starting with <code>## </code> begins a
+section of its own on the page.</p>
+</div>
+<div class="actions"><button class="btn primary">{"Save" if editing else "Write the playbook"}</button>
+<a class="btn" href="{f"/playbook/{U(p.id)}" if editing else "/playbooks"}">Cancel</a></div>
+</form>
+<script>{PLAYBOOK_FORM_SCRIPT}</script>"""
+
+
+# The rule fields: one field per rule that grows with its text, Enter adds
+# the next one, the numbers in the margin run through the whole form the way
+# they run through the page.
+PLAYBOOK_FORM_SCRIPT = """
+function grow(t){ t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+function renumber(){
+  let n = 1;
+  document.querySelectorAll('.rule-row .n').forEach(el => { el.textContent = n++; });
+}
+function rule_row(name){
+  const div = document.createElement('div');
+  div.className = 'rule-row';
+  div.innerHTML = '<span class="n"></span>'
+    + '<textarea name="' + name + '" rows="1" class="short" placeholder="in a few words"></textarea>'
+    + '<textarea name="' + name + '_detail" rows="1" placeholder="the whole rule, if the words need it"></textarea>'
+    + '<button type="button" class="x" title="remove the rule" onclick="drop_rule(this)">&times;</button>';
+  return div;
+}
+function add_rule(button, after){
+  const box = button.closest('.rules-edit');
+  const row = rule_row(box.dataset.name);
+  if (after) after.insertAdjacentElement('afterend', row);
+  else box.insertBefore(row, button);
+  renumber();
+  row.querySelector('textarea').focus();
+}
+function drop_rule(x){
+  const box = x.closest('.rules-edit'), row = x.closest('.rule-row');
+  if (box.querySelectorAll('.rule-row').length === 1)
+    row.querySelectorAll('textarea').forEach(t => { t.value = ''; grow(t); });
+  else row.remove();
+  renumber();
+}
+function pick_limit_kind(sel){
+  const name = sel.parentElement.querySelector('[name="limit_name"]');
+  name.hidden = sel.value !== 'other';
+  if (!name.hidden) name.focus();
+}
+function add_limit(){
+  const box = document.getElementById('limits');
+  box.insertBefore(document.getElementById('limit-template').content.cloneNode(true),
+                   box.querySelector('.btn'));
+  const rows = box.querySelectorAll('.limit-row');
+  rows[rows.length - 1].querySelector('select').focus();
+}
+function drop_limit(x){ x.closest('.limit-row').remove(); }
+function add_setup(){
+  const count = document.getElementById('setups-count');
+  const n = parseInt(count.value, 10) + 1;
+  count.value = n;
+  const html = document.getElementById('setup-template').innerHTML.replaceAll('__N__', n);
+  document.getElementById('setups').insertAdjacentHTML('beforeend', html);
+  renumber();
+  document.querySelector(`[name="setup_name_${n}"]`).focus();
+}
+document.addEventListener('input', e => {
+  if (e.target.matches('.rule-row textarea')) grow(e.target);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !e.target.matches('.rule-row textarea')) return;
+  e.preventDefault();
+  const row = e.target.closest('.rule-row');
+  add_rule(row.closest('.rules-edit').querySelector('.btn'), row);
+});
+renumber();
+document.querySelectorAll('.rule-row textarea').forEach(grow);
+"""
+
+
+class RulesChanged(ValueError):
+    """The rules were rewritten under the same version number."""
+
+
+def playbook_from_form(data, p):
+    """The form -> the playbook, rules numbered afresh."""
+    p.name = one(data, "name").strip()
+    p.styles = [v for v in data.get("styles", []) if v]
+    p.status = one(data, "status") or "active"
+    p.version = one(data, "version").strip()
+    since = one(data, "since")
+    p.since = datetime.strptime(since, "%Y-%m-%d") if since else None
+    block = one(data, "block").strip()
+    p.block = int(block) if block else None
+    p.intro = one(data, "intro").replace("\r", "").strip()
+    no_reserved_heading(p.intro, "intro")
+    p.setups, number = [], 1
+    for n in range(1, int(one(data, "setups", "1") or 1) + 1):
+        name = one(data, f"setup_name_{n}").strip()
+        about = one(data, f"setup_about_{n}").strip()
+        pairs = rule_pairs(data, f"setup_rule_{n}")
+        if not (name or about or pairs):
+            continue
+        rules = [Rule(number + i, text, detail) for i, (text, detail) in enumerate(pairs)]
+        number += len(rules)
+        p.setups.append(Setup(name=name, text=about, rules=rules))
+    p.filters = [Rule(number + i, text, detail)
+                 for i, (text, detail) in enumerate(rule_pairs(data, "filter"))]
+    number += len(p.filters)
+    p.management = [Rule(number + i, text, detail)
+                    for i, (text, detail) in enumerate(rule_pairs(data, "management"))]
+    p.limits = []
+    kinds, names, values = (data.get("limit_kind", []), data.get("limit_name", []),
+                            data.get("limit_value", []))
+    for i, kind in enumerate(kinds):
+        what = (names[i] if kind == "other" and i < len(names) else kind).strip()
+        value = (values[i] if i < len(values) else "").strip()
+        if what and what != "other" and value:
+            p.limits.append((what, value))
+    p.sections = []
+    notes = one(data, "notes").replace("\r", "").strip()
+    no_reserved_heading(notes, "notes")
+    if notes:
+        parts = store._split_sections(notes if notes.startswith("## ")
+                                      else "## Notes\n" + notes)
+        p.sections = [(h, t) for h, t in parts.items() if t.strip()]
+    return p
+
+
+def add_review(p, data):
+    """A dated entry at the end of the review, with its screenshots appended
+    to the shots folder, the way an update is added to a plan: this form
+    shows one zone, so the folder is never rewritten from it."""
+    text = one(data, "review").replace("\r", "").strip()
+    if not text:
+        raise RecordError("a review without a word in it")
+    if any(line.startswith("## ") for line in text.split("\n")):
+        raise RecordError("a review takes no headings")
+    token = one(data, "token")
+    folder = store.playbook_dir(ROOT, p.id)
+    shots = add_shots(folder, "review",
+                      zone_sources(data, "review", folder, token)) if token else []
+    entry = f"**{datetime.now():%d.%m.%Y}**: {text}"
+    for name in shots:
+        entry += f"\n![]({name})"
+    p.review = (p.review + "\n\n" + entry) if p.review.strip() else entry
+    store.save_playbook(ROOT, p)
+    if token:
+        drop_draft(token)
+    return p
+
+
+RESERVED = ("Setups", "Conditions", "Filters", "Management", "Limits", "Review")
+
+
+def no_reserved_heading(text, where):
+    """A `## ` line in free text that names one of the headings the file
+    gives a meaning to would replace that part on the next load."""
+    for line in text.split("\n"):
+        if line.startswith("## ") and line[3:].strip() in RESERVED:
+            raise RecordError(f"{where}: a heading cannot be called "
+                              f"{line[3:].strip()}, that name belongs to the file")
+        if where == "intro" and line.startswith("## "):
+            raise RecordError("the introduction takes no headings; they go in the notes")
+
+
+def rules_shape(p):
+    return ([(x.name, [(r.text, r.detail) for r in x.rules]) for x in p.setups],
+            [(r.text, r.detail) for r in p.filters],
+            [(r.text, r.detail) for r in p.management])
+
+
+def create_playbook(data):
+    p = playbook_from_form(data, Playbook(id=""))
+    p.id = store.new_playbook_id(ROOT, p.name)
+    p.check()
+    store.save_playbook(ROOT, p)
+    return p
+
+
+def trades_under(j, playbook_id, version):
+    """The trades ticked against that version of the playbook. A trade tied
+    to it later, with no ticks, holds nothing: there was no checklist."""
+    return [t for t in j.trades
+            if t.playbook == playbook_id and t.playbook_version == version
+            and t.deviations is not None]
+
+
+def edit_playbook(before, data):
+    """Rules rewritten under the same number would leave every trade opened
+    under that number pointing at rules it was never ticked against, so once
+    such trades exist a change of the rules asks for a new number, and the
+    old file is kept for them. Until the first trade the rules are a draft
+    and are edited freely: nothing points at them yet. A trade tied to the
+    playbook without a checklist does not count as pointing."""
+    p = playbook_from_form(data, Playbook(id=before.id, extra=dict(before.extra),
+                                          review=before.review))
+    p.check()
+    held = trades_under(journal(True), before.id, before.version)
+    if held and rules_shape(p) != rules_shape(before) and p.version == before.version:
+        raise RulesChanged(p)
+    # a new number with the rules untouched is frozen as well: the next
+    # change of the rules will have no ticked trade under the new number to
+    # stop it, and the old trades would be left looking at the new rules
+    if held and p.version != before.version:
+        store.freeze_playbook(ROOT, before.id)
+    store.save_playbook(ROOT, p)
+    return p
+
+
 
 
 # --- daily card ------------------------------------------------------------
@@ -2394,6 +3644,11 @@ def report_link(period):
         # the best and the worst row name a trade, so they lead to it directly
         if section == "Best and worst trade" and value:
             return f"/trade/{U(value)}"
+        if section == "By playbook":
+            for b in store.all_playbooks(ROOT, []):
+                if playbook_label(b) == value:
+                    return f"/playbook/{U(b.id)}"
+            return None
         field = REPORT_LINKS.get(section)
         if not field or not value:
             return None
@@ -2557,7 +3812,7 @@ def accounts_page(message=""):
         f'<td>{esc(c.kind)}</td>'
         f'<td class="num {"win" if c.amount > 0 else "lose"}">'
         f'{amount(j, c.amount, c.account, signed=True)}</td>'
-        f'<td>{esc(c.comment) or "<span class=\'muted\'>-</span>"}</td>'
+        f'<td>{esc(c.comment) or EMPTY_CELL}</td>'
         f'<td><form method="post" action="/money/delete" style="display:inline" '
         f'onsubmit="return confirm(\'Delete this record? It moves to .trash.\')">'
         f'<input type="hidden" name="id" value="{esc(c.id)}">'
@@ -2626,7 +3881,12 @@ other is a difference you found.</p></div>"""
         f'<input type="hidden" name="name" value="{esc(name)}">'
         f'<button class="btn">Restore</button></form></td></tr>'
         for name, kind, record_id, when in trashed)
+    # folded: the list grows with every deleted record and is wanted rarely,
+    # so the card shows the count and opens on a click
+    n = len(trashed)
     trash = (f'<div class="card"><h2>Trash</h2>'
+             f'<details class="fold"><summary>{n} record{"" if n == 1 else "s"}'
+             f'<span class="caption">everything deleted, put back from here</span></summary>'
              + (f'<table><thead><tr><th>what</th><th>id</th><th>deleted</th>'
                 f'<th></th></tr></thead><tbody>{trash_rows}</tbody></table>'
                 if trashed else
@@ -2634,7 +3894,7 @@ other is a difference you found.</p></div>"""
              + f'<p class="caption">Everything deleted lands in <code>.trash</code> '
              f'next to the journal and is put back from here, screenshots and '
              f'all. A record written again under the same id since is not '
-             f'overwritten: the one in the trash stays there.</p></div>')
+             f'overwritten: the one in the trash stays there.</p></details></div>')
 
     top = (f'<div class="card"><p>{esc(message)}</p></div>' if message else "")
     body = f"""{top}
@@ -2978,6 +4238,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(week_page(key))
         if path == "/accounts":
             return self._send(accounts_page((q.get("m") or [""])[0]))
+        if path == "/playbooks":
+            return self._send(playbooks_page())
+        if path == "/playbook/new":
+            return self._send(page("New playbook", playbook_form(None, new_token()),
+                                   "playbooks"))
+        if len(parts) == 2 and parts[0] == "playbook":
+            shown = playbook_page(parts[1])
+            return self._send(shown or "no such playbook", 200 if shown else 404)
+        if len(parts) == 3 and parts[0] == "playbook" and parts[2] == "edit":
+            if not store.safe_dir_name(parts[1]):
+                return self._send("bad playbook id", 400)
+            try:
+                p = store.load_playbook(ROOT, parts[1])
+            except OSError:
+                return self._send("no such playbook", 404)
+            return self._send(page("Edit playbook", playbook_form(p, new_token()),
+                                   "playbooks"))
+        if len(parts) == 3 and parts[0] == "playbook-shot":
+            if not store.safe_dir_name(parts[1]):
+                return self._send("bad playbook id", 400, "text/plain; charset=utf-8")
+            return self._file(os.path.join(store.playbook_dir(ROOT, parts[1]),
+                                           store.SHOTS, os.path.basename(parts[2])))
+        if len(parts) == 4 and parts[0] == "playbook" and parts[2] == "version":
+            shown = playbook_version_page(parts[1], parts[3])
+            return self._send(shown or "no such version", 200 if shown else 404)
         if path == "/plans":
             return self._send(plans_page())
         if path == "/plan/new":
@@ -3067,6 +4352,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._send("no such trade", 404)
                 edit_trade(t, data)
                 return self._go(f"/trade/{U(t.id)}", "Trade saved")
+            if path == "/playbook/new":
+                p = create_playbook(data)
+                return self._go(f"/playbook/{U(p.id)}", "Playbook written")
+            if len(parts) == 3 and parts[0] == "playbook":
+                if not store.safe_dir_name(parts[1]):
+                    return self._send("bad playbook id", 400)
+                if parts[2] == "delete":
+                    if store.delete_playbook(ROOT, parts[1]) is None:
+                        return self._send("no such playbook", 404)
+                    return self._go("/playbooks", "Playbook moved to the trash")
+                if parts[2] not in ("edit", "review"):
+                    return self._send("no such page", 404)
+                try:
+                    before = store.load_playbook(ROOT, parts[1])
+                except OSError:
+                    return self._send("no such playbook", 404)
+                if parts[2] == "review":
+                    add_review(before, data)
+                    return self._go(f"/playbook/{U(before.id)}", "Review added")
+                try:
+                    p = edit_playbook(before, data)
+                except RulesChanged as e:
+                    return self._send(page(
+                        "Edit playbook",
+                        playbook_form(e.args[0], new_token(),
+                                      "The rules changed, and trades were opened "
+                                      f"under version {esc(before.version) or 'this one'}. "
+                                      "Give the new rules a new number: those "
+                                      "trades keep the rules they were ticked "
+                                      "against."),
+                        "playbooks"), 400)
+                return self._go(f"/playbook/{U(p.id)}", "Playbook saved")
             if path == "/plan/new":
                 k = create_plan(data)
                 return self._go(f"/plan/{U(k.id)}", "Plan written")

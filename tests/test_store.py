@@ -12,7 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import mdfile, store
 from plainbook.model import (Trade, Account, Adjustment, IdeaBlock, Card, Week,
-                      Graded, Plan, RecordError, PAIR_NOT_SET)
+                      Graded, Plan, Playbook, Setup, Rule, RecordError,
+                      PAIR_NOT_SET)
 
 
 def sample_trade(**kw):
@@ -455,3 +456,158 @@ class Trash(unittest.TestCase):
             self.assertEqual(len(problems), 1)
             self.assertIn("2026-08-30-01-eurusd/trade.md", problems[0][0])
             self.assertIn("one", problems[0][1])
+
+
+PLAYBOOK_TEXT = """---
+id: pullback
+name: Pullback
+styles:
+  - swing
+status: experiment
+version: 1.0
+since: 2026-08-15
+block: 40
+---
+
+The one way I enter with the trend. Written 14.08.2026.
+
+## Markets
+
+Majors only.
+
+## Setups
+
+### A: reaction at a higher level
+The level was hit, the first reaction is in.
+- [ ] **Level on W or D** The level is a fractal on the weekly or the daily chart
+- [ ] The reaction is seen on H4 or H1
+- [x] The target is at least 1R away
+
+### B: continuation
+- [ ] The trend is visible on D1
+- [ ] Entry from the touch, stop behind the fractal
+
+## Filters
+
+- [ ] More than an hour to the next high-impact release
+- [ ] No other position of this playbook is open
+
+## Management
+
+- [ ] **Stop never moved against** The stop stays where the idea dies
+- [ ] **Closed by Friday** No position over the weekend
+
+## Limits
+
+- risk: 1 %
+- max per week: 5
+"""
+
+
+class PlaybookCase(unittest.TestCase):
+    def test_the_review_is_its_own_part(self):
+        text = PLAYBOOK_TEXT + "\n## Review\n\n**01.09.2026**: block one held.\n![](shots/review-01.png)\n"
+        p = store.text_to_playbook(text)
+        self.assertEqual(p.sections, [("Markets", "Majors only.")])
+        self.assertIn("block one held", p.review)
+        again = store.text_to_playbook(store.playbook_to_text(p))
+        self.assertEqual(again.review, p.review)
+
+    def test_a_playbook_reads_rules_numbered_through(self):
+        p = store.text_to_playbook(PLAYBOOK_TEXT).check()
+        self.assertEqual((p.id, p.name, p.styles, p.status, p.version, p.block),
+                         ("pullback", "Pullback", ["swing"], "experiment", "1.0", 40))
+        self.assertEqual(p.since, datetime(2026, 8, 15))
+        self.assertTrue(p.intro.startswith("The one way"))
+        self.assertEqual([s.name for s in p.setups], ["A: reaction at a higher level",
+                                                      "B: continuation"])
+        self.assertEqual(p.setups[0].text, "The level was hit, the first reaction is in.")
+        self.assertEqual([r.number for r in p.rules], [1, 2, 3, 4, 5, 6, 7, 8, 9])
+        self.assertEqual([r.number for r in p.management], [8, 9])
+        self.assertEqual(p.management[1].text, "Closed by Friday")
+        self.assertIn("## Management", store.playbook_to_text(p))
+        self.assertEqual((p.rules[0].text, p.rules[0].detail),
+                         ("Level on W or D",
+                          "The level is a fractal on the weekly or the daily chart"))
+        self.assertEqual((p.rules[1].text, p.rules[1].detail),
+                         ("The reaction is seen on H4 or H1", ""))
+        self.assertIn("- [ ] **Level on W or D** The level", store.playbook_to_text(p))
+        self.assertEqual(p.filters[1].text, "No other position of this playbook is open")
+        self.assertEqual(p.limits, [("risk", "1 %"), ("max per week", "5")])
+        self.assertEqual(p.sections, [("Markets", "Majors only.")])
+
+    def test_a_playbook_round_trips(self):
+        p = store.text_to_playbook(PLAYBOOK_TEXT)
+        text = store.playbook_to_text(p)
+        again = store.text_to_playbook(text)
+        self.assertEqual(store.playbook_to_text(again), text)
+        self.assertEqual([r.text for r in again.rules], [r.text for r in p.rules])
+        self.assertEqual([r.number for r in again.management], [8, 9])
+        self.assertEqual(again.limits, p.limits)
+        self.assertEqual(again.sections, p.sections)
+
+    def test_prose_above_the_first_setup_goes_to_the_introduction(self):
+        p = store.text_to_playbook("---\nid: one\nname: One\n---\n\nWhy.\n\n## Setups\n\n"
+                                   "A word on the setups.\n\n### A\n\n- [ ] first\n")
+        self.assertEqual([x.name for x in p.setups], ["A"])
+        self.assertEqual(p.intro, "Why.\n\nA word on the setups.")
+        p.check()
+
+    def test_conditions_without_setups_are_one_nameless_setup(self):
+        p = store.text_to_playbook("---\nid: one\nname: One\n---\n\n## Conditions\n\n"
+                                   "- [ ] first\n- [ ] second\n\n## Filters\n\n- [ ] third\n")
+        self.assertEqual(len(p.setups), 1)
+        self.assertEqual(p.setups[0].name, "")
+        self.assertEqual([r.number for r in p.rules], [1, 2, 3])
+        text = store.playbook_to_text(p)
+        self.assertIn("## Conditions", text)
+        self.assertNotIn("###", text)
+
+    def test_a_playbook_is_saved_and_listed(self):
+        with tempfile.TemporaryDirectory() as root:
+            store.save_playbook(root, Playbook(id="old", name="Old", status="retired"))
+            store.save_playbook(root, Playbook(
+                id="pull", name="Pullback",
+                setups=[Setup(name="A", rules=[Rule(1, "one")])],
+                filters=[Rule(2, "two")]))
+            books = store.all_playbooks(root)
+            self.assertEqual([p.id for p in books], ["pull", "old"])
+            self.assertEqual([r.text for r in books[0].rules], ["one", "two"])
+            with self.assertRaises(RecordError):
+                store.save_playbook(root, Playbook(id="bad", name="Bad", status="maybe"))
+            with self.assertRaises(RecordError):
+                store.save_playbook(root, Playbook(id="nameless", name="  "))
+
+    def test_a_playbook_id_comes_from_the_name(self):
+        with tempfile.TemporaryDirectory() as root:
+            self.assertEqual(store.new_playbook_id(root, "EMT prop"), "emt-prop")
+            self.assertEqual(store.new_playbook_id(root, "  "), "playbook")
+            store.save_playbook(root, Playbook(id="emt-prop", name="EMT prop"))
+            self.assertEqual(store.new_playbook_id(root, "EMT prop"), "emt-prop-2")
+            self.assertEqual(store.freeze_playbook(root, "emt-prop"), "unversioned")
+            self.assertEqual(store.freeze_playbook(root, "emt-prop"), "unversioned-2")
+            self.assertEqual(store.playbook_versions(root, "emt-prop"),
+                             ["unversioned", "unversioned-2"])
+
+    def test_a_trade_keeps_its_playbook_and_deviations(self):
+        t = sample_trade(playbook="pull", playbook_version="1.0", setup="A", deviations=[2, 5])
+        again = store.text_to_trade(store.trade_to_text(t))
+        self.assertEqual((again.playbook, again.playbook_version, again.setup, again.deviations),
+                         ("pull", "1.0", "A", [2, 5]))
+        clean = store.text_to_trade(store.trade_to_text(sample_trade(playbook="pull", deviations=[])))
+        self.assertEqual(clean.deviations, [])       # ticked, every rule met
+        untouched = store.text_to_trade(store.trade_to_text(sample_trade(playbook="pull")))
+        self.assertIsNone(untouched.deviations)      # tied later, never ticked
+        self.assertNotIn("deviations", store.trade_to_text(sample_trade(playbook="pull")))
+        held = store.text_to_trade(store.trade_to_text(
+            sample_trade(playbook="pull", deviations=[], exit_deviations=[9])))
+        self.assertEqual((held.deviations, held.exit_deviations), ([], [9]))
+        why = store.text_to_trade(store.trade_to_text(sample_trade(
+            playbook="pull", deviations=[2], exit_deviations=[9],
+            reasons={9: "closed at the news: fear", 2: "no reaction, entered anyway"})))
+        self.assertEqual(why.reasons, {2: "no reaction, entered anyway",
+                                       9: "closed at the news: fear"})
+        self.assertIn("  - 9: closed at the news: fear", store.trade_to_text(why))
+        self.assertIsNone(store.text_to_trade(store.trade_to_text(
+            sample_trade(playbook="pull", deviations=[]))).exit_deviations)
+        self.assertNotIn("playbook", store.trade_to_text(sample_trade()))

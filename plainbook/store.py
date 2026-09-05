@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 
 from . import mdfile
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
+                    Playbook, Setup, Rule, PLAYBOOK_KEYS,
                     Plan, TRADE_KEYS, ACCOUNT_KEYS, ADJUSTMENT_KEYS, CARD_KEYS,
                     WEEK_KEYS, PLAN_KEYS, CARD_SECTIONS, WEEK_SECTIONS,
                     PAIR_NOT_SET, STYLES, TIMEFRAMES, EXECUTION)
@@ -32,8 +33,10 @@ TRASH = ".trash"            # deleted records: outside git, but not gone
 TRADES, ACCOUNTS, ADJUSTMENTS, REPORTS = "trades", "accounts", "adjustments", "reports"
 CARDS = "cards"             # the reviews: a file per day, a file per week
 PLANS = "plans"             # trading plans, a folder each, like a trade
+PLAYBOOKS = "playbooks"     # the standing rules, a folder each
 TRADE_FILE = "trade.md"
 PLAN_FILE = "plan.md"
+PLAYBOOK_FILE = "playbook.md"
 SHOTS = "shots"
 
 _IMAGE = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)\s*$")
@@ -87,6 +90,16 @@ def _number_to_text(x):
     return str(int(x)) if float(x) == int(x) else repr(round(float(x), 4))
 
 
+def _reasons(lines):
+    """'6: closed at the news' lines -> {6: 'closed at the news'}."""
+    out = {}
+    for line in lines:
+        number, _, why = str(line).partition(":")
+        if number.strip().isdigit() and why.strip():
+            out[int(number)] = why.strip()
+    return out
+
+
 def _list(v):
     if not v:
         return []
@@ -114,6 +127,20 @@ def trade_to_text(t):
         head["note"] = t.note
     if t.plan:
         head["plan"] = t.plan
+    if t.playbook:
+        head["playbook"] = t.playbook
+        if t.playbook_version:
+            head["playbook version"] = t.playbook_version
+        if t.setup:
+            head["setup"] = t.setup
+        # the key stands, empty, for a trade ticked against every rule; a trade
+        # tied to the playbook later, never ticked, does not carry it
+        if t.deviations is not None:
+            head["deviations"] = [str(n) for n in t.deviations]
+        if t.exit_deviations is not None:
+            head["exit deviations"] = [str(n) for n in t.exit_deviations]
+        if t.reasons:
+            head["reasons"] = [f"{n}: {why}" for n, why in sorted(t.reasons.items())]
     if t.notion_id:
         head["notion id"] = t.notion_id
     head.update(t.extra)
@@ -157,6 +184,15 @@ def text_to_trade(text):
         closed_time=closed_with_time,
         note=_text(head.get("note")),
         plan=_text(head.get("plan")),
+        playbook=_text(head.get("playbook")),
+        playbook_version=_text(head.get("playbook version")),
+        setup=_text(head.get("setup")),
+        deviations=(None if "deviations" not in head else
+                    [int(x) for x in _list(head.get("deviations")) if str(x).strip()]),
+        exit_deviations=(None if "exit deviations" not in head else
+                         [int(x) for x in _list(head.get("exit deviations"))
+                          if str(x).strip()]),
+        reasons=_reasons(_list(head.get("reasons"))),
         notion_id=_text(head.get("notion id")),
         extra={k: v for k, v in head.items() if k not in known},
     )
@@ -316,6 +352,161 @@ def text_to_plan(text):
     return k
 
 
+# --- playbook: object <-> text ---------------------------------------------
+# The file reads as the rules would on paper: a heading per setup, a line per
+# rule with a box in front of it. Only three headings mean anything to the
+# code (Setups or Conditions, Filters, Limits); every other heading is kept as
+# the owner wrote it and shown as text.
+
+_RULE = re.compile(r"^\s*[-*]\s*\[[ xX]?\]\s*(.*)$")
+_SHORT = re.compile(r"^\*\*(.+?)\*\*\s*(.*)$", re.S)
+SETUPS, CONDITIONS, FILTERS, LIMITS = "Setups", "Conditions", "Filters", "Limits"
+REVIEW = "Review"          # the block reviews, dated entries with screenshots
+MANAGEMENT = "Management"  # the rules of holding a position, ticked at the close
+
+
+def _rule(number, line):
+    """`**the few words** the whole rule` -> Rule; a line with no bold part
+    is the few words and nothing more."""
+    m = _SHORT.match(line)
+    if m:
+        return Rule(number=number, text=m.group(1).strip(), detail=m.group(2).strip())
+    return Rule(number=number, text=line, detail="")
+
+
+def _rule_line(r):
+    return f"- [ ] **{r.text}** {r.detail}" if r.detail else f"- [ ] {r.text}"
+
+
+def _rules_and_text(chunk, start):
+    """A section body -> (the prose above and between the rules, [Rule]).
+    Numbering carries on from `start`, so a rule's number is unique in the
+    whole playbook."""
+    rules, prose = [], []
+    for line in chunk.split("\n"):
+        m = _RULE.match(line)
+        if m and m.group(1).strip():
+            rules.append(_rule(start + len(rules), m.group(1).strip()))
+        elif not m:
+            prose.append(line)
+    return "\n".join(prose).strip(), rules
+
+
+def _parse_setups(text, start):
+    """The setups under `## Setups` -> ([Setup], the prose above the first
+    `###`). That prose is nobody's setup: it goes back to the introduction."""
+    setups, name, buf, lead = [], None, [], ""
+
+    def close():
+        nonlocal lead
+        if name is None and not "".join(buf).strip():
+            return
+        prose, rules = _rules_and_text("\n".join(buf), start + sum(
+            len(x.rules) for x in setups))
+        if name is None and not rules:
+            lead = prose
+            return
+        setups.append(Setup(name=name or "", text=prose, rules=rules))
+
+    for line in text.split("\n"):
+        if line.startswith("### "):
+            close()
+            name, buf = line[4:].strip(), []
+        else:
+            buf.append(line)
+    close()
+    return setups, lead
+
+
+def playbook_to_text(p):
+    head = {"id": p.id}
+    if p.name:
+        head["name"] = p.name
+    if p.styles:
+        head["styles"] = list(p.styles)
+    head["status"] = p.status
+    if p.version:
+        head["version"] = p.version
+    if p.since:
+        head["since"] = _date_to_text(p.since)
+    if p.block:
+        head["block"] = str(int(p.block))
+    head.update(p.extra)
+
+    parts = []
+    if p.intro.strip():
+        parts.append(p.intro.strip())
+    if p.setups:
+        named = any(s.name for s in p.setups) or len(p.setups) > 1
+        parts.append(f"## {SETUPS}" if named else f"## {CONDITIONS}")
+        for s in p.setups:
+            if named:
+                parts.append(f"### {s.name}")
+            if s.text.strip():
+                parts.append(s.text.strip())
+            parts.extend(_rule_line(r) for r in s.rules)
+    if p.filters:
+        parts.append(f"## {FILTERS}")
+        parts.extend(_rule_line(r) for r in p.filters)
+    if p.management:
+        parts.append(f"## {MANAGEMENT}")
+        parts.extend(_rule_line(r) for r in p.management)
+    if p.limits:
+        parts.append(f"## {LIMITS}")
+        parts.extend(f"- {what}: {value}" for what, value in p.limits)
+    for heading, text in p.sections:
+        if text.strip():
+            parts += [f"## {heading}", text.strip()]
+    if p.review.strip():
+        parts += [f"## {REVIEW}", p.review.strip()]
+    return mdfile.dump(head, "\n\n".join(parts))
+
+
+def text_to_playbook(text):
+    head, body = mdfile.parse(text)
+    known = {key for _, key in PLAYBOOK_KEYS}
+    since, _ = _date(head.get("since"))
+    block = _number(head.get("block"))
+    p = Playbook(
+        id=_text(head.get("id")),
+        name=_text(head.get("name")),
+        styles=_list(head.get("styles")),
+        status=_text(head.get("status")) or "active",
+        version=_text(head.get("version")),
+        since=since,
+        block=None if block is None else int(block),
+        extra={kk: v for kk, v in head.items() if kk not in known},
+    )
+    # the text above the first heading is the introduction
+    intro, _, rest = body.partition("\n## ")
+    p.intro = intro.strip() if not body.startswith("## ") else ""
+    sections = _split_sections(body if body.startswith("## ") else "## " + rest
+                               if rest else "")
+    setups = sections.pop(SETUPS, None)
+    if setups is not None:
+        p.setups, lead = _parse_setups(setups, 1)
+        if lead:
+            p.intro = (p.intro + "\n\n" + lead).strip()
+    elif CONDITIONS in sections:
+        prose, rules = _rules_and_text(sections.pop(CONDITIONS), 1)
+        p.setups = [Setup(name="", text=prose, rules=rules)]
+    if FILTERS in sections:
+        _, p.filters = _rules_and_text(sections.pop(FILTERS),
+                                       1 + sum(len(s.rules) for s in p.setups))
+    if MANAGEMENT in sections:
+        _, p.management = _rules_and_text(
+            sections.pop(MANAGEMENT),
+            1 + sum(len(s.rules) for s in p.setups) + len(p.filters))
+    for line in sections.pop(LIMITS, "").split("\n"):
+        line = line.strip().lstrip("-*").strip()
+        if ":" in line:
+            what, _, value = line.partition(":")
+            p.limits.append((what.strip(), value.strip()))
+    p.review = sections.pop(REVIEW, "").strip()
+    p.sections = [(h, t) for h, t in sections.items() if t.strip()]
+    return p
+
+
 # --- the trades assessment: object <-> text ---------------------------------
 # Written the way the paper numbers it: "1. what was traded | grade | result".
 # Empty cells at the end of a line are not written, so a line that has only a
@@ -471,7 +662,7 @@ def _load(problems, path, convert, root=None):
         return None
 
 
-JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, PLANS, REPORTS]
+JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, PLANS, PLAYBOOKS, REPORTS]
 
 
 def make_layout(root):
@@ -602,6 +793,96 @@ def all_plans(root, problems=None):
                 plans.append(k)
     plans.sort(key=lambda k: (k.day or datetime.min, k.id), reverse=True)
     return plans
+
+
+def playbook_dir(root, playbook_id):
+    return os.path.join(root, JOURNAL, PLAYBOOKS, playbook_id)
+
+
+def save_playbook(root, p):
+    p.check()
+    _write(os.path.join(playbook_dir(root, p.id), PLAYBOOK_FILE), playbook_to_text(p))
+    return p
+
+
+def load_playbook(root, playbook_id):
+    return text_to_playbook(_read(os.path.join(playbook_dir(root, playbook_id),
+                                               PLAYBOOK_FILE)))
+
+
+def all_playbooks(root, problems=None):
+    """Every playbook: the ones in use first, retired ones last, by name."""
+    base = os.path.join(root, JOURNAL, PLAYBOOKS)
+    found = []
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        path = os.path.join(base, name, PLAYBOOK_FILE)
+        if os.path.isfile(path):
+            p = _load(problems, path, text_to_playbook, root)
+            if p is not None:
+                found.append(p)
+    found.sort(key=lambda p: (not p.offered, (p.name or p.id).lower()))
+    return found
+
+
+VERSIONS = "versions"       # the rules as they were before each revision
+
+
+def new_playbook_id(root, name):
+    """A playbook id from its name: 'EMT prop' -> emt-prop, with a counter when
+    the name is taken. The id is the folder, and it does not change with the
+    name later, because trades point at it."""
+    stem = re.sub(r"-+", "-", re.sub(r"[^\w-]+", "-", (name or "playbook").lower())).strip("-")
+    stem = stem or "playbook"
+    base = os.path.join(root, JOURNAL, PLAYBOOKS)
+    taken = set(os.listdir(base) if os.path.isdir(base) else [])
+    if stem not in taken:
+        return stem
+    n = 2
+    while f"{stem}-{n}" in taken:
+        n += 1
+    return f"{stem}-{n}"
+
+
+def freeze_playbook(root, playbook_id):
+    """Keeps the file as it is under versions/<version>.md before the rules
+    are rewritten. A trade opened under the old rules will be shown them, not
+    the new ones. Returns the name the version was kept under."""
+    path = os.path.join(playbook_dir(root, playbook_id), PLAYBOOK_FILE)
+    if not os.path.isfile(path):
+        return None
+    head, _ = mdfile.parse(_read(path))
+    label = re.sub(r"[^\w.-]+", "-", _text(head.get("version"))) or "unversioned"
+    target = os.path.join(playbook_dir(root, playbook_id), VERSIONS, label + ".md")
+    if os.path.exists(target):          # the same number twice: keep both
+        n = 2
+        while os.path.exists(os.path.join(os.path.dirname(target), f"{label}-{n}.md")):
+            n += 1
+        target = os.path.join(os.path.dirname(target), f"{label}-{n}.md")
+    _write(target, _read(path))
+    return os.path.basename(target)[:-3]
+
+
+def playbook_versions(root, playbook_id):
+    """The frozen versions, oldest first by file name."""
+    base = os.path.join(playbook_dir(root, playbook_id), VERSIONS)
+    return sorted(name[:-3] for name in (os.listdir(base) if os.path.isdir(base) else [])
+                  if name.endswith(".md"))
+
+
+def load_playbook_version(root, playbook_id, label):
+    return text_to_playbook(_read(os.path.join(playbook_dir(root, playbook_id),
+                                               VERSIONS, label + ".md")))
+
+
+def delete_playbook(root, playbook_id):
+    """To the trash with its versions, like a plan."""
+    path = playbook_dir(root, playbook_id)
+    if not os.path.isdir(path):
+        return None
+    target = _trash_target(root, f"playbook-{playbook_id}")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.move(path, target)
+    return target
 
 
 def new_plan_id(root, day, pair):
@@ -884,7 +1165,7 @@ def delete_account(root, account_id):
 # id, the others carry their kind in front. The stamp at the end is what lets
 # the same record be deleted twice.
 
-_TRASHED = re.compile(r"^(?:(plan|card|week|adjustment|account)-)?(.+)-"
+_TRASHED = re.compile(r"^(?:(plan|playbook|card|week|adjustment|account)-)?(.+)-"
                       r"(\d{8}-\d{6})(\.md)?$")
 
 
@@ -911,7 +1192,7 @@ def trash_list(root):
         if not m:
             continue
         kind = m.group(1) or "trade"
-        if (kind in ("trade", "plan")) == bool(m.group(4)):
+        if (kind in ("trade", "plan", "playbook")) == bool(m.group(4)):
             continue                     # a folder record with .md, or the reverse
         when = datetime.strptime(m.group(3), "%Y%m%d-%H%M%S")
         items.append((name, kind, m.group(2), when))
@@ -928,6 +1209,8 @@ def _trash_home(root, kind, record_id):
         return trade_dir(root, record_id)
     if kind == "plan":
         return plan_dir(root, record_id)
+    if kind == "playbook":
+        return playbook_dir(root, record_id)
     folder = {"card": CARDS, "week": CARDS,
               "adjustment": ADJUSTMENTS, "account": ACCOUNTS}[kind]
     return os.path.join(root, JOURNAL, folder, record_id + ".md")

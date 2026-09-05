@@ -125,6 +125,8 @@ def build(root, journal, period, conclusions=None):
               f"| {f'{stats.drawdown_r(journal, was_trades):+.2f} R' if was.trades else '-'} |",
               ""]
 
+    lines += playbook_table(root, journal, trades, cur)
+
     for heading, key in (("By style", lambda t: [t.style]),
                          ("By pair", lambda t: [t.pair]),
                          ("By account", lambda t: [t.account]),
@@ -160,6 +162,42 @@ def build(root, journal, period, conclusions=None):
         f.write(mdfile.dump(head, "\n".join(lines)))
     os.replace(tmp, file)
     return file
+
+
+def playbook_table(root, journal, trades, cur):
+    """The trades by the playbook they were opened under, its setups indented
+    beneath it, the ones under none last. Nothing when no trade names one."""
+    rows = stats.by_playbook(journal, trades)
+    if not any(pid != stats.NO_PLAYBOOK for pid, _, _ in rows):
+        return []
+    names = {b.id: b.name or b.id for b in store.all_playbooks(root, [])}
+
+    def clean(c):
+        share = "-" if c.clean_share is None else f"{c.clean_share:.0f}%"
+        return share + (f" ({c.unticked} not ticked)" if c.unticked else "")
+
+    def held(c):
+        return "-" if c.held_share is None else f"{c.held_share:.0f}%"
+
+    def line(label, s, c):
+        return (f"| {label} | {s.trades} | {s.wr:.1f}% | {s.sum_r:+.2f} "
+                f"| {s.average_r:+.2f} | {s.sum_pnl:+,.0f} | {clean(c) if c else '-'} "
+                f"| {held(c) if c else '-'} |".replace(",", " "))
+
+    lines = ["### By playbook", "",
+             f"| | trades | WR | Σ R | EV | Σ {cur} | clean | held |",
+             "|---|---|---|---|---|---|---|---|"]
+    for pid, s, c in rows:
+        if pid == stats.NO_PLAYBOOK:
+            lines.append(line(stats.NO_PLAYBOOK, s, None))
+            continue
+        lines.append(line(names.get(pid, pid), s, c))
+        own = [t for t in trades if t.playbook == pid]
+        setups = stats.by_setup(journal, own)
+        if len(setups) > 1 or (setups and setups[0][0] != "-"):
+            for name, ss, cc in setups:
+                lines.append(line(f"· {name}", ss, cc))
+    return lines + [""]
 
 
 def extremes(journal, trades):

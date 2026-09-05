@@ -5,7 +5,9 @@ Summary figures: WR, R and PnL across slices; the equity curve; R distribution.
 
 Only closed trades count: an open one has neither a result nor an R.
 """
+import re
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass
@@ -85,6 +87,166 @@ def by_values(journal, trades, key):
     rows = [(value, summary(journal, xs)) for value, xs in groups.items()]
     rows.sort(key=lambda x: -x[1].trades)
     return rows
+
+
+# --- playbooks ---------------------------------------------------------------
+
+NO_PLAYBOOK = "no playbook"
+
+
+@dataclass
+class Compliance:
+    """How the trades of a playbook went through its checklist."""
+    clean: int = 0          # ticked, every rule met
+    deviated: int = 0       # ticked, some rule not met
+    unticked: int = 0       # tied to the playbook later, never ticked
+    held: int = 0           # closed, the management rules ticked and all met
+    held_broken: int = 0    # closed, ticked, some management rule not met
+    held_unticked: int = 0  # closed without the management ticked
+
+    @property
+    def ticked(self):
+        return self.clean + self.deviated
+
+    @property
+    def clean_share(self):
+        """The share of ticked trades that met every rule, or None when
+        nothing was ticked: an unticked trade says nothing either way."""
+        return 100.0 * self.clean / self.ticked if self.ticked else None
+
+    @property
+    def held_ticked(self):
+        return self.held + self.held_broken
+
+    @property
+    def held_share(self):
+        """The same for the management rules, over the closed trades that
+        ticked them."""
+        return 100.0 * self.held / self.held_ticked if self.held_ticked else None
+
+
+def compliance(trades):
+    c = Compliance()
+    for t in trades:
+        if t.deviations is None:
+            c.unticked += 1
+        elif t.deviations:
+            c.deviated += 1
+        else:
+            c.clean += 1
+        if t.is_open:
+            continue
+        if t.exit_deviations is None:
+            c.held_unticked += 1
+        elif t.exit_deviations:
+            c.held_broken += 1
+        else:
+            c.held += 1
+    return c
+
+
+def by_playbook(journal, trades):
+    """[(playbook id or NO_PLAYBOOK, Summary, Compliance)] over the closed
+    trades, the playbooks by their number of trades, the trades without one
+    last."""
+    groups = {}
+    for t in trades:
+        if t.is_open:
+            continue
+        groups.setdefault(t.playbook or NO_PLAYBOOK, []).append(t)
+    rows = [(pid, summary(journal, xs), compliance(xs)) for pid, xs in groups.items()]
+    rows.sort(key=lambda x: (x[0] == NO_PLAYBOOK, -x[1].trades))
+    return rows
+
+
+def by_setup(journal, trades):
+    """[(setup, Summary, Compliance)] over the closed trades of one playbook;
+    a trade with no setup named stands under '-'."""
+    groups = {}
+    for t in trades:
+        if t.is_open:
+            continue
+        groups.setdefault(t.setup or "-", []).append(t)
+    rows = [(name, summary(journal, xs), compliance(xs)) for name, xs in groups.items()]
+    rows.sort(key=lambda x: -x[1].trades)
+    return rows
+
+
+def rule_costs(journal, trades, rules):
+    """What each rule cost: for every rule, (rule, how many ticked trades
+    broke it, Summary of those trades). Alongside, the Summary of the trades
+    that met every rule, which is what a broken rule is measured against.
+
+    Only ticked trades take part: a trade tied to the playbook later says
+    nothing about any rule. Open trades are counted as breaking a rule but
+    carry no R yet, the Summary being of closed trades. The management rules
+    are in the same table, their breaks read from the close; the measure is
+    the trades that kept every rule, at the entry and after."""
+    ticked = [t for t in trades if t.deviations is not None]
+    clean = summary(journal, [t for t in ticked
+                              if not t.deviations and not t.exit_deviations])
+    rows = []
+    for r in rules:
+        broke = [t for t in ticked
+                 if r.number in t.deviations or r.number in (t.exit_deviations or [])]
+        rows.append((r, len(broke), summary(journal, broke)))
+    return rows, clean
+
+
+def _figure(limits, key):
+    try:
+        return float(str(limits.get(key, "")).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def frame(journal, playbook, now=None):
+    """The limits of a playbook held against its trades at this moment, for
+    the form of a new trade: [(what, value, limit, reached)]. A count that
+    has reached its limit is flagged, because the trade being opened would
+    go past it; the loss of the week is flagged once it has reached the
+    fuse. Nothing is refused, the figures are only shown."""
+    now = now or datetime.now()
+    limits = dict(playbook.limits)
+    own = [t for t in journal.trades if t.playbook == playbook.id]
+    this_week, this_month = week(now), f"{now:%Y-%m}"
+    rows = []
+    n = _figure(limits, "max per week")
+    if n is not None:
+        count = sum(1 for t in own if t.opened and week(t.opened) == this_week)
+        rows.append(("trades this week", count, n, count >= n))
+    n = _figure(limits, "max per month")
+    if n is not None:
+        count = sum(1 for t in own if t.opened and f"{t.opened:%Y-%m}" == this_month)
+        rows.append(("trades this month", count, n, count >= n))
+    n = _figure(limits, "weekly loss limit")
+    if n is not None:
+        r = sum(journal.r(t.id) or 0.0 for t in own
+                if not t.is_open and t.closed and week(t.closed) == this_week)
+        rows.append(("R this week", r, -n, r <= -n))
+    n = _figure(limits, "open at once")
+    if n is not None:
+        count = sum(1 for t in own if t.is_open)
+        rows.append(("open now", count, n, count >= n))
+    return rows
+
+
+_ENTRY = re.compile(r"^\*\*\d\d\.\d\d\.\d{4}\*\*:")
+
+
+def reviews_written(playbook):
+    """How many dated entries the review holds: one per block reviewed. An
+    entry starts with the date the page stamps it with; a bold word inside
+    an entry is not one."""
+    return sum(1 for line in playbook.review.split("\n") if _ENTRY.match(line))
+
+
+def review_due(playbook, count):
+    """Has a block run its course without its review: the trades make more
+    full blocks than there are reviews."""
+    if not playbook.block:
+        return False
+    return count // playbook.block > reviews_written(playbook)
 
 
 def drawdown_r(journal, trades):

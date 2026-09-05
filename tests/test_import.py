@@ -156,3 +156,43 @@ class ImportCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AttachCase(unittest.TestCase):
+    def test_trades_of_the_styles_since_the_date_are_tied(self):
+        from plainbook.model import Playbook, Rule, Setup, Trade
+        import subprocess, sys
+        with tempfile.TemporaryDirectory() as root:
+            store.save_account(root, Account(id="broker", start_balance=1000))
+            store.save_playbook(root, Playbook(
+                id="pull", name="Pull", styles=["swing"], version="1.0",
+                since=datetime(2026, 8, 15),
+                setups=[Setup(rules=[Rule(1, "one")])]))
+            def trade(n, style, day, **kw):
+                return Trade(id=f"2026-08-{day:02d}-{n:02d}-eurusd", account="broker",
+                             pair="EURUSD", direction="long", style=style,
+                             opened=datetime(2026, 8, day), **kw)
+            for t in (trade(1, "swing", 14), trade(1, "swing", 15), trade(2, "EMT", 15),
+                      trade(1, "swing", 20, playbook="other", playbook_version="2")):
+                store.save_trade(root, t)
+            tool = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "tools", "attach_playbook.py")
+            dry = subprocess.run([sys.executable, tool, root, "pull"],
+                                 capture_output=True, text=True).stdout
+            self.assertIn("trades to tie: 1", dry)
+            self.assertEqual([t.playbook for t in store.all_trades(root)],
+                             ["", "", "", "other"])
+            done = subprocess.run([sys.executable, tool, root, "pull", "--apply"],
+                                  capture_output=True, text=True).stdout
+            self.assertIn("written: 1", done)
+            tied = {t.id: (t.playbook, t.playbook_version) for t in store.all_trades(root)}
+            self.assertEqual(tied["2026-08-15-01-eurusd"], ("pull", "1.0"))
+            with open(os.path.join(store.trade_dir(root, "2026-08-15-01-eurusd"),
+                                   "trade.md")) as f:
+                self.assertNotIn("deviations", f.read())
+            self.assertEqual(tied["2026-08-14-01-eurusd"], ("", ""))
+            self.assertEqual(tied["2026-08-15-02-eurusd"], ("", ""))
+            self.assertEqual(tied["2026-08-20-01-eurusd"], ("other", "2"))
+            again = subprocess.run([sys.executable, tool, root, "pull", "--apply"],
+                                   capture_output=True, text=True).stdout
+            self.assertIn("written: 0", again)

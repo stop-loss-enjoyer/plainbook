@@ -57,6 +57,12 @@ TRADE_KEYS = [
     ("closed", "exit"),
     ("note", "note"),
     ("plan", "plan"),
+    ("playbook", "playbook"),
+    ("playbook_version", "playbook version"),
+    ("setup", "setup"),
+    ("deviations", "deviations"),
+    ("exit_deviations", "exit deviations"),
+    ("reasons", "reasons"),
     ("notion_id", "notion id"),
 ]
 
@@ -79,6 +85,14 @@ class Trade:
     closed_time: bool = False                       # is the exit time known
     note: str = ""
     plan: str = ""                                  # id of the plan it follows
+    playbook: str = ""                              # id of the playbook, if any
+    playbook_version: str = ""                      # the rules it was ticked against
+    setup: str = ""                                 # the setup taken, if the playbook has them
+    deviations: list = None                         # numbers of the rules not met;
+                                                    # None: the rules were never ticked
+    exit_deviations: list = None                    # the same for the management
+                                                    # rules, ticked when it is closed
+    reasons: dict = field(default_factory=dict)     # {rule number: why it was not met}
     notion_id: str = ""
     idea: list = field(default_factory=list)        # list of IdeaBlock
     exit_images: list = field(default_factory=list)
@@ -177,6 +191,108 @@ class Plan:
             raise RecordError(f"{self.id}: the plan ends before it starts")
         if self.narrative and self.narrative not in NARRATIVES:
             raise RecordError(f"{self.id}: bad narrative {self.narrative!r}")
+        return self
+
+
+# --- playbook --------------------------------------------------------------
+# The standing rules of one way of trading: what has to be true before a trade
+# is opened. A plan is written for a day and a pair; a playbook has no date and
+# no pair, it is the system itself. A trade will name the playbook it was taken
+# under and the rules it did not meet, so that a rule can be priced in R.
+
+PLAYBOOK_KEYS = [
+    ("id", "id"),
+    ("name", "name"),
+    ("styles", "styles"),
+    ("status", "status"),
+    ("version", "version"),
+    ("since", "since"),
+    ("block", "block"),
+]
+
+# experiment: rules on trial, the sample is being built; active: the system
+# is trusted; retired: kept for the trades that carry it, not offered any more
+PLAYBOOK_STATUSES = ("active", "experiment", "retired")
+
+# The limits a playbook can set as figures: (key in the file, label in the
+# interface, unit). The form offers a field for each, so that nobody has to
+# know the key, and the journal will count them against the trades. A limit
+# of another kind is written as text and shown as written.
+LIMITS = [
+    ("risk", "risk per trade", "%"),
+    ("max per week", "trades per week, at most", ""),
+    ("max per month", "trades per month, at most", ""),
+    ("weekly loss limit", "loss per week, at most", "R"),
+    ("open at once", "positions open at once", ""),
+    ("max hold", "longest hold", "days"),
+    ("min rr", "least RR", ""),
+]
+
+
+@dataclass
+class Rule:
+    """One line to tick before the trade: numbered through the whole playbook,
+    so that a trade can name the rules it did not meet by number. The text is
+    the few words the checklist shows; the detail is the whole rule, for the
+    page and for a look while ticking."""
+    number: int
+    text: str
+    detail: str = ""
+
+
+@dataclass
+class Setup:
+    """A way to enter under the playbook, with its own rules. A playbook with
+    one way of entering keeps its rules in a setup with no name."""
+    name: str = ""
+    text: str = ""                                  # what the setup is about
+    rules: list = field(default_factory=list)       # [Rule]
+
+
+@dataclass
+class Playbook:
+    id: str
+    name: str = ""
+    styles: list = field(default_factory=list)      # the styles it is for
+    status: str = "active"
+    version: str = ""                               # rules change by version
+    since: date = None                              # the first trade it counts
+    block: int = None                               # trades per review, or none
+    intro: str = ""                                 # what the playbook is
+    setups: list = field(default_factory=list)      # [Setup]
+    filters: list = field(default_factory=list)     # [Rule], for every setup
+    management: list = field(default_factory=list)  # [Rule], ticked at the close
+    limits: list = field(default_factory=list)      # [(what, value)] as text
+    sections: list = field(default_factory=list)    # [(heading, text)] the rest
+    review: str = ""                                # dated entries, with shots
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def rules(self):
+        """Every rule in the order it is numbered: the setups, then the
+        filters, then the management."""
+        out = []
+        for s in self.setups:
+            out.extend(s.rules)
+        out.extend(self.filters)
+        out.extend(self.management)
+        return out
+
+    @property
+    def offered(self):
+        return self.status != "retired"
+
+    def check(self):
+        if not self.id:
+            raise RecordError("playbook has no id")
+        if not self.name.strip():
+            raise RecordError(f"{self.id}: the playbook has no name")
+        if self.status not in PLAYBOOK_STATUSES:
+            raise RecordError(f"{self.id}: bad status {self.status!r}")
+        if self.block is not None and self.block <= 0:
+            raise RecordError(f"{self.id}: the block must be above zero")
+        if len(self.setups) > 1 and not all(x.name for x in self.setups):
+            raise RecordError(f"{self.id}: with several setups, every setup needs a name")
         return self
 
 

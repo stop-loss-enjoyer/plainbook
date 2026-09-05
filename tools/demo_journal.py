@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import stats, store
 from plainbook.model import (Account, Adjustment, Card, Graded, IdeaBlock,
+                             Playbook, Setup, Rule,
                              Plan, Trade, Week)
 
 ACCOUNTS = [Account(id="broker", name="broker", start_balance=10000),
@@ -74,6 +75,50 @@ def build(root, days=40):
                         f"imbalance was filled overnight, waiting for the retest.")
     store.save_plan(root, plan)
 
+    # a playbook, so that the Playbooks tab and its page have rules to show
+    store.save_playbook(root, Playbook(
+        id="pullback", name="Pullback", styles=["swing"], status="experiment",
+        version="1.0", since=start, block=40,
+        intro="The one way I enter with the trend: a pullback into an area the "
+              "higher timeframe left behind. Written before the first trade "
+              "counted here; the rules change between blocks only.",
+        setups=[
+            Setup(name="A: reaction at a higher level",
+                  text="The level was hit and the first reaction is in.",
+                  rules=[Rule(1, "Level on W or D",
+                              "A fractal level or zone of the weekly or the daily "
+                              "chart; a reaction in the premium of the range is "
+                              "only sold, in the discount only bought"),
+                         Rule(2, "Reaction seen on H4 or H1",
+                              "A rejection, a rejection block, a fractal or a "
+                              "slowdown; a fractal counts only against the range "
+                              "or a major level"),
+                         Rule(3, "Entry at market after the reaction is confirmed"),
+                         Rule(4, "The stop is behind the extreme of the reaction, "
+                                 "with a buffer"),
+                         Rule(5, "The nearest target is at least 2R away, or "
+                                 "there is no trade")]),
+            Setup(name="B: continuation from an imbalance",
+                  text="A strong trend, an imbalance left behind, entry with the "
+                       "trend to the next level.",
+                  rules=[Rule(6, "The trend is visible on the daily chart"),
+                         Rule(7, "Entry from the touch when a stop fits behind "
+                                 "the fractal, otherwise on confirmation"),
+                         Rule(8, "The next level is at least 2R away")])],
+        filters=[Rule(9, "More than an hour to the next high-impact release"),
+                 Rule(10, "No other position of this playbook is open"),
+                 Rule(11, "This is not the fourth trade of the week")],
+        management=[Rule(12, "Stop never moved against the position",
+                         "The stop stays where the idea dies; it moves only to "
+                         "break-even and only after the first target"),
+                    Rule(13, "Held to the target or to the stop",
+                         "No exit on a feeling; a close by hand is a rule broken"),
+                    Rule(14, "Closed by Friday", "No position over the weekend")],
+        limits=[("risk", "1"), ("max per week", "3"), ("min rr", "2")],
+        sections=[("Math", "Break-even win rate at 2R is 33%. The block is "
+                           "reviewed at 40 trades; below 30% the rules are "
+                           "rewritten before the next one.")]))
+
     for i in range(26):
         day = start + timedelta(days=int(i * days / 26), hours=random.randint(-5, 4))
         if day.weekday() >= 5:                      # the market is closed
@@ -99,15 +144,38 @@ def build(root, days=40):
             plan=plan.id if plan.covers(day) and pair == "EURUSD" else "",
             idea=[IdeaBlock(tf="H4", text=random.choice(IDEAS))],
             conclusions=random.choice(CONCLUSIONS))
+        # the swing trades are taken under the playbook: most ticked clean,
+        # some with a rule or two not met and a word on why, so that the
+        # figures of the playbook have something to say
+        if style == "swing":
+            trade.playbook, trade.playbook_version = "pullback", "1.0"
+            trade.setup = random.choice(["A: reaction at a higher level",
+                                         "B: continuation from an imbalance"])
+            # a rule is broken more often on the trades that lost: the demo
+            # should show what the figures are for, a rule with a price on it
+            lost = result == "Lose"
+            broke = random.choice([[2], [5], [9], [2, 9], [], []] if lost else
+                                  [[], [], [], [], [], [9]])
+            if trade.setup.startswith("B"):
+                broke = [n for n in broke if n not in (2, 5)]
+            trade.deviations = broke
+            trade.exit_deviations = random.choice([[13], [12], [], []] if lost else
+                                                  [[], [], [], [12]])
+            why = {2: "no reaction yet, went in early", 5: "target 1.6R, took it anyway",
+                   9: "forgot the calendar", 12: "moved the stop at the news",
+                   13: "closed by hand at the first pullback"}
+            trade.reasons = {n: why[n] for n in broke + trade.exit_deviations}
         store.save_trade(root, trade)
 
     # one position still open: the front page has a card of its own for those
     open_day = today - timedelta(hours=6)
     store.save_trade(root, Trade(
         id=store.new_id(root, open_day, "EURUSD"), account="broker", pair="EURUSD",
-        direction="short", style="EMT", entry_tf="H1", risk=1.0,
+        direction="short", style="swing", entry_tf="H4", risk=1.0,
         opened=open_day, opened_time=True, plan=plan.id,
-        idea=[IdeaBlock(tf="H1", text=IDEAS[0])]))
+        playbook="pullback", playbook_version="1.0",
+        setup="A: reaction at a higher level", deviations=[],
+        idea=[IdeaBlock(tf="H4", text=IDEAS[0])]))
 
     # one deposit half way, so that the equity curve has a hollow dot and a
     # step in its base line to show

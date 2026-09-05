@@ -97,6 +97,14 @@ header nav a{{display:inline-flex;align-items:center;color:{DIM};padding:0 10px;
  margin-bottom:-1px}}
 header nav a:hover{{color:{INK2}}}
 header nav a.current{{color:{INK};border-bottom-color:{ACCENT}}}
+/* A tab that asks for the owner: amber, the colour the journal already
+   uses for a warning tile. It is on while there is no playbook and while a
+   block waits for its review, and off the rest of the time, so that when it
+   is on it is seen. A colour that is always on is not seen after a week. */
+header nav a.attention{{color:{WARN}}}
+header nav a.attention::after{{content:"";display:inline-block;width:5px;height:5px;
+ border-radius:50%;background:{WARN};margin-left:6px;vertical-align:1px}}
+header nav a.attention.current{{color:{INK};border-bottom-color:{WARN}}}
 header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 
 /* buttons */
@@ -284,6 +292,106 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .idea-block:last-child{{margin-bottom:0}}
 .is-open{{border-left:2px solid {WARN}}}
 .props{{max-width:660px}}
+
+/* playbooks: the rules on paper, a line each with its number in the margin */
+.pb-name{{font:600 20px/1.2 system-ui,sans-serif;color:{INK};margin:0}}
+.chip{{display:inline-block;font:600 10px/1 {MONO};text-transform:uppercase;
+ letter-spacing:.07em;padding:4px 6px;border-radius:3px;border:1px solid {AXIS};
+ color:{INK2};vertical-align:2px}}
+.chip.experiment{{color:{WARN};border-color:rgba(217,164,65,.45)}}
+.chip.active{{color:{GOOD};border-color:rgba(72,172,122,.45)}}
+.chip.retired{{color:{DIM}}}
+.pb-meta{{color:{DIM};font-size:12px;margin:6px 0 0}}
+.pb-meta b{{color:{INK2};font-weight:500}}
+.pb-intro{{max-width:760px;color:{INK2};font-size:13px;line-height:1.55;margin:12px 0 0}}
+.pb-intro p{{margin:0 0 8px}}
+.setup{{margin-top:20px}}
+.setup:first-child{{margin-top:0}}
+.setup h3{{margin:0 0 4px}}
+.setup .about{{max-width:760px;color:{INK2};font-size:13px;line-height:1.5;margin:0 0 4px}}
+.rules{{list-style:none;margin:6px 0 0;padding:0;max-width:760px}}
+.rules li{{display:flex;gap:12px;align-items:baseline;padding:8px 0;
+ border-top:1px solid {GRID};font-size:13px;line-height:1.5}}
+.rules li:first-child{{border-top:0}}
+.rules .n{{flex:0 0 40px;font:600 11px/1.6 {MONO};color:{DIM};text-align:right;
+ white-space:nowrap}}
+.rules .n::before{{content:"";display:inline-block;width:9px;height:9px;
+ border:1px solid {AXIS};border-radius:2px;margin-right:7px;vertical-align:-1px}}
+.block-bar{{height:4px;background:{GRID};border-radius:2px;max-width:320px;margin-top:8px}}
+.block-bar i{{display:block;height:100%;background:{ACCENT};border-radius:2px}}
+.limits{{display:flex;flex-wrap:wrap;gap:10px 26px;margin:0}}
+.limits div{{font-size:12px;color:{DIM}}}
+.limits b{{font:600 13px/1 {MONO};color:{INK};margin-left:7px}}
+.pb-text{{max-width:760px;font-size:13px;line-height:1.55;color:{INK2}}}
+.pb-text p{{margin:0 0 8px}}
+.pb-text ul{{margin:0 0 8px;padding-left:20px}}
+.pb-text li{{margin:2px 0}}
+.pb-text h3{{margin-top:12px}}
+.setup-form{{border-left:2px solid {AXIS};padding-left:12px;margin-bottom:16px}}
+.setup-form .fields{{margin-bottom:8px}}
+textarea.lines{{font-family:{MONO};font-size:12px}}
+.rules-edit{{max-width:860px}}
+.rule-row{{display:flex;gap:10px;align-items:flex-start;padding:3px 0}}
+.rule-row .n{{flex:0 0 26px;font:600 11px/1 {MONO};color:{DIM};text-align:right;
+ padding-top:9px}}
+.rule-row textarea{{flex:1;width:auto;min-height:0;height:auto;resize:none;
+ overflow:hidden;line-height:1.45;padding:6px 9px}}
+.rule-row textarea.short{{flex:0 0 300px;color:{INK};font-weight:500}}
+.rules .detail{{display:block;color:{DIM};font-size:12px;line-height:1.45;margin-top:2px}}
+.rule-row .x{{background:transparent;border:0;color:{DIM};cursor:pointer;
+ font-size:17px;line-height:1;padding:6px 6px}}
+.rule-row .x:hover{{color:{BAD}}}
+.btn.small{{padding:3px 9px;font-size:11px;margin-top:4px}}
+/* the checklist in the trade form: a row per rule, the whole rule behind ? */
+.checklist h3{{margin-top:0}}
+.checklist .setups{{display:flex;gap:16px;flex-wrap:wrap;margin:0 0 10px}}
+.checklist .radio{{display:inline-flex;align-items:center;gap:6px;margin:0;
+ text-transform:none;letter-spacing:0;font-size:13px;color:{INK}}}
+.checklist .filter-rules h3{{margin-top:14px}}
+.check{{display:flex;align-items:baseline;gap:8px;padding:6px 0;
+ border-top:1px solid {GRID};max-width:760px}}
+.check:first-child,.setups + .setup-rules .check:first-child{{border-top:0}}
+.check input[type=checkbox]{{flex:0 0 auto;margin:0;vertical-align:0}}
+.check label{{display:inline;margin:0;text-transform:none;letter-spacing:0;
+ font-size:13px;color:{INK};cursor:pointer}}
+.check label .n{{font:600 11px/1 {MONO};color:{DIM};margin-right:8px}}
+.check .why{{background:transparent;border:1px solid {AXIS};color:{DIM};
+ border-radius:50%;width:18px;height:18px;line-height:1;font-size:11px;
+ cursor:pointer;padding:0;flex:0 0 auto}}
+.check .why:hover{{color:{INK};border-color:{DIM}}}
+.check .detail{{flex-basis:100%;color:{DIM};font-size:12px;line-height:1.45;
+ padding-left:26px}}
+.check{{flex-wrap:wrap}}
+.check .why-in{{flex-basis:100%;margin-left:26px;width:auto;font-size:12px;
+ padding:4px 8px;border-color:rgba(217,164,65,.45)}}
+.rules .reason{{display:block;color:{WARN};font-size:12px;line-height:1.45;margin-top:2px}}
+.reasons{{font-size:12px;margin-top:8px}}
+.reasons b{{font:600 11px/1 {MONO};color:{DIM};margin-right:6px}}
+.reasons ul{{margin:4px 0 0;padding-left:26px;color:{INK2}}}
+.reasons li{{margin:2px 0}}
+.reasons li a{{font-family:{MONO};font-size:11px;margin-right:6px}}
+.tally{{margin:10px 0 0}}
+.frame{{display:flex;gap:6px 22px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:{DIM}}}
+.frame b{{font:600 12px/1 {MONO};color:{INK}}}
+.frame .over,.frame .over b{{color:{BAD}}}
+.pb-meta.over,.pb-meta.over b{{color:{WARN}}}
+.over{{color:{BAD}}}
+/* the same rules on the page of a trade, met or not */
+.rules.ticked li.ok .n::before{{content:"✓";color:{GOOD};border-color:transparent;
+ width:auto;height:auto;font-size:12px}}
+.rules.ticked li.no .n::before{{content:"✗";color:{BAD};border-color:transparent;
+ width:auto;height:auto;font-size:12px}}
+.rules.ticked li.no > span:last-child{{color:{BAD}}}
+tr.total td{{border-top:1px solid {AXIS};color:{INK};font-weight:500}}
+tr.sub td:first-child{{padding-left:28px;color:{INK2}}}
+tr.sub td{{color:{INK2}}}
+.limit-row{{display:flex;gap:8px;align-items:center;padding:3px 0}}
+.limit-row input[name="limit_name"]{{width:240px}}
+.limit-row .x{{background:transparent;border:0;color:{DIM};cursor:pointer;
+ font-size:17px;line-height:1;padding:4px 6px}}
+.limit-row .x:hover{{color:{BAD}}}
+.versions{{list-style:none;margin:0;padding:0;font-size:12px}}
+.versions li{{padding:4px 0}}
 .props td:first-child{{width:190px;color:{DIM}}}
 .caption{{color:{DIM};font-size:11px}}
 mark{{background:rgba(111,157,255,.28);color:inherit;border-radius:2px}}
@@ -387,13 +495,16 @@ def money(x, signed=False):
     return text.replace(",", " ")
 
 
-def page(title, body, tab="journal", header_right="", notice="", said=""):
-    links = [("journal", "/", "Journal"), ("plans", "/plans", "Plans"),
+def page(title, body, tab="journal", header_right="", notice="", said="",
+         attention=()):
+    """`attention` names the tabs that ask for the owner, see the CSS."""
+    links = [("journal", "/", "Journal"), ("playbooks", "/playbooks", "Playbooks"),
+             ("plans", "/plans", "Plans"),
              ("cards", "/cards", "Cards"), ("stats", "/stats", "Statistics"),
              ("reports", "/reports", "Reports"), ("accounts", "/accounts", "Accounts"),
              ("search", "/search", "Search")]
     nav = "".join(
-        f'<a href="{href}" class="{"current" if code == tab else ""}">{name}</a>'
+        f'<a href="{href}" class="{" ".join(["current"] * (code == tab) + ["attention"] * (code in attention))}">{name}</a>'
         for code, href, name in links)
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>{"Plainbook" if title == "Journal"

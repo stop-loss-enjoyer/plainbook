@@ -16,6 +16,8 @@ screenshots in a folder you own: no account, no cloud, no network calls.
   <img src="docs/statistics.png" width="49%" alt="Statistics">
 </p>
 
+![A playbook: the figures by setup and what each rule cost](docs/playbook.png)
+
 <p align="center"><i>The screenshots are made on invented data.</i></p>
 
 ## Why
@@ -56,6 +58,17 @@ updates added while it runs and the review after. A trade points at the plan it
 followed, so the plan page can show every trade that came out of it with its R,
 say how many went with the narrative and how many against it, and answer the
 only question worth asking of a plan.
+
+**A playbook, and a checklist before every trade.** The rules of a way of
+trading, written down once: the setups with their rules, the filters, the
+rules of holding the position, the limits. A trade is opened under a
+playbook and its rules are ticked in the form, a box each with a few words;
+nothing is refused, but every rule left unticked is recorded with the
+trade, with a line for why. The management rules are ticked at the close.
+The statistics then say what each rule is worth: the trades that broke it
+and what they brought in R, against the trades that kept every rule. Rules
+change by version, and a trade keeps the rules it was ticked against.
+[PLAYBOOK.md](PLAYBOOK.md) takes the form apart.
 
 **A daily card.** The day reviewed on the pattern of a paper Daily Report Card:
 process grade, opportunity quality, focus, what went well, errors, best trade,
@@ -135,7 +148,7 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in about a second.** 161 of them, no fixtures, no network.
+- **The tests finish in about a second.** 189 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
@@ -144,7 +157,7 @@ first place: plain files, no dependencies, a small surface.
 - **A guard stands between an agent and your records.** `tools/check_public.py`
   refuses a push that would carry trade records, private paths or anything
   else it recognises as yours; it runs as a pre-push hook and in CI.
-- **The whole program is ~6 100 lines** of straightforward Python, and the
+- **The whole program is ~8 600 lines** of straightforward Python, and the
   routing table fits on one screen. It fits in a context window, so an agent
   reasons about the real thing rather than about a summary of it.
 - **One language throughout:** code, comments, documents and commit messages.
@@ -173,6 +186,7 @@ balance is right from the first minute.
 
 Autostart on Linux, Windows and macOS, plus desktop integration:
 **[INSTALL.md](INSTALL.md)**. The day-to-day guide: **[GUIDE.md](GUIDE.md)**.
+Writing a playbook, part by part: **[PLAYBOOK.md](PLAYBOOK.md)**.
 
 ## Your data
 
@@ -221,6 +235,14 @@ Range breakout, waiting for a retest.
 
 Held to target, did not move the stop.
 ```
+
+A playbook is a folder too: `journal/playbooks/<id>/playbook.md` with the
+rules as a checklist, `versions/` for the rules as they were before each
+revision, `shots/` for the screenshots of the reviews. A trade opened under
+one carries `playbook`, `playbook version`, `setup`, `deviations`, `exit
+deviations` and `reasons` in its header. An empty `deviations:` key means
+the rules were ticked and every one was met; a missing key means they were
+never ticked. Keep that difference if you edit a file by hand.
 
 That is the whole storage format. No database, no schema migrations, no export
 button: the export is `cp -r`.
@@ -309,7 +331,7 @@ Measured on a journal of 159 trades with 363 screenshots:
 | a trade page | **2 ms**, 14 KB |
 | statistics with charts | **7 ms**, 37 KB |
 | server memory | **25 MB** |
-| the whole program | **~6 100 lines of Python** |
+| the whole program | **~8 600 lines of Python** |
 
 Pages are plain HTML rendered by one Python process: no framework, no bundler,
 no build step. The charts are SVG generated on the server. There is nothing to

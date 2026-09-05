@@ -42,7 +42,10 @@ the result, not the code. Installing by hand works the same way.
    were worked out, then delete the test trade (it lands in `.trash`, show them
    that, deleting has to feel reversible). Show where the files live.
 8. Hand them [GUIDE.md](GUIDE.md); the daily round is all in there. Do not
-   recite it: show it once on a live example and say where the text is.
+   recite it: show it once on a live example and say where the text is. The
+   **Playbooks** tab is amber until the first playbook is written; that is
+   the journal asking for the rules, not an error. When they are ready to
+   write them down, [PLAYBOOK.md](PLAYBOOK.md) takes the form apart.
 
 The default port is 8778; if it is taken, set another one through `PLAINBOOK_PORT` (and
 use it everywhere below).

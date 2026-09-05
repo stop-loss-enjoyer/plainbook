@@ -12,7 +12,7 @@ its own and survives a reboot; there is nothing to "start" by hand.
 1. **Before the market**, a plan if the week or the day needs one: the
    **+ Plan** button.
 2. **Opened a position?** Write it down at once, with the **+ Trade** button,
-   and pick the plan it follows.
+   pick the plan it follows and the playbook, and tick its rules.
 3. **Closed it?** Close the trade too: the **Close** button in the open
    positions block or on the trade page.
 4. **At the end of the day**, a card: the **+ DRC** button.
@@ -40,6 +40,8 @@ who was right. In hindsight an idea always looks tidier than it was.
 - **entry**: date and time of entry; clicking the field opens a calendar.
 - **plan**: the trading plan this trade follows, picked from the plans you have
   written. Left at "-" if the trade belongs to none.
+- **playbook**: the playbook the trade is opened under, if any. Picking one
+  sets the style and opens its checklist under the form; see Playbooks above.
 - **execution**: the checkboxes. They come from your list too, so the formats
   you actually trade are the ones offered.
 
@@ -60,6 +62,188 @@ account and the risk, so each is measured against its own balance. After that
 they are ordinary trades: each is closed with its own result and PnL.
 
 **Open trade** saves it. The position counts as open until it is closed.
+
+## Playbooks
+
+The **Playbooks** tab holds the standing rules of a way of trading: what has
+to be true before a trade is opened. A plan is written for a day and a pair;
+a playbook has no date and no pair, it is the system itself, and it changes
+by version rather than by the week.
+
+The tab is drawn amber while the journal has no playbook: the rules are what
+the trade form will hold the trades against, and until they are written
+nothing can be held.
+
+**+ Playbook** on the tab writes one. The form is six cards: the header, the
+setups, the filters, the management, the limits and the notes. What each part is for, and how the journal uses it, is
+laid out in [PLAYBOOK.md](PLAYBOOK.md).
+
+- **name, status, version, counts from, block, styles.** The status is
+  `experiment` while the sample is being built, `active` once the rules are
+  trusted, `retired` when they are not offered any more; a retired playbook
+  stays for the trades that carry it. *Counts from* (`since` in the file) is
+  the day the tool that ties old trades starts from; it starts at today. A
+  new playbook starts as an experiment at version 1.0. *Block* is how many
+  trades make one review, if the rules are reviewed by blocks; the page
+  shows how far the current block has come.
+- **setups.** One way of entering per setup: a name, a line on what it is,
+  and its rules, a row each. A rule is a few words, which is what the
+  checklist in the trade form will show, and then the whole rule, if the
+  words need it; the page shows both. Enter in a row adds the next one under
+  it, the cross takes one away, and an empty row is simply dropped.
+  **+ setup** adds another setup. A playbook with one way of entering leaves
+  the name empty.
+- **filters**: rules checked before every trade, whatever the setup, in the
+  same fields.
+- **management**: the rules of holding the position, in the same fields.
+  They are ticked when the trade is closed, not when it is opened: the stop
+  not moved, the position held to its target, closed by Friday. Three to
+  five is a list that gets ticked.
+- **limits**: a row each, **+ limit** adds one and the cross takes one
+  away. A value is a plain number, the unit stands in the label, and the
+  loss per week is written as a positive number. The first five kinds are
+  counted above the checklist of a new trade: risk per trade, trades per
+  week and per month, loss per week in R, positions open at once. The
+  longest hold and the least RR are shown on the page and left for the
+  review. *Other* takes a name of your own and is shown as written.
+- **notes**: anything else. A line starting with `## ` begins a section of
+  its own on the page: the markets, the math, what is still being decided;
+  text with no heading lands under *Notes*.
+
+The rules are numbered through the whole playbook, setups first, then the
+filters, then the management. That number is what a trade will record when a rule was not met.
+
+**Revising the rules.** Until the first trade is ticked against a version,
+the rules are a draft: edit them as often as you like. Once a trade has been
+through the checklist under the number, a change of the rules asks for a new
+number, and the rules as they
+were are kept under *Earlier versions* on the page: a trade opened under the
+old number keeps the rules it was ticked against. Only the rules and the names of
+the setups are held to this; the intro, the notes, the limits and the status
+change freely.
+
+The file it writes, `journal/playbooks/<id>/playbook.md`, reads by eye like
+every other record:
+
+    ---
+    id: pullback
+    name: Pullback
+    styles:
+      - swing
+    status: experiment
+    version: 1.0
+    since: 2026-08-15
+    block: 40
+    ---
+
+    What the playbook is, in a few lines.
+
+    ## Setups
+
+    ### A: reaction at a higher level
+    A line or two on what the setup is.
+    - [ ] **Level on W or D** A fractal level of the weekly or the daily chart
+    - [ ] The target is at least 2R away
+
+    ## Filters
+
+    - [ ] More than an hour to the next high-impact release
+
+    ## Management
+
+    - [ ] **Stop never moved against** The stop stays where the idea dies
+
+    ## Limits
+
+    - risk: 1
+    - max per week: 3
+
+    ## Math
+
+    Anything else, under any heading.
+
+A rule is a line with a box in front, `- [ ]`; the few words go in bold and
+the whole rule follows them. A playbook with one way of
+entering writes its rules under `## Conditions` instead of `## Setups`. Any
+other heading is kept and shown as text. Earlier versions sit next to it in
+`versions/<number>.md`.
+
+**In the form of a trade.** Next to *plan* there is *playbook*. Picking one
+sets the style to the playbook's and opens its checklist under the form: the
+setups to choose from, the rules of the chosen setup and the filters, a box
+each with the few words of the rule; the question mark shows the whole rule.
+Tick what holds. The trade opens with any number of boxes ticked, nothing is
+refused, but the rules left unticked are recorded with it, and the line under
+the list says how many. Under every box left empty stands a line for why,
+and ticking the box folds it away: the fact, not the verdict. "Target 1.6R, took it anyway" is enough; whether it
+was a good reason is a question for the review, where the reasons given
+for every rule stand together. Leaving every box empty is recorded too: every rule
+not met. The page of the trade then shows the rules with a tick or a cross,
+and the rules of the version it was ticked against, whatever the playbook
+says later.
+
+Editing a trade shows its checklist as it was ticked. A trade tied to a
+playbook later, with no checklist, says so on its page; tick the rules in
+its form to record them, or leave them alone and it stays as it is.
+
+**At the close.** The form that closes a trade shows the management rules
+of its playbook under the outcome, a box each. Tick what was held; the rules
+left unticked are recorded with the trade, apart from the ones of the entry,
+each with its why, the same way.
+The page of the trade then shows both lists, the entry and the management,
+with a tick or a cross each; while the trade is open the management rules
+stand there as a plain list, to be kept in mind. A closed trade edited later
+keeps its ticks unless the list is touched.
+
+**The frame.** When the playbook has limits, a line above its checklist
+holds them against the playbook's own trades at that moment: trades this week and this
+month against the caps, the R of the week against the loss limit, positions
+open against the cap, and the risk typed in the form against its cap. A
+figure turns red where this trade would go past the limit. Nothing is
+refused; the figure is there to be seen before the box is ticked.
+
+**Reviewing a block.** The page of the playbook ends with *Review*: one
+field, a dated entry each time, and screenshots pasted with it stay under
+that entry, the way an update is added to a plan. That is where a block is
+taken apart when its count is reached: what the trades said, what leaked,
+what the next version changes. Then the rules are revised in the form under
+a new number. When a block has run its course and has no review yet, the
+Playbooks tab turns amber, the list says *review due* and the page of the
+playbook says which block is complete; a dated entry per completed block
+settles it.
+
+**Changing the status.** A playbook set to *retired* leaves the form of a
+trade and drops to the end of the list, grey; its page, its trades and its
+figures stay. Set it back to *active* and it is offered again. **Delete**
+on the page moves the folder to `.trash`, versions and screenshots
+included, and the Trash card on the Accounts tab puts it back; the trades
+opened under it keep its name and their checklists either way.
+
+**Trades already taken this way.** A playbook is usually written for a way
+of trading that has been going on for a while. To count those trades under
+it, run
+
+    python3 tools/attach_playbook.py <journal root> <playbook id>
+
+It names how many trades would be tied, by account and by style: the ones of
+the playbook's styles opened on or after its *counts from* date that carry
+no playbook yet. Add `--apply` to write it. These trades get the playbook
+and its version, no setup and no checklist: nobody ticked the rules for
+them, and they do not hold the version, so the rules stay a draft. Open each
+one and fill that in if you remember.
+
+**The figures.** The Statistics tab opens with *By playbook*: a row per
+playbook with its setups beneath it, the trades taken under none last, and
+a *clean* column, the share of ticked trades that met every rule. The
+monthly and quarterly reports carry the same table. Next to *clean* stands
+*held*, the share of closed trades that ticked the management rules and kept
+every one. The page
+of a playbook adds *By setup* and *What a rule costs*: for every rule that
+was not met, at the entry or to the close, how many trades broke it and what
+those trades brought in R, against the last row, the trades that kept every
+rule. Only ticked trades of the current version take part in that table.
+Under it, *Reasons given* folds out what stood behind each rule not met, in
+the trader's own words, a line per trade.
 
 ## Trading plans
 
@@ -251,6 +435,11 @@ sum of two currencies has no name.
 
 ## The Statistics tab
 
+**By playbook.** First on the tab, when any trade names a playbook: a row per
+playbook with its setups beneath it, the trades under none last, with
+trades, WR, Σ R, EV, money, and the *clean* and *held* shares. A row leads to
+the playbook's page. The Playbooks section above says what the shares mean.
+
 **Equity by account.** One picture per account, each on its own scale, because
 the small moves of a small account would vanish next to a 100k prop. The switch
 above picks a single account and applies to the tables below as well. Archived
@@ -363,6 +552,7 @@ The **Accounts** tab.
   offering it when a trade is opened. An account with trades cannot be deleted,
   only archived; one without them is deleted into `.trash` like everything else.
 - **Trash** lists everything deleted, newest first, with a **Restore** button.
+  The card is folded, the count on it; a click opens the list.
 - **Pairs** are the suggestions for the form. Taking a pair out of the list does
   not touch the trades already recorded with it. Every pair is shown with its
   flags: two round ones for a currency pair, one for an index, a lettered coin
@@ -408,9 +598,9 @@ across the boundary.
 
 **What is in a report.** The summary, with the same figures for the period
 before it in the next column, so every number is read against something. Under
-it the period cut by style, by pair, by account, by direction, by entry
-timeframe and by execution format, every row with its trades, WR, Σ R, EV and
-money; the balance of each account before and after;
+it the period cut by playbook (with the setups beneath, when any trade names
+one), by style, by pair, by account, by direction, by entry timeframe and by
+execution format, every row with its trades, WR, Σ R, EV and money; the balance of each account before and after;
 the best and the worst trade by R; and the process, meaning how many daily cards
 you wrote for the days you traded and what grades you gave them. In the summary
 there is one figure the tabs do not show: **deepest fall from a high**, how far
@@ -427,7 +617,8 @@ period, press **Recalculate**.
 direction in the report tables and the journal opens filtered to it, over the
 months of that report. That is how a row like "XAU, 5 trades, -4.56 R" turns
 back into the five trades it was counted from, with the idea you wrote before
-each entry. The best and the worst trade lead straight to the trade itself.
+each entry. The best and the worst trade lead straight to the trade itself, and a
+playbook row to the playbook's page.
 
 ## Search
 
@@ -449,6 +640,9 @@ Everything is in the `journal/` folder: ordinary text files and pictures.
     journal/cards/2026-W36.md
     journal/plans/2026-08-31-eurusd/plan.md
     journal/plans/2026-08-31-eurusd/shots/*.png
+    journal/playbooks/pullback/playbook.md
+    journal/playbooks/pullback/versions/1.0.md
+    journal/playbooks/pullback/shots/*.png
     journal/accounts/*.md
     journal/adjustments/*.md
     journal/reports/2026-08.md
