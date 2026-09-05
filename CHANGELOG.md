@@ -2,6 +2,47 @@
 
 What changed and why. Newest first.
 
+## v1.5.1, 05.09.2026
+
+### Added
+
+- **The name of an account leads to its statistics.** On the front page the
+  name over the balance is a link: it opens the Statistics tab with that
+  account chosen, its own equity curve and its own figures, instead of the
+  filter having to be set by hand.
+- **The trades of a card are counted by colour.** The Cards tab said `3` for
+  a week that had four positions in it, because the count of a week is what it
+  closed. Both tables now say it the way the front page says a winrate: green
+  won, red lost, amber break-even, blue still in the market when the period
+  ended, no labels, the words in the tooltip. The daily table gained the
+  column; the weekly card carries the same figures under its trades field, so
+  the number and what stands behind it are read together. A card with no
+  trades behind it in the journal keeps the count written on it.
+- **The progress of a focus runs to 10, and every number says what it means.**
+  The weekly card had a bare 1 to 5 under the focus, a scale that drifts
+  because nobody wrote it down. It is now 1 to 10, each with its word, from
+  `1 · not moved` to `10 · done, take a new focus`, and a line under the field
+  saying that a 10 is a focus to retire and replace. Cards written on the old
+  five read unchanged; their number stood for a fifth of the way, so it is
+  worth revisiting by hand.
+- **A position still in the market is graded on the card of the week it was
+  run.** Both cards offer the trades the period held and did not close, as
+  `USDJPY long, open since 01.09`, next to the ones it closed. A line picked
+  from that list remembers which trade it names, so its result is the
+  journal's answer and not a frozen word: `open` while the position is open,
+  `Win +2.40 R, 18.09` once it closes, a fortnight later if that is how long
+  the swing ran. The money of the card does not move, a period is still
+  measured by the exits it had, and a result you type yourself is kept as
+  typed. The row keeps the trade in a fourth cell of the file; a card written
+  before it has three cells and reads exactly as it did.
+- **The best trade of a card is picked, not only typed.** Over the best trade
+  field, on both report cards, stands **pick a trade**, a drop-down of the
+  trades of the day or of the week, the open ones among them, spelled as the
+  assessment table spells them. What you pick is put into the text where the
+  cursor stands; the list goes back to empty and saves nothing of its own, so
+  the field stays the text it was. It is not drawn when the period held no
+  trade at all.
+
 ## v1.5.1, 09.09.2026
 
 The licence changes. Nothing else does.

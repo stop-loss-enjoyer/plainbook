@@ -301,6 +301,18 @@ class Weeks(unittest.TestCase):
             with self.assertRaises(RecordError):
                 Week(week=bad).check()
 
+    def test_the_progress_of_a_focus_runs_to_ten(self):
+        """The scale of the card: 1 to 10, and a 10 is the best week the focus
+        can have. A card written on the old five keeps reading: those numbers
+        are in the ten as well."""
+        for good in (1, 5, 10):
+            self.assertEqual(self.sample(progress=good).check().progress, good)
+        for bad in (0, 11, -1):
+            with self.assertRaises(RecordError):
+                self.sample(progress=bad).check()
+        k = store.text_to_week("---\nweek: 2026-W36\nprogress: 3\n---\n")
+        self.assertEqual(k.progress, 3)
+
     def test_the_two_cards_share_a_folder_and_do_not_mix(self):
         """A day and a week are both cards and live in journal/cards, told
         apart by the name of the file."""
@@ -337,6 +349,23 @@ class Weeks(unittest.TestCase):
             "1. EURUSD long | B\n2. XAU short\n3.\n")
         self.assertEqual([(r.trade, r.grade) for r in k.assessment],
                          [("EURUSD long", "B"), ("XAU short", "")])
+
+    def test_the_trade_of_a_row_is_the_fourth_cell(self):
+        """A row picked from the trades the journal offers keeps its id, so
+        the card can be drawn with what that trade did later. A row written
+        before the cell existed has three, and reads with an empty id."""
+        k = store.text_to_week(
+            "---\nweek: 2026-W36\n---\n\n## Trades\n\n"
+            "1. USDJPY long, open since 01.09 | A |  | 2026-09-01-01-usdjpy\n"
+            "2. XAU short, 03.09 | C | Lose -1.00 R\n")
+        self.assertEqual([(r.trade, r.result, r.id) for r in k.assessment],
+                         [("USDJPY long, open since 01.09", "", "2026-09-01-01-usdjpy"),
+                          ("XAU short, 03.09", "Lose -1.00 R", "")])
+        text = store.week_to_text(k)
+        self.assertIn("1. USDJPY long, open since 01.09 | A |  | "
+                      "2026-09-01-01-usdjpy\n", text)
+        self.assertIn("2. XAU short, 03.09 | C | Lose -1.00 R\n", text)
+        self.assertEqual(store.text_to_week(text).assessment, k.assessment)
 
     def test_the_result_is_the_third_cell_and_an_old_line_still_reads(self):
         """A line written before the result column has two cells, or one; it

@@ -197,7 +197,7 @@ def build(root, days=40):
                     Graded("EURUSD long, second entry", "C", "Lose -1.04 R")]))
 
     store.save_week(root, Week(
-        week=stats.week(today), grade="B", quality="B", progress=3,
+        week=stats.week(today), grade="B", quality="B", progress=7,
         pnl=sum(t.pnl or 0.0 for t in store.all_trades(root)
                 if not t.is_open and t.closed
                 and stats.week(t.closed) == stats.week(today)),

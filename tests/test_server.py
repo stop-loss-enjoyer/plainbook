@@ -1411,7 +1411,8 @@ class ServerCase(unittest.TestCase):
         now = datetime.now().strftime("%Y-%m-%dT%H:%M")
         trade_id = self.open_trade(entry=now, risk="1")     # 1% of ~10 000 at risk
         _, html = self.get("/")
-        tile = re.search(r'<div class="tile([^"]*)"><div class="name">Broker', html)
+        tile = re.search(r'<div class="tile([^"]*)"><div class="name">'
+                         r'<a href="/stats\?account=broker"[^>]*>Broker', html)
         self.assertIn("over", tile.group(1))
         self.assertIn("daily loss limit reached", html)
         self.assertIn("limit 50 $", html)
@@ -1491,6 +1492,11 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/week/2026-W35")
         self.assertIn("Weekly report card", html)
         self.assertIn("missed / underexploited opportunities", html)
+        # the progress of the focus: ten numbers, each with what it means
+        self.assertIn('<option value="10">10 · done, take a new focus</option>', html)
+        self.assertIn('<option value="1">1 · not moved</option>', html)
+        self.assertIn('<option value="5">5 · halfway</option>', html)
+        self.assertNotIn('<option value="11"', html)
         self.post("/week/save", {
             "week": "2026-W35", "previous": "2026-W35", "grade": "B", "pnl": "480",
             "trades": "4", "quality": "A", "progress": "3",
@@ -1781,6 +1787,11 @@ class ServerCase(unittest.TestCase):
         _, html = self.get(f"/card/{day}")
         self.assertIn(f'<option value="{label}">', html)
         self.assertIn('name="assess_result"', html)
+        # the same list is offered to the best trade, which is written by hand
+        self.assertIn('class="pick" data-into="best"', html)
+        # and is not offered on a day the journal held no trade at all: the
+        # list behind it would be empty
+        self.assertNotIn('class="pick"', self.get("/card/2000-01-01")[1])
         # graded without a result, as a card written before the column was
         self.post("/card/save", {"date": day, "previous": day, "grade": "B",
                                  "assess_trade": [label, "XAU short"],
@@ -1868,6 +1879,66 @@ class ServerCase(unittest.TestCase):
                 and stats.week(t.closed) == stats.week(now))
         _, home = self.get("/")
         self.assertIn(f"{n} closed", home)
+
+    def test_74_a_swing_still_open_is_graded_on_the_week_it_was_run(self):
+        """The card of week 29 is written while the position is in the market:
+        the row keeps the trade, says "open", and says what the trade made when
+        it closes, in week 30, with the day it closed on."""
+        tid = self.open_trade(pair="USDJPY", style="swing", risk="1",
+                              entry="2026-07-14T09:00")
+        q = urllib.parse.quote(tid)
+        label = "USDJPY long, open since 14.07"
+        _, html = self.get("/week/2026-W29")
+        self.assertIn(f'<option value="{label}">', html)      # offered, though open
+        self.assertIn(f'"{label}": "{tid}"', html.replace("&quot;", '"'))
+        self.assertIn('name="assess_id"', html)
+        # graded in the week it was run, with the result the journal offered
+        self.post("/week/save", {
+            "week": "2026-W29", "previous": "2026-W29", "grade": "B",
+            "focus": "hold the swing", "assess_trade": [label],
+            "assess_grade": ["A"], "assess_result": ["open"], "assess_id": [tid]})
+        k = store.load_week(self.root, "2026-W29")
+        # the answer of the journal is not written into the card: the trade is
+        self.assertEqual([(r.trade, r.grade, r.result, r.id) for r in k.assessment],
+                         [(label, "A", "", tid)])
+        _, html = self.get("/week/2026-W29")
+        self.assertIn('style="width:100%" value="open"', html)
+        # it closes a week later, in week 30
+        _, form = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(form), "result": "Win",
+                                  "pnl": "200", "exit": "2026-07-22T12:00"})
+        r = self.S.journal(True).r(tid)
+        # the card of week 29 now says what the swing made, and when
+        _, html = self.get("/week/2026-W29")
+        self.assertIn(f'style="width:100%" value="Win {r:+.2f} R, 22.07"', html)
+        # and in week 30, where the money is, it is offered as a closed trade
+        _, html = self.get("/week/2026-W30")
+        self.assertIn('<option value="USDJPY long, 22.07">', html)
+        # the cards tab counts the trades of a week by colour and no words:
+        # week 29 held it and did not close it, so it is the blue one there,
+        # and week 30, where it closed in the money, has it green
+        def row(week, html):
+            return re.search(rf'href="/week/{week}".*?</tr>', html, re.S).group(0)
+        self.post("/week/save", {"week": "2026-W30", "previous": "2026-W30",
+                                 "grade": "A", "focus": "let it run"})
+        _, html = self.get("/cards")
+        self.assertIn('<span class="live">', row("2026-W29", html))
+        self.assertNotIn('<span class="win">', row("2026-W29", html))
+        self.assertIn('<span class="win">1</span>', row("2026-W30", html))
+        self.post(f"/week/2026-W30/delete", {})
+        self.post(f"/week/2026-W29/delete", {})
+        self.post(f"/trade/{q}/delete", {})
+
+    def test_75_a_card_with_no_trades_behind_it_keeps_its_own_count(self):
+        """A week brought in from before the journal held those trades has
+        nothing to break down, and the number written on it stands."""
+        self.post("/week/save", {"week": "2026-W20", "previous": "2026-W20",
+                                 "grade": "C", "trades": "6", "focus": "imported"})
+        _, html = self.get("/cards")
+        row = re.search(r'href="/week/2026-W20".*?</tr>', html, re.S).group(0)
+        self.assertNotIn("breakdown", row)
+        self.assertIn(">6</a>", row)
+        self.post("/week/2026-W20/delete", {})
 
 
 if __name__ == "__main__":

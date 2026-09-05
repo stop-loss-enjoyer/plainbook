@@ -226,6 +226,32 @@ async function run(p) {
   check(page.includes("By playbook".toLowerCase()) && page.includes("Break test".toLowerCase()), "statistics show the playbook");
   await p.goto(B + "/playbook/break-test/version/1.0");
   check((await p.evaluate(`document.body.innerText`)).toLowerCase().includes("kept"), "frozen version page opens");
+
+  // ---- 7. the report card: the trades of the day offered to the two fields
+  // that name a trade, the best one and the assessment
+  await p.goto(B + "/card/2026-09-07");            // the day the trade above closed
+  check(await p.evaluate(`!!document.querySelector('select.pick[data-into=best]')`),
+    "the card offers the day's trades to the best trade");
+  const label = await p.evaluate(`document.querySelector('select.pick option:nth-child(2)').value`);
+  await p.evaluate(`var i=document.querySelector('.pick'); i.value=${JSON.stringify(label)}; i.dispatchEvent(new Event('change',{bubbles:true}))`);
+  check(await p.evaluate(`document.querySelector('textarea[name=best]').value`) === label + " ",
+    "picking a trade writes it into the best trade: " + label);
+  check(await p.evaluate(`document.querySelector('.pick').value`) === "",
+    "the picker goes back to empty, so it saves nothing of its own");
+  await p.evaluate(`var t=document.querySelector('[name=assess_trade]'); t.value=${JSON.stringify(label)}; t.dispatchEvent(new Event('input',{bubbles:true}))`);
+  check(await has(`document.querySelector('[name=assess_result]').value`, "lose"),
+    "the assessment fills the result of the picked trade");
+  check(await p.evaluate(`document.querySelector('[name=assess_id]').value`) !== "",
+    "the row remembers which trade it names");
+  await p.evaluate(`var t=document.querySelector('[name=assess_trade]'); t.value='a trade of my own'; t.dispatchEvent(new Event('input',{bubbles:true}))`);
+  check(await p.evaluate(`document.querySelector('[name=assess_id]').value`) === "",
+    "a text the journal does not know lets the trade go");
+  await p.evaluate(`var t=document.querySelector('[name=assess_trade]'); t.value=${JSON.stringify(label)}; t.dispatchEvent(new Event('input',{bubbles:true}))`);
+  await p.evaluate(`document.querySelector('[name=grade]').value='B'`);
+  await p.submit();
+  check((await p.url()).startsWith("/card/2026-09-07"), "the card saved: " + (await p.url()));
+  check(await has(`document.querySelector('textarea[name=best]').value`, label),
+    "the card came back with the trade in the best trade");
 }
 
 let failed = false;

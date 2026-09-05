@@ -158,6 +158,10 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
  margin:0 -1px -1px 0}}
 .tile .name{{color:{DIM};font-size:10px;text-transform:uppercase;
  letter-spacing:.09em}}
+/* the name of an account leads to its statistics: it keeps the quiet look of
+   a caption and lights up under the pointer, so the tile stays a tile */
+.tile .name a{{color:inherit}}
+.tile .name a:hover{{color:{INK};text-decoration:underline;text-underline-offset:3px}}
 .tile .value{{font:600 22px/1.15 {MONO};margin-top:5px;
  font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
 .tile .sub{{color:{INK2};font-size:11px;margin-top:4px}}
@@ -219,9 +223,11 @@ tr.group td.lose{{color:{BAD}}}
 tr.group .label{{color:{INK};font-weight:600;letter-spacing:.04em}}
 tr.group .dates{{color:{DIM};margin-left:8px}}
 .win{{color:{GOOD}}} .lose{{color:{BAD}}} .flat{{color:{INK2}}}
-/* in the winrate tile the three numbers say what they are by colour alone */
-.be{{color:{WARN}}}
-.tile .sub .breakdown{{font-family:{MONO};font-size:12px}}
+/* figures that say what they are by colour alone and take no labels: the
+   winrate tile, and the trades of a report card. Blue is a position that was
+   still in the market when the period ended */
+.be{{color:{WARN}}} .live{{color:{ACCENT}}}
+.breakdown{{font-family:{MONO};font-size:12px}}
 .muted{{color:{DIM}}}
 
 /* forms */

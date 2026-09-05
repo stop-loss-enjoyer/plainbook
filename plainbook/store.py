@@ -516,9 +516,12 @@ _ROW = re.compile(r"^\s*\d+[.)]\s*")
 
 
 def assessment_to_text(rows):
+    """The table of a card: number, trade, grade, result, and last the id of
+    the trade the line names, when it was picked from the ones offered. A row
+    written before the fourth cell existed has three, and reads as it did."""
     lines = []
     for n, row in enumerate(rows, 1):
-        cells = [f"{n}. {row.trade}".rstrip(), row.grade, row.result]
+        cells = [f"{n}. {row.trade}".rstrip(), row.grade, row.result, row.id]
         while len(cells) > 1 and not cells[-1]:
             cells.pop()
         lines.append(" | ".join(cells))
@@ -532,8 +535,8 @@ def text_to_assessment(text):
         if not line:
             continue
         cells = [c.strip() for c in line.split("|")]
-        trade, grade, result = (cells + ["", ""])[:3]
-        rows.append(Graded(trade=trade, grade=grade, result=result))
+        trade, grade, result, tid = (cells + ["", "", ""])[:4]
+        rows.append(Graded(trade=trade, grade=grade, result=result, id=tid))
     return rows
 
 

@@ -307,10 +307,18 @@ ASSESSMENT_ROWS = 5
 class Graded:
     """One line of the trades assessment: a trade, the mark it earned, and how
     it ended. The result is text, as on paper: the journal offers what it
-    knows, the owner keeps the last word."""
+    knows, the owner keeps the last word.
+
+    `id` is the trade the line names, kept when the line was picked from the
+    ones the journal offers. A line that has it is drawn with the journal's
+    answer every time the card is opened, and the answer is not stored: a
+    swing graded while it was still running says "open" that week and says
+    what it made once it closes, a fortnight later if that is how long it
+    took. A result the owner typed is stored and stands."""
     trade: str = ""
     grade: str = ""
     result: str = ""
+    id: str = ""
 
 
 # --- daily card ------------------------------------------------------------
@@ -399,7 +407,7 @@ class Week:
     pnl: float = None
     trades: int = None              # how many trades the week held
     quality: str = ""               # how good the opportunities were
-    progress: int = None            # 1 to 5 on the current focus
+    progress: int = None            # 1 to 10 on the current focus
     focus: str = ""
     process: str = ""
     learned: str = ""
@@ -434,8 +442,8 @@ class Week:
             raise RecordError(f"bad week {self.week!r}: expected YYYY-Www")
         if not 1 <= self.number <= 53:
             raise RecordError(f"no week {self.number} in a year")
-        if self.progress is not None and not 1 <= self.progress <= 5:
-            raise RecordError(f"{self.week}: progress is 1 to 5")
+        if self.progress is not None and not 1 <= self.progress <= 10:
+            raise RecordError(f"{self.week}: progress is 1 to 10")
         try:
             self.monday
         except ValueError:

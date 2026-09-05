@@ -333,8 +333,23 @@ that one. The **Cards** tab lists them, the daily ones in the upper table.
   closed that day; pick one, or type its pair, and the result fills in with
   what the journal knows, `Win +1.20 R`, and stays yours to change. An empty
   line is not saved.
+- **A position still in the market can be graded too.** The list offers what
+  the day held and did not close, as `USDJPY long, open since 01.09`. Its
+  result says `open`, and it does not have to be corrected later: a line you
+  picked from the list remembers which trade it is, so when the trade closes,
+  in a fortnight if that is how long the swing runs, the line says what it
+  made and the day it closed on, `Win +2.40 R, 18.09`. The money of the card
+  is untouched by it: a period counts the trades it closed, and the R of that
+  swing belongs to the week it closed in. Type your own words into the result
+  and they are kept as typed, exactly as before.
 - Then, laid out as on paper: focus, process, what went well, errors, then the
   best trade beside the assessment, and the overview under them.
+- **best trade** is your text, and over it stands **pick a trade**, a
+  drop-down of the day's trades: choose one and its name is put into the text
+  where the cursor stands, spelled as the assessment spells it. The list goes
+  back to empty and saves nothing of its own; the words after the name are
+  yours. It offers what the assessment offers, the open positions among them,
+  and is not shown on a day the journal held no trade at all.
 
 ## The weekly card
 
@@ -346,15 +361,37 @@ and both kinds are stored side by side in `journal/cards`.
   groups the trades by. Changing it moves the card, exactly as the date moves a
   daily one, and the journal refuses to write one week over another.
 - **P&L** and **trades** are filled in from the trades that week closed. Both
-  are editable: the count you review by is yours, not the journal's.
-- **progress** under the focus is the 1 to 5 of the paper card: how far the
-  thing you are working on has moved.
+  are editable: the count you review by is yours, not the journal's. Under the
+  count stand the week's trades in figures and colour, no words: green won,
+  red lost, amber break-even, blue still in the market when the week ended.
+  That is why the field can say 3 while the colours say `2 / 1 / 1`: the field
+  counts what the week closed, the colours count everything it held.
+- **progress** under the focus says how far the thing you are working on has
+  moved this week, out of 10, and every number carries the word for what it
+  means, from `1 · not moved` to `10 · done, take a new focus`. A 10 is a focus
+  worked through: retire it and write the next one. The words are there so that
+  the same number means the same week in January and in June. A card written
+  when the scale ran to 5 keeps its number and reads as it did, but that number
+  was a fifth of the way, not a tenth: change it by hand if you want the old
+  weeks on the new scale.
 - **trades assessment**: the same table as the daily card, for the trades of
   the week, the mark each one earned and how each ended. The trade field
   suggests the trades you closed that week, and the result fills in from the
-  journal as on the daily card; an empty line is not saved.
+  journal as on the daily card; an empty line is not saved. The swings the
+  week held and did not close are offered here as well, with the same `open`
+  and the same answer once they close: the week you carried a position is the
+  week to grade how you carried it.
 - Then, as on paper: the weekly process, what went well, errors, the best trade,
-  what you missed, and the key lesson of the week.
+  what you missed, and the key lesson of the week. The **best trade** has the
+  same **pick a trade** drop-down as the daily card, offering the trades of the
+  week, the ones still open among them.
+
+## Both cards on the Cards tab
+
+The **trades** column of both tables is the same row of figures: green won,
+red lost, amber break-even, blue what was still in the market when the day or
+the week ended. Hover for the words. A card brought in from before the journal
+held those trades has nothing to count, and shows the number written on it.
 
 ## Two small things everywhere
 
@@ -373,6 +410,8 @@ and both kinds are stored side by side in `journal/cards`.
   account with a **daily loss limit** (see Accounts) carries one more line:
   what today has already cost, what the open trades still put at risk, and the
   limit; the tile turns amber at four fifths of it and red when it is reached.
+  **The name of an account is a link**: it opens Statistics with that account
+  chosen, its own equity curve and its own figures.
 - **Open positions**: what is in the market right now, with the risk in money
   and a Close button.
 - **Summary tiles**: the current period, the size of the selection, the
