@@ -64,7 +64,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash, the owner's lists of pairs and words |
 | `plainbook/balances.py` | balances and R, computed by replaying history |
 | `plainbook/stats.py` | summaries, the equity curve, the R distribution |
-| `plainbook/reports.py` | monthly and quarterly reports |
+| `plainbook/reports.py` | monthly and quarterly reports: `compose` reads the figures off the journal on every look, `build` writes them into the file that is the archive and holds the conclusions |
 | `plainbook/html.py` | the palette, the CSS, the page shell, the SVG charts |
 | `plainbook/flags.py` | the round flag icons of a trading symbol, and what a symbol is taken apart into |
 | `plainbook/server.py` | routes, pages, forms: everything HTTP |

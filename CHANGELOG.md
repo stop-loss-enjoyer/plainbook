@@ -43,6 +43,50 @@ What changed and why. Newest first.
   the field stays the text it was. It is not drawn when the period held no
   trade at all.
 
+### Changed
+
+- **A report opens on a strip of figures.** A monthly or quarterly report
+  used to be a summary table and a wall of tables under it, every number the
+  same size, the profit and the mistakes to be looked for. It now opens on a
+  strip of tiles, one figure each: the result in R and money, the winrate with
+  the EV and the trades won, lost, break-even by colour, and the deepest fall
+  from a high, each with the period before in grey under it; then the
+  mistakes, the cards written against the days traded, and the best and the
+  worst trade. Under the strip every closed trade of the period stands as one
+  bar, in the order of the exits, against a dashed line at -1 R, the stop: a
+  bar past it means the size was too large, and it shows without a label;
+  a line marks every new week, or month in a quarter, and a bar opens its
+  trade. The rings of the period stand beside it. Then **By playbook** with
+  **Rules** next to it, every rule not met with what the trades that broke
+  it brought, costliest first, against the trades that kept every rule, and
+  the losses past the stop listed under it; **Process** with the errors you
+  wrote on the cards of the period; and your **Conclusions**, in one place
+  whether written or not, read as text with an Edit fold once they are. The
+  tables come after, Σ R the one coloured column. Nothing is graded and no
+  surface is coloured.
+- **Mistakes are what the journal itself recorded.** A rule ticked as not met,
+  at the entry or at the close, or a loss of -1.2 R and worse. A trade that did
+  both counts once; a trade never ticked counts neither way, and the tile says
+  how many trades under a playbook were never ticked. The count is plain
+  ink; only the R of those trades carries colour.
+- **A report is drawn from the journal as it is now.** The page no longer
+  reads its figures back from the file, so there is nothing to recalculate
+  and the Recalculate button is gone. Building a report, and saving its
+  conclusions, writes the figures with the text into
+  `journal/reports/<period>.md`, the archive and the home of the
+  conclusions, which a rebuild still never overwrites. A report page needs
+  the file to exist, as before; *rebuild* on the Reports tab refreshes it.
+- **The Reports tab is a shelf.** Instead of two select boxes and a list of
+  period ids, every quarter and month since the first closed trade stands in
+  one table, newest first, the months under their quarter, with the figures
+  the journal holds for it now whether a report was built or not: trades and
+  their colours, WR, Σ R, EV, money, and the daily cards written against the
+  days traded. A period with trades and no report has a Build button in its
+  row, blue on the one that is due; a period with one is a link to it, with
+  the day the file was built and a dot once conclusions are written. The
+  running month and quarter are marked, and only there the positions open
+  now stand in blue beside the closed trades.
+
 ## v1.5.1, 09.09.2026
 
 The licence changes. Nothing else does.

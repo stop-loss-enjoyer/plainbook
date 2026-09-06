@@ -84,13 +84,20 @@ PnL and the number of trades come from the week you traded, and stay editable.
 
 **Statistics that answer honest questions.** An equity curve per account, by
 date or by trade, coloured against the balance it started from, the
-distribution of R as two rings, losses and wins each cut by size, slices by
-style, pair and account with the EV of every row, and a monthly or quarterly report built on a button,
-with the figures recomputed and your conclusions kept. A report carries the
-period before it beside every figure, the rings of that period, the deepest fall
-from a high, the slices by direction, entry timeframe and execution format, the
-best and the worst trade, and the grades of the daily cards. Every row of a
-report is a link back to the trades it was counted from.
+distribution of R as two rings, losses and wins each cut by size, and slices by
+style, pair and account with the EV of every row.
+
+**A report read in a second.** A month or a quarter opens on its figures, one
+tile each: the result, the winrate with the EV and the deepest fall from a
+high, each with the period before in grey under it, then the mistakes, the
+cards written against the days traded, the best and the worst trade. Under
+them every closed trade of the period stands as one bar against the line of
+the stop, the rings of the period beside it; then which rules were not met and
+what they cost, the errors you wrote on your cards, your conclusions, kept
+through every rebuild, and only then the tables. The Reports tab is a shelf of
+every month and quarter since the first closed trade, with its figures whether
+a report was built for it or not. A pair, a style, an account or a direction
+in the tables leads back to the trades it was counted from.
 
 **Pairs you recognise before you read them.** EURUSD carries two round flags,
 GER40 the German one, gold and the coins a lettered face. The flags are drawn in

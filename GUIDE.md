@@ -624,40 +624,78 @@ the difference came from. That way the history stays honest.
 
 ## Reports
 
-The **Reports** tab: pick a month or a quarter and press **Build**. The header
-has no button for it; building a report belongs on the tab that shows them. A report is
-an ordinary file in `journal/reports/`. Building it again recomputes the figures
-and **never overwrites your conclusions**, so you can write them right in the
-report.
+The **Reports** tab is a shelf: every quarter and month since your first closed
+trade, newest first, each with the figures the journal holds for it now, whether
+a report was built for it or not. Trades, then won / lost / break-even and, on
+the running period, the positions open now in blue, WR, Σ R, EV, money, and
+the daily cards written against the days traded. A period with trades and no
+report has a **Build** button in its row, blue on the one that is due, the
+newest finished period with trades and no report. A period with a report is a
+link to it, with the day its file was built and a blue dot once conclusions
+are written; *rebuild* refreshes the file. The month and the quarter still
+running are marked so.
 
 **A report counts the trades that closed in the period**, the way a broker
 states a month and the cards count a day. The list of trades groups by entry,
 so a row of a report and the list it opens can differ by a trade that ran
 across the boundary.
 
-**What is in a report.** The summary, with the same figures for the period
-before it in the next column, so every number is read against something. Under
-it the period cut by playbook (with the setups beneath, when any trade names
-one), by style, by pair, by account, by direction, by entry timeframe and by
-execution format, every row with its trades, WR, Σ R, EV and money; the balance of each account before and after;
-the best and the worst trade by R; and the process, meaning how many daily cards
-you wrote for the days you traded and what grades you gave them. In the summary
-there is one figure the tabs do not show: **deepest fall from a high**, how far
-the period went below its own best point, in R. A month can end in plus and
-still have been survived rather than traded.
+**What is in a report.** The header leads to the report of the period before
+and the one after, and for a month to its quarter, when those reports exist.
+The page opens on the figures a review asks for first, one tile each, the
+period before in grey under the first three: the result in R with the money
+under it; the winrate with the EV and the trades won, lost, break-even by
+colour, the positions open now in blue while the period runs; the **deepest
+fall from a high**, how far
+the period went below its own best point, in R, because a month can end in
+plus and still have been survived rather than traded; the **mistakes**; the
+**process**, the daily cards written against the days traded and their
+grades; and the best and the worst trade by R, each a link to the trade.
 
-**The rings** stand right under the summary, before the tables: the R
-distribution, the same as on the Statistics tab but counted on this period
-alone. The tables are the numbers frozen when the report was last built; the
-rings are drawn from the journal as it is now, so if you edited a trade of that
-period, press **Recalculate**.
+**Mistakes** are what the journal itself recorded as one: a rule ticked as not
+met at the entry or at the close, or a loss of -1.2 R and worse, which is past
+the stop and therefore size. A trade that did both counts once; a trade never
+ticked counts neither way, and the tile says how many trades under a playbook
+were never ticked. The
+count is plain ink and only the R of those trades is coloured: a report does
+not grade a month. The **Rules** card names every rule the trades ticked
+against the current version of their playbook did not meet, how many trades
+broke it and what they brought, the costliest first, against the
+last row, the trades that kept every rule; the losses past the stop are listed
+under it as **Past the stop**, each a link to the trade. The card stands
+whenever a trade of the period names a playbook or a loss went past the stop.
+
+**Trade by trade** is every closed trade of the period as one bar, in the
+order of the exits: a win stands up in green, a loss hangs down in red, a
+break-even is an amber tick on the zero line, and a thin line marks where a new
+week begins, or a new month in a quarter. The dashed line is the stop, -1 R. A
+bar that reaches past it means the size was too large, and it shows without a
+label.
+Hover a bar for the trade, click it to open it. Beside it stand **the rings**,
+the R distribution of the period, the same as on the Statistics tab.
+
+Then **By playbook** with its setups beneath, when any trade names one;
+**Process**, with the daily cards against the days traded, the weekly cards
+of the period, the grades, the D and F days and the errors you wrote on the
+cards, each a link to its card; and your **Conclusions**: an open field until they are
+written, then your text with an **Edit** fold under it. Saving writes the
+figures and the text into `journal/reports/<period>.md`, an ordinary markdown
+file you can read anywhere. The text is never overwritten by a rebuild. The
+page itself is always the journal as it is now, so there is nothing to
+recalculate; the file catches up when you save or press *rebuild* on the shelf.
+
+After the story come the tables: for a quarter its months, each a link to its
+own report when one exists; then by pair, by style, the accounts with the
+balance of each before and after the period, by direction, by entry timeframe
+and by execution format, every row with its trades, WR, Σ R, EV and money, Σ R
+the one coloured column.
 
 **Every row leads to its trades.** Click a pair, an account, a style or a
 direction in the report tables and the journal opens filtered to it, over the
 months of that report. That is how a row like "XAU, 5 trades, -4.56 R" turns
 back into the five trades it was counted from, with the idea you wrote before
-each entry. The best and the worst trade lead straight to the trade itself, and a
-playbook row to the playbook's page.
+each entry. The best and the worst trade lead straight to the trade itself, a
+playbook row to the playbook's page, and a bar of the tape to its trade.
 
 ## Search
 

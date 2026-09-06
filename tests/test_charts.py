@@ -8,6 +8,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from plainbook import html as H
 from plainbook import stats
 from plainbook.balances import Journal
 from plainbook.html import smooth_path, spread_days
@@ -254,6 +255,116 @@ class DrawdownAndSlicesCase(unittest.TestCase):
         j = self.journal([(100, [])])
         rows = dict(stats.by_values(j, j.trades, lambda t: t.execution or ["not set"]))
         self.assertEqual(rows["not set"].trades, 1)
+
+
+class ReportCase(unittest.TestCase):
+    """What a report calls a mistake, and the shelf it lays the periods on."""
+
+    def trade(self, i, pnl, **kw):
+        return Trade(id=f"t{i}", account="broker", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=datetime(2026, 8, i, 10),
+                     closed=datetime(2026, 8, i, 12),
+                     result="Win" if pnl > 0 else "Lose" if pnl < 0 else "BE",
+                     pnl=pnl, **kw)
+
+    def test_a_mistake_is_a_rule_not_met_or_a_loss_past_the_stop(self):
+        import tempfile
+        from plainbook import reports
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
+        trades = [self.trade(1, 200, playbook="p", deviations=[2]),       # broke a rule and won
+                  self.trade(2, -150, playbook="p", deviations=[],
+                             exit_deviations=[7]),                         # broke at the close, past the stop
+                  self.trade(3, -100, playbook="p", deviations=[]),       # clean, the stop itself
+                  self.trade(4, -130),                                     # no playbook, past the stop
+                  self.trade(5, 100, playbook="p")]                        # tied later, never ticked
+        j = Journal(accounts, trades, [])
+        with tempfile.TemporaryDirectory() as root:
+            r = reports.compose(root, j, "2026-08")
+        self.assertEqual((r.ticked, r.unticked), (3, 1))
+        self.assertEqual((r.entry_broken, r.close_broken), (1, 1))
+        self.assertEqual([t.id for t in r.past_stop], ["t2", "t4"])      # the deeper first
+        # t2 broke a rule and went past the stop, and is counted once
+        self.assertEqual(sorted(t.id for t in r.mistakes), ["t1", "t2", "t4"])
+        self.assertEqual(r.mistakes_sum.trades, 3)
+        self.assertEqual(r.kept.trades, 1)
+        self.assertEqual([t.id for t in r.order], ["t1", "t2", "t3", "t4", "t5"])
+        self.assertEqual(r.days_traded, 5)
+        self.assertEqual(r.earlier_name, "July 2026")
+
+    def test_a_rule_not_held_at_the_close_counts_without_an_entry_checklist(self):
+        """A trade tied to its playbook later, ticked at the close only, with a
+        management rule not held: a mistake on the tile, a break in the
+        playbook's held column, the two agree."""
+        import tempfile
+        from plainbook import reports, stats
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
+        trades = [self.trade(1, 100, playbook="p", exit_deviations=[13]),   # entry never ticked
+                  self.trade(2, 100, playbook="p", exit_deviations=[]),     # close ticked clean
+                  self.trade(3, 100, playbook="p")]                          # never ticked at all
+        j = Journal(accounts, trades, [])
+        with tempfile.TemporaryDirectory() as root:
+            r = reports.compose(root, j, "2026-08")
+        self.assertEqual((r.ticked, r.unticked), (2, 1))
+        self.assertEqual((r.entry_broken, r.close_broken), (0, 1))
+        self.assertEqual([t.id for t in r.mistakes], ["t1"])
+        self.assertEqual(r.kept.trades, 1)
+        self.assertTrue(stats.ticked(trades[0]) and stats.broke(trades[0]))
+        self.assertFalse(stats.ticked(trades[2]))
+
+    def test_the_file_writes_a_dash_where_the_page_shows_one(self):
+        import tempfile
+        from plainbook import reports
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
+        j = Journal(accounts, [self.trade(4, 0)], [])
+        with tempfile.TemporaryDirectory() as root:
+            r = reports.compose(root, j, "2026-08")
+            md = reports.to_markdown(r, j, "")
+        self.assertIn("| winrate (BE not counted) | - |", md)
+        self.assertIn("1 day had trades", md)
+
+    def test_the_shelf_runs_from_the_first_closed_trade_to_now(self):
+        from plainbook import reports
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
+        j = Journal(accounts, [self.trade(3, 100)], [])
+        now = datetime(2026, 10, 5)
+        self.assertEqual(reports.periods(j, "month", now), ["2026-08", "2026-09", "2026-10"])
+        self.assertEqual(reports.periods(j, "quarter", now), ["2026-Q3", "2026-Q4"])
+        self.assertEqual(reports.periods(Journal(accounts, [], []), "month", now), [])
+        self.assertEqual(reports.next_period("2026-12"), "2027-01")
+        self.assertEqual(reports.next_period("2026-Q4"), "2027-Q1")
+        self.assertEqual(reports.previous_period("2027-Q1"), "2026-Q4")
+
+    def test_open_positions_stand_only_beside_the_running_period(self):
+        from plainbook import reports
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
+        # a swing carried over the end of May and closed in June, and one
+        # position open now, entered in August
+        carried = Trade(id="c", account="broker", pair="EURUSD", direction="long",
+                        style="swing", risk=1.0, opened=datetime(2026, 5, 20, 9),
+                        closed=datetime(2026, 6, 2, 12), result="Win", pnl=100)
+        live = Trade(id="o", account="broker", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=datetime(2026, 8, 28, 9))
+        j = Journal(accounts, [self.trade(3, 100), carried, live], [])
+        now = datetime(2026, 9, 6)
+        # a finished period shows nothing in blue, whatever ran across its end
+        self.assertEqual(reports.still_open(j, "2026-05", now), [])
+        self.assertEqual(reports.still_open(j, "2026-08", now), [])
+        self.assertEqual(reports.still_open(j, "2026-Q2", now), [])
+        # the running month and quarter carry the position open now
+        self.assertEqual([t.id for t in reports.still_open(j, "2026-09", now)], ["o"])
+        self.assertEqual([t.id for t in reports.still_open(j, "2026-Q3", now)], ["o"])
+
+    def test_the_tape_draws_one_bar_per_trade(self):
+        self.assertIn("No closed trades", H.tape_svg([], []))
+        bars = [(2.1, "Win", "/trade/a", "a"), (-1.0, "Lose", "/trade/b", "b"),
+                (-0.05, "BE", "/trade/c", "c"), (-1.6, "Lose", "/trade/d", "d")]
+        svg = H.tape_svg(bars, [(0, "W32"), (2, "W33")])
+        self.assertEqual(svg.count("<a href="), 4)
+        self.assertIn(">stop<", svg)
+        self.assertIn(">W32<", svg)
+        self.assertIn(f'fill="{H.WARN}"', svg)                  # the break-even tick
+        # the scale reaches past the deepest loss and never stops short of -1.5
+        self.assertIn(">-2<", svg)
 
 
 if __name__ == "__main__":

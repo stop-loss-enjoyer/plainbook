@@ -172,24 +172,37 @@ def by_setup(journal, trades):
     return rows
 
 
+def ticked(t):
+    """Whether the trade went through a checklist at all: at the entry, at the
+    close, or both. A trade tied to its playbook later and never ticked says
+    nothing about the rules."""
+    return t.deviations is not None or t.exit_deviations is not None
+
+
+def broke(t):
+    """Whether a ticked trade has a rule marked as not met, at the entry or at
+    the close."""
+    return bool(t.deviations or t.exit_deviations)
+
+
 def rule_costs(journal, trades, rules):
     """What each rule cost: for every rule, (rule, how many ticked trades
     broke it, Summary of those trades). Alongside, the Summary of the trades
     that met every rule, which is what a broken rule is measured against.
 
-    Only ticked trades take part: a trade tied to the playbook later says
-    nothing about any rule. Open trades are counted as breaking a rule but
+    Only ticked trades take part, ticked at the entry or at the close: a trade
+    tied to the playbook later and never ticked says nothing about any rule.
+    Open trades are counted as breaking a rule but
     carry no R yet, the Summary being of closed trades. The management rules
     are in the same table, their breaks read from the close; the measure is
     the trades that kept every rule, at the entry and after."""
-    ticked = [t for t in trades if t.deviations is not None]
-    clean = summary(journal, [t for t in ticked
-                              if not t.deviations and not t.exit_deviations])
+    held = [t for t in trades if ticked(t)]
+    clean = summary(journal, [t for t in held if not broke(t)])
     rows = []
     for r in rules:
-        broke = [t for t in ticked
-                 if r.number in t.deviations or r.number in (t.exit_deviations or [])]
-        rows.append((r, len(broke), summary(journal, broke)))
+        missed = [t for t in held
+                  if r.number in (t.deviations or []) or r.number in (t.exit_deviations or [])]
+        rows.append((r, len(missed), summary(journal, missed)))
     return rows, clean
 
 

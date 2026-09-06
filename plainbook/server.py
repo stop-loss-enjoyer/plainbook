@@ -705,7 +705,7 @@ def account_tabs(j, q, selected, right=""):
             + " ".join(parts) + f'</span><span class="right">{right}</span></div>')
 
 
-def ring(title, rows, steps, kind):
+def ring(title, rows, steps, kind, size=188):
     """One ring of the R distribution, with its slices written out beside it."""
     total = sum(n for _, n, _ in rows)
     coloured = [(label, n, sum_r, steps[i % len(steps)])
@@ -714,16 +714,21 @@ def ring(title, rows, steps, kind):
         return (f'<div class="ring"><h3>{esc(title)}</h3>'
                 f'<p class="muted">None yet.</p></div>')
     sum_r = sum(r for _, _, r in rows)
+    donut = H.donut_svg([(label, n, colour) for label, n, _, colour in coloured],
+                        size=size, thickness=round(size * 30 / 188),
+                        middle=str(total), under=f"{sum_r:+.1f} R")
     return (f'<div class="ring"><h3>{esc(title)}</h3>'
-            f'<div class="ring-body">'
-            f'{H.donut_svg([(label, n, colour) for label, n, _, colour in coloured], middle=str(total), under=f"{sum_r:+.1f} R")}'
-            f'{H.donut_legend(coloured, total)}</div></div>')
+            f'<div class="ring-body">{donut}{H.donut_legend(coloured, total)}</div></div>')
 
 
-def r_rings(j, trades):
+def r_rings(j, trades, compact=False):
     """Where the trades landed by the size of R: losses in one ring, wins in
     the other. The share of a bucket is read off the ring directly, instead of
-    being measured against the tallest bar of a histogram."""
+    being measured against the tallest bar of a histogram.
+
+    Compact, the rings shrink and their legends go under them, so the two fit
+    beside another picture; the explanation is cut to the one sentence that
+    is not said elsewhere on that page."""
     losses, wins, be = stats.r_split(j, trades)
     if not sum(n for _, n, _ in losses) and not sum(n for _, n, _ in wins):
         return ('<div class="card"><h2>R distribution</h2>'
@@ -731,19 +736,26 @@ def r_rings(j, trades):
     s = stats.summary(j, trades)
     head = (f'{s.trades} closed · {s.wins} won · {s.losses} lost'
             + (f' · {be} break-even' if be else ''))
+    size = 150 if compact else 188
+    if compact:
+        explained = ('Cut by the size of R, the brighter the further from zero. '
+                     'Losses of -1 to -1.2 R are the stop as designed; a loss past '
+                     '-1.2 R counts as a mistake and is listed under Rules.')
+    else:
+        explained = ('Each ring is one pile of trades cut by the size '
+                     'of R: the further from zero, the brighter the slice. In the middle '
+                     'of a ring stands the number of trades in it and their total R. '
+                     'Break-even trades are in neither ring; what their commission cost '
+                     'is in the EV. On the losses, -1 to -1.2 R is the stop as designed, '
+                     'since commission and swap are paid on top of it; a loss past '
+                     '-1.2 R means the size was too large.')
     return (f'<div class="card"><h2>R distribution</h2>'
             f'<p class="caption">{esc(head)}</p>'
-            f'<div class="rings">'
-            f'{ring("Losses", losses, H.LOSS_STEPS, "lose")}'
-            f'{ring("Wins", wins, H.WIN_STEPS, "win")}'
+            f'<div class="rings{" compact" if compact else ""}">'
+            f'{ring("Losses", losses, H.LOSS_STEPS, "lose", size)}'
+            f'{ring("Wins", wins, H.WIN_STEPS, "win", size)}'
             f'</div>'
-            f'<p class="caption">Each ring is one pile of trades cut by the size '
-            f'of R: the further from zero, the brighter the slice. In the middle '
-            f'of a ring stands the number of trades in it and their total R. '
-            f'Break-even trades are in neither ring; what their commission cost '
-            f'is in the EV. On the losses, -1 to -1.2 R is the stop as designed, '
-            f'since commission and swap are paid on top of it; a loss past '
-            f'-1.2 R was not the stop but too much size.</p>'
+            f'<p class="caption">{explained}</p>'
             f'</div>')
 
 
@@ -3443,8 +3455,8 @@ def drop_computed(j, rows, period=None):
 
 def trades_breakdown(j, closed, running=()):
     """The trades of a period as figures and colour, the way the winrate tile
-    on the front page says its three: won, lost, flat, and the ones the period
-    ended with still in the market.
+    on the front page says its three: won, lost, flat, and the ones still in
+    the market: for a card, when its period ended; for a report, open now.
 
     No labels, the colour is the word: green, red, amber, blue. A figure that
     is zero is left out, so an ordinary week reads `2 / 1` and not
@@ -3750,89 +3762,353 @@ def save_week(data):
 
 
 # --- reports ---------------------------------------------------------------
+# A report is drawn from the journal as it stands. The file is what build()
+# writes, the archive and the home of the conclusions. The page
+# answers what a review asks, in the order it asks: how the period ended, what
+# stood behind it, where the rules gave way, which two trades are worth
+# reopening, and only then the tables. Every shape on it is one the front page
+# already has: a tile, a bar, a ring, a table. Nothing is graded and no
+# surface is coloured.
 
-def md_to_html(text, link=None):
-    """A tiny renderer: we generate the reports ourselves, their markup is simple.
+def tile(name, value, sub="", cls="", lead=False):
+    """One tile of a strip: a caption, a figure, a line under it."""
+    kind = "tile lead" if lead else "tile"
+    under = f'<div class="sub">{sub}</div>' if sub else ""
+    return (f'<div class="{kind}"><div class="name">{name}</div>'
+            f'<div class="value {cls}">{value}</div>{under}</div>')
 
-    `link(section, value)` may hand back an address for the first cell of a row,
-    which is how a line of a report leads to the trades behind it."""
-    parts, in_table, section = [], False, ""
-    for line in text.split("\n"):
-        s = line.strip()
-        if s.startswith("|"):
-            cells = [c.strip() for c in s.strip("|").split("|")]
-            if all(set(c) <= set("-: ") for c in cells):
-                continue
-            if not in_table:
-                # the first row of a table is its head: no icons and no link,
-                # or "account" would lead to an account by that name
-                parts.append('<table><thead><tr>' + "".join(
-                    f'<th class="{"num" if i else ""}">{esc(c)}</th>'
-                    for i, c in enumerate(cells)) + "</tr></thead><tbody>")
-                in_table = True
-                continue
-            # under "By pair" the first column holds symbols, so they get their
-            # icons here, the same as everywhere else
-            show = H.pair if section == "By pair" else esc
-            first = show(cells[0])
-            href = link(section, cells[0]) if link else None
-            if href:
-                first = f'<a href="{href}">{first}</a>'
-            parts.append("<tr>" + f"<td>{first}</td>" + "".join(
-                f'<td class="num">{esc(c)}</td>' for c in cells[1:]) + "</tr>")
-            continue
-        if in_table:
-            parts.append("</tbody></table>")
-            in_table = False
-        if s.startswith("### "):
-            section = s[4:]
-            parts.append(f"<h3>{esc(section)}</h3>")
-        elif s.startswith("## "):
-            parts.append(f"<h2>{esc(s[3:])}</h2>")
-        elif s.startswith("# "):
-            parts.append(f"<h2>{esc(s[2:])}</h2>")
-        elif s:
-            parts.append(f"<p>{esc(s)}</p>")
-    if in_table:
-        parts.append("</tbody></table>")
+
+def r_text(x):
+    return f"{x:+.2f} R"
+
+
+def report_tiles(j, r):
+    """The headline strip: the rows of the old summary table, one tile each,
+    the period before as the last clause of the sub line, so every figure is
+    still read against something without a second column to cross-read."""
+    s, was = r.total, r.was
+    then = esc(r.earlier_name)
+    money = (f'<span class="{sum_class(s.sum_pnl)}">{amount(j, s.sum_pnl, signed=True)}'
+             f'</span>' if s.trades else "")
+    result = tile("result", r_text(s.sum_r) if s.trades else "-",
+                  " · ".join(x for x in (
+                      money or "no closed trades",
+                      f'<span class="muted">{then}: '
+                      f'{r_text(was.sum_r) if was.trades else "-"}</span>') if x),
+                  sum_class(s.sum_r) if s.trades else "muted", lead=True)
+    winrate = tile("winrate",
+                   f"{s.wr:.1f}% {expectancy(s)}" if s.decided else "-",
+                   " · ".join(x for x in (
+                       trades_breakdown(j, r.trades, r.held),
+                       f'<span class="muted">{then}: '
+                       f'{f"{was.wr:.1f}%" if was.decided else "-"}</span>') if x),
+                   "" if s.decided else "muted")
+    fall = tile("deepest fall from a high",
+                r_text(r.fall) if r.fall else ("0.00 R" if s.trades else "-"),
+                " · ".join(x for x in (
+                    "" if r.fall or not s.trades else "never below its high",
+                    f'<span class="muted">{then}: '
+                    f'{r_text(r.was_fall) if was.trades else "-"}</span>') if x),
+                "" if s.trades else "muted")
+    return ('<div class="tiles report">' + result + winrate + fall + mistakes_tile(r)
+            + process_tile(r) + extremes_tile(j, r) + "</div>")
+
+
+def mistakes_tile(r):
+    """What the journal itself calls a mistake, counted and priced: a rule
+    ticked as not met, at the entry or at the close, and a loss past the stop.
+    The count stays ink, only the R under it carries colour: a number painted
+    red is a grade, and a report does not grade. A trade never ticked says
+    nothing either way, and the tile says so rather than reading as clean."""
+    if not r.ticked and not r.past_stop:
+        if not r.trades:
+            return tile("mistakes", "-", "no closed trades", "muted")
+        within = " · every loss stayed within the stop" if r.total.losses else ""
+        if r.unticked:
+            return tile("mistakes", "-", f"{r.unticked} under a playbook, none ticked{within}", "muted")
+        return tile("mistakes", "-", f"no checklist ticked{within}", "muted")
+    n = len(r.mistakes)
+    bits = []
+    broke = len({t.id for t in r.mistakes if stats.broke(t)})
+    if broke:
+        bits.append(f"{broke} broke a rule")
+    if r.past_stop:
+        bits.append(f"{len(r.past_stop)} past the stop")
+    if n:
+        bits.append(f'{"that trade" if n == 1 else "those trades"} '
+                    f'<span class="{sum_class(r.mistakes_sum.sum_r)}">'
+                    f'{r_text(r.mistakes_sum.sum_r)}</span>')
+    else:
+        bits.append("every ticked trade kept every rule")
+        if r.total.losses:
+            bits.append("every loss stayed within the stop")
+    if r.unticked:
+        bits.append(f'<span class="muted">{r.unticked} not ticked</span>')
+    return tile("mistakes", str(n), " · ".join(bits), "" if n else "muted")
+
+
+def process_tile(r):
+    """Cards written against days traded, and the grades they carry."""
+    if not r.cards and not r.days_traded:
+        return tile("process", "-", "no days traded, no cards", "muted")
+    value = f"{len(r.cards)} / {r.days_traded}"
+    if not r.cards:
+        return tile("process", value, "no cards written on the days traded", "muted")
+    grades = " · ".join(f"{esc(g)} {n}" for g, n in r.grades)
+    return tile("process", value, f"cards on days traded · {grades}")
+
+
+def extremes_tile(j, r):
+    """The two trades worth opening again, by R: a figure each, and the trade
+    under it as the way in."""
+    if not r.best:
+        return tile("best / worst trade", "-", "no closed trades", "muted")
+
+    def way(t):
+        return (f'<a href="/trade/{U(t.id)}">{esc(t.pair)} {esc(t.style)}, '
+                f'{t.closed:%d.%m}</a>')
+    best = j.r(r.best.id) or 0.0
+    value = f'<span class="{sum_class(best)}">{r_text(best)}</span>'
+    sub = way(r.best)
+    if r.worst:
+        worst = j.r(r.worst.id) or 0.0
+        value += f'<span class="ev {sum_class(worst)}">{r_text(worst)}</span>'
+        sub += f" · {way(r.worst)}"
+    if r.worst:
+        name = "best / worst trade"
+    else:
+        name = "the only trade" if len(r.trades) == 1 else "every trade the same R"
+    return tile(name, value, sub)
+
+
+def report_head(r):
+    """The period at reading size, with its edges under it."""
+    last = r.end - timedelta(days=1)
+    bits = [f"{r.start:%d.%m} to {last:%d.%m.%Y}",
+            f"{r.total.trades} trade{'' if r.total.trades == 1 else 's'} closed",
+            f"read against {esc(r.earlier_name)}"]
+    return (f'<div class="report-head"><div><h2>{esc(r.kind)}ly report</h2>'
+            f'<h1 class="pb-name">{esc(r.name)}</h1>'
+            f'<p class="pb-meta">{" · ".join(bits)}</p></div></div>')
+
+
+def report_nav(r, ready):
+    """The reports beside this one: the period before, the one after, and for
+    a month its quarter, each a button only when that report exists."""
+    parts = []
+    before, after = reports.previous_period(r.period), reports.next_period(r.period)
+    if before in ready:
+        parts.append(f'<a class="btn" href="/report/{U(before)}">'
+                     f'← {esc(reports.parse_period(before)[2])}</a>')
+    parts.append('<a class="btn" href="/reports">All reports</a>')
+    if r.kind == "month":
+        quarter = stats.quarter(r.start)
+        if quarter in ready:
+            parts.append(f'<a class="btn" href="/report/{U(quarter)}">'
+                         f'{esc(reports.parse_period(quarter)[2])}</a>')
+    if after in ready:
+        parts.append(f'<a class="btn" href="/report/{U(after)}">'
+                     f'{esc(reports.parse_period(after)[2])} →</a>')
     return "".join(parts)
 
 
-def reports_page():
-    j = journal()
-    months = stats.closing_months(j.trades)
-    quarters = sorted({stats.quarter(t.closed) for t in j.trades
-                       if not t.is_open and t.closed})
-    ready = reports.existing(ROOT)
-    ready_rows = "".join(
-        f'<tr><td><a href="/report/{U(p)}">{esc(p)}</a></td>'
-        f'<td class="muted">{esc(report_kind(p))}</td></tr>' for p in ready
-    ) or '<tr><td class="muted">none yet</td><td></td></tr>'
-    form = f"""<form method="post" action="/report/build" class="filters">
-<div><label>month</label>
-{select("period_month", list(reversed(months)), "", empty="-")}</div>
-<div><button class="btn primary" name="what" value="month">Build month</button></div>
-<div><label>quarter</label>
-{select("period_quarter", list(reversed(quarters)), "", empty="-")}</div>
-<div><button class="btn" name="what" value="quarter">Build quarter</button></div>
-</form>"""
-    body = (f'<div class="card"><h2>Build a report</h2>{form}'
-            f'<p class="caption">Rebuilding refreshes the numbers and never '
-            f'touches your conclusions.</p></div>'
-            f'<div class="card"><h2>Existing reports</h2>'
-            f'<table><tbody>{ready_rows}</tbody></table></div>')
-    return page("Reports", body, "reports")
+def conclusions_card(r, text, stamp):
+    """The owner's words, in one place whatever their state: written, they
+    are read as text with the form behind Edit; not yet, the field is open."""
+    form = (f'<form method="post" action="/report/{U(r.period)}">'
+            f'<textarea name="conclusions" placeholder="What you learned this period: '
+            f'what to keep, what to stop">{esc(text)}</textarea>'
+            f'<p class="actions"><button class="btn primary">Save conclusions</button></p>'
+            f'</form>')
+    stamp = stamp if isinstance(stamp, str) else ""
+    try:
+        stamp = datetime.strptime(stamp, "%Y-%m-%d %H:%M").strftime("%d.%m.%Y %H:%M")
+    except ValueError:
+        pass
+    when = f", last built {esc(stamp)}" if stamp else ""
+    note = (f'<p class="caption">This page is drawn from the journal as it is now. '
+            f'Saving writes these figures with your text into '
+            f'<code>journal/reports/{esc(r.period)}.md</code>{when}; the text is '
+            f'never overwritten by a rebuild.</p>')
+    if text:
+        return (f'<div class="card conclusions"><h2>Conclusions</h2>'
+                f'<div class="pb-text">{paragraphs(text)}</div>'
+                f'<details class="fold" style="margin-top:12px"><summary>Edit</summary>'
+                f'{form}{note}</details></div>')
+    return f'<div class="card"><h2>Conclusions</h2>{form}{note}</div>'
 
 
-def report_kind(period):
-    return "quarter" if "Q" in period else "month"
+def report_tape(j, r):
+    """The trades of the period one bar each, cut into weeks or months."""
+    if not r.order:
+        return NOTHING_TO_PLOT
+    bars, marks, last = [], [], None
+    for i, t in enumerate(r.order):
+        key = stats.week(t.closed) if r.kind == "month" else f"{t.closed:%Y-%m}"
+        if key != last:
+            label = (f"W{int(key[6:])}" if r.kind == "month"
+                     else reports.MONTH_NAMES[int(key[5:]) - 1][:3])
+            marks.append((i, label))
+            last = key
+        rr = j.r(t.id) or 0.0
+        words = (f"{t.closed:%d.%m.%Y} {t.pair} {t.direction} · {t.style} · "
+                 f"{t.result} {rr:+.2f} R · {amount(j, t.pnl, t.account, signed=True)}")
+        bars.append((rr, t.result, f"/trade/{U(t.id)}", words))
+    return H.tape_svg(bars, marks, height=270)
 
 
-# Which filter of the journal a column of a report belongs to. The heading is
-# the one written into the file, so a report built long ago still links.
+def report_pictures(j, r):
+    """The shape of the period: every trade by size, and the two rings."""
+    word = "week" if r.kind == "month" else "month"
+    caption = (f'<p class="caption">One bar per closed trade, in the order of the '
+               f'exits, a line where a new {word} begins. A break-even is the amber '
+               f'tick on the zero line; the dashed line is the stop, -1 R. A bar past '
+               f'it means the size was too large. Each bar opens its trade.</p>')
+    left = (f'<div class="card"><h2>Trade by trade</h2>{report_tape(j, r)}'
+            f'{caption if r.order else ""}</div>')
+    return f'<div class="pictures">{left}{r_rings(j, r.trades, compact=True)}</div>'
+
+
+def rules_card(j, r):
+    """Which rules gave way and what it cost, against the trades that kept them
+    all; then the losses past the stop, each a way to its trade."""
+    if not r.ticked:
+        body = ('<p class="muted">No trade of the period went through a checklist, '
+                'so nothing can be said about the rules.</p>')
+    else:
+        books = {label for label, _, _, _ in r.rules}
+        rows = "".join(
+            f'<tr><td><span class="n muted">'
+            f'{esc(label + " " if len(books) > 1 else "")}{rule.number}</span> '
+            f'{esc(rule.text)}</td><td class="num">{n}</td>'
+            f'<td class="num {sum_class(s.sum_r)}">{s.sum_r:+.2f}</td>'
+            f'<td class="num">{s.average_r:+.2f}</td></tr>'
+            for label, rule, n, s in r.rules)
+        kept = (f'<tr class="total"><td>kept every rule</td>'
+                f'<td class="num">{r.kept.trades}</td>'
+                f'<td class="num {sum_class(r.kept.sum_r)}">{r.kept.sum_r:+.2f}</td>'
+                f'<td class="num">{r.kept.average_r:+.2f}</td></tr>')
+        body = (f'<table><thead><tr><th>rule not met</th><th class="num">trades</th>'
+                f'<th class="num">Σ R</th><th class="num">EV</th></tr></thead>'
+                f'<tbody>{rows}{kept}</tbody></table>'
+                f'<p class="caption">{r.ticked} ticked trade{"" if r.ticked == 1 else "s"}. '
+                f'A trade that broke '
+                f'several rules stands in each of their rows; the last row is the '
+                f'measure, what the trades that kept every rule brought. Rules are '
+                f'counted by number, so only trades ticked against the current version '
+                f'of their playbook stand in the rows.</p>')
+    if r.past_stop:
+        lines = "".join(
+            f'<tr>{link_cell(f"/trade/{U(t.id)}", f"{t.closed:%d.%m.%Y}")}'
+            f'{link_cell(f"/trade/{U(t.id)}", H.pair(t.pair))}'
+            f'{link_cell(f"/trade/{U(t.id)}", esc(t.style))}'
+            f'{link_cell(f"/trade/{U(t.id)}", r_text(j.r(t.id) or 0.0), "num lose")}</tr>'
+            for t in r.past_stop)
+        body += (f'<h3>Past the stop</h3><table><tbody>{lines}</tbody></table>'
+                 f'<p class="caption">The stop with commission and swap on top lands '
+                 f'between -1 and -1.2 R; a loss past that means the size was too '
+                 f'large.</p>')
+    return f'<div class="card"><h2>Rules</h2>{body}</div>'
+
+
+def process_card(r):
+    """The cards of the period: how many days were reviewed, what grades they
+    got, and the errors written on them in the owner's own words."""
+    if not r.cards and not r.weeks:
+        body = (f'<p class="muted">No cards written for this period, and '
+                f'{r.days_traded} day{"" if r.days_traded == 1 else "s"} had trades.</p>')
+        return f'<div class="card"><h2>Process</h2>{body}</div>'
+    body = (f'<p class="pb-meta"><b>{len(r.cards)}</b> daily card'
+            f'{"" if len(r.cards) == 1 else "s"} on <b>{r.days_traded}</b> day'
+            f'{"" if r.days_traded == 1 else "s"} traded'
+            + (f', <b>{len(r.weeks)}</b> weekly' if r.weeks else "") + "</p>")
+    if r.grades:
+        body += ('<p class="grades">' + "".join(
+            f'<span class="chip">{esc(g)} <b>{n}</b></span>' for g, n in r.grades) + "</p>")
+    poor = [k for k in r.cards if k.grade in ("D", "F")]
+    if poor:
+        body += ('<p class="caption days">D and F days: ' + " · ".join(
+            f'<a href="/card/{U(k.id)}">{k.day:%d.%m}</a>' for k in poor) + "</p>")
+    errors = [(f"/card/{U(k.id)}", f"{k.day:%d.%m}", k.errors) for k in r.cards
+              if k.errors.strip()]
+    errors += [(f"/week/{U(k.id)}", f"W{k.number}", k.errors) for k in r.weeks
+               if k.errors.strip()]
+    if errors:
+        items = "".join(
+            f'<li><a href="{href}">{esc(label)}</a>{inline(text.strip())}</li>'
+            for href, label, text in errors)
+        body += f'<h3>Errors written on the cards</h3><ul class="errors">{items}</ul>'
+    return f'<div class="card"><h2>Process</h2>{body}</div>'
+
+
+def accounts_card(j, r, link):
+    """Each account before and after the period, then the figures by account."""
+    tiles = ""
+    for account, before, after in r.balances:
+        name = j.accounts[account].name or account
+        change = after - before
+        tiles += tile(f'<a href="{link("By account", account)}">{esc(name)}</a>',
+                      amount(j, after, account),
+                      f'from {amount(j, before, account)} · '
+                      f'<span class="{sum_class(change)}">'
+                      f'{amount(j, change, account, signed=True)}</span>')
+    rows = dict(r.slices).get("By account", [])
+    table = slice_table(j, "By account", rows, link) if rows else ""
+    return (f'<div class="card"><h2>Accounts</h2>'
+            f'<div class="tiles narrow">{tiles}</div>{table}</div>')
+
+
+def slice_rows(j, heading, rows, link, first=None):
+    """The rows of one slice table, in the order the Statistics tab keeps
+    them; Σ R is the one coloured column."""
+    out = ""
+    for value, s in rows:
+        shown = first(value) if first else (H.pair(value) if heading == "By pair" else esc(value))
+        href = link(heading, value) if link else None
+        cell = f'<a href="{href}">{shown}</a>' if href else shown
+        out += (f'<tr><td>{cell}</td><td class="num">{s.trades}</td>'
+                f'<td class="num">{s.wr:.1f}%</td>'
+                f'<td class="num {sum_class(s.sum_r)}">{s.sum_r:+.2f}</td>'
+                f'<td class="num">{s.average_r:+.2f}</td>'
+                f'<td class="num">{H.money(s.sum_pnl, signed=True)}</td></tr>')
+    return out
+
+
+def slice_table(j, heading, rows, link, first=None, caption=""):
+    return (f'<table><thead><tr><th></th>{figures_head()}'
+            f'<th class="num">Σ {H.sign(j.currency())}</th></tr></thead>'
+            f'<tbody>{slice_rows(j, heading, rows, link, first)}</tbody></table>'
+            + (f'<p class="caption">{caption}</p>' if caption else ""))
+
+
+def slice_card(j, heading, rows, link, caption=""):
+    if not rows:
+        return ""
+    return (f'<div class="card"><h2>{esc(heading)}</h2>'
+            f'{slice_table(j, heading, rows, link, caption=caption)}</div>')
+
+
+def months_card(j, r, ready):
+    """A quarter by its months, in order, each the way to its own report."""
+    if r.kind != "quarter" or not r.trades:
+        return ""
+    rows = stats.by_values(j, r.trades, lambda t: [f"{t.closed:%Y-%m}"])
+    rows.sort(key=lambda x: x[0])
+
+    def link(_, key):
+        if key in ready:
+            return f"/report/{U(key)}"
+        return f"/?from={U(key)}&to={U(key)}&group=week"
+    table = slice_table(j, "By month", rows, link,
+                        first=lambda key: esc(reports.parse_period(key)[2]),
+                        caption="A month with a report of its own opens it; one "
+                                "without opens its trades in the journal.")
+    return f'<div class="card"><h2>By month</h2>{table}</div>'
+
+
+# Which filter of the journal a table of a report belongs to.
 REPORT_LINKS = {"By style": "style", "By pair": "pair", "By account": "account",
-                "By direction": "direction",
-                "Balance change by account": "account"}
+                "By direction": "direction"}
 
 
 def report_link(period):
@@ -3841,14 +4117,6 @@ def report_link(period):
     since, until = reports.period_months(period)
 
     def link(section, value):
-        # the best and the worst row name a trade, so they lead to it directly
-        if section == "Best and worst trade" and value:
-            return f"/trade/{U(value)}"
-        if section == "By playbook":
-            for b in store.all_playbooks(ROOT, []):
-                if playbook_label(b) == value:
-                    return f"/playbook/{U(b.id)}"
-            return None
         field = REPORT_LINKS.get(section)
         if not field or not value:
             return None
@@ -3858,35 +4126,161 @@ def report_link(period):
 
 
 def report_page(period):
+    if not reports.is_period(period):
+        return None
     head, body = reports.read(ROOT, period)
     if body is None:
         return None
     j = journal()
-    trades = reports.trades_of_period(j, period)
-    conclusions = reports.previous_conclusions(ROOT, period)
-    without = re.split(r"^## Conclusions\s*$", body, maxsplit=1, flags=re.M)[0]
-    # the summary, then the rings, then the tables: the picture stands next to
-    # the few figures it draws, not at the foot of a page of tables
-    top, _, rest = without.partition("\n### ")
+    r = reports.compose(ROOT, j, period)
+    ready = set(reports.existing(ROOT))
+    text = reports.previous_conclusions(ROOT, period)
     link = report_link(period)
-    form = f"""<form method="post" action="/report/{U(period)}">
-<textarea name="conclusions" placeholder="What you learned this period">{esc(conclusions)}</textarea>
-<p><button class="btn primary">Save conclusions</button>
-<button class="btn" name="rebuild" value="1">Recalculate</button></p></form>"""
-    caption = (f'<p class="caption">A pair, an account, a style, a direction or '
-               f'one of the two trades named in these tables opens what is behind '
-               f'the row, over the same months. The figures are the ones counted '
-               f'at the last build, {esc(head.get("updated", ""))}; the rings are '
-               f'drawn from the journal as it is now, so press Recalculate if a '
-               f'trade of the period changed since.</p>')
-    html = (f'<div class="card">{md_to_html(top, link)}'
-            f'{"" if rest else caption}</div>'
-            f'{r_rings(j, trades)}'
-            + (f'<div class="card">{md_to_html("### " + rest, link)}{caption}</div>'
-               if rest else "")
-            + f'<div class="card"><h2>Conclusions</h2>{form}</div>')
-    return page(period, html, "reports",
-                  '<a class="btn" href="/reports">All reports</a>')
+    slices = dict(r.slices)
+    left = (months_card(j, r, ready)
+            + slice_card(j, "By pair", slices.get("By pair"), link)
+            + slice_card(j, "By style", slices.get("By style"), link))
+    right = (accounts_card(j, r, link)
+             + slice_card(j, "By direction", slices.get("By direction"), link)
+             + slice_card(j, "By entry TF", slices.get("By entry TF"), link)
+             + slice_card(j, "By execution", slices.get("By execution"), link,
+                          caption="A trade entered on two formats stands in both rows."))
+    story = (report_head(r) + report_tiles(j, r) + report_pictures(j, r)
+             + (f'<div class="twin books">{by_playbook_card(j, r.trades)}{rules_card(j, r)}</div>'
+                if r.playbooks else (rules_card(j, r) if r.past_stop else ""))
+             + f'<div class="twin">{process_card(r)}'
+             f'{conclusions_card(r, text, head.get("updated", ""))}</div>')
+    tables = (f'<div class="twin"><div>{left}</div><div>{right}</div></div>'
+              if left and right else left + right)
+    appendix = (tables
+                + '<p class="caption">A pair, a style, an account or a direction opens '
+                'the journal filtered to it over the same months. A period counts the '
+                'trades that closed inside '
+                'it; WR is wins against wins and losses, EV is Σ R over every closed '
+                'trade, break-evens included.</p>')
+    return page(r.name, story + appendix, "reports", report_nav(r, ready))
+
+
+# --- the shelf of reports ---------------------------------------------------
+
+def build_button(period, ready, lead=False):
+    """Build, or rebuild, the file of a period: the same form as ever, one
+    per row instead of two selects at the top."""
+    kind = reports.kind_of(period)
+    word = "rebuild" if period in ready else "Build"
+    cls = "quiet" if period in ready else "btn small primary" if lead else "btn small"
+    return (f'<form method="post" action="/report/build" class="inline">'
+            f'<input type="hidden" name="what" value="{kind}">'
+            f'<input type="hidden" name="period_{kind}" value="{esc(period)}">'
+            f'<button class="{cls}">{word}</button></form>')
+
+
+def shelf_cells(j, r):
+    """The figures of one period on the shelf, live from the journal."""
+    s = r.total
+    if not s.trades:
+        return ('<td class="num muted">-</td><td></td><td class="num muted">-</td>'
+                '<td class="num muted">-</td><td class="num muted">-</td>'
+                '<td class="num muted">-</td><td class="num muted">-</td>')
+    cards = f"{len(r.cards)} / {r.days_traded}"
+    return (f'<td class="num">{s.trades}</td><td>{trades_breakdown(j, r.trades, r.held)}</td>'
+            f'<td class="num">{f"{s.wr:.1f}%" if s.decided else "-"}</td>'
+            f'<td class="num {sum_class(s.sum_r)}">{s.sum_r:+.2f}</td>'
+            f'<td class="num">{s.average_r:+.2f}</td>'
+            f'<td class="num">{amount(j, s.sum_pnl, signed=True)}</td>'
+            f'<td class="num{"" if r.cards else " muted"}">{cards}</td>')
+
+
+def report_cell(period, ready, lead):
+    """Whether the report stands: the way to it, or the button that makes it."""
+    if period in ready:
+        head, _ = reports.read(ROOT, period)
+        written = bool(reports.previous_conclusions(ROOT, period))
+        built = (head or {}).get("updated", "")
+        built = built[:10] if isinstance(built, str) else ""
+        try:
+            built = datetime.strptime(built, "%Y-%m-%d").strftime("%d.%m.%Y")
+        except ValueError:
+            pass
+        note = (f'<span class="caption">'
+                + ('<span class="dot" title="conclusions written"></span>' if written else "")
+                + f'built {esc(built)}</span>')
+        return f'<td class="report">{note}{build_button(period, ready)}</td>'
+    return f'<td class="report">{build_button(period, ready, lead)}</td>'
+
+
+def reports_page():
+    """Every month and quarter since the first closed trade, on one shelf,
+    with its figures whether a report was built for it or not: the report
+    that is missing is seen as clearly as the one that stands."""
+    j = journal()
+    now = datetime.now()
+    ready = set(reports.existing(ROOT))
+    months = set(reports.periods(j, "month")) | {p for p in ready if reports.kind_of(p) == "month"}
+    if not months:
+        body = ('<div class="card"><h2>Reports</h2><p class="muted">No closed trades '
+                'yet, nothing to report.</p></div>')
+        return page("Reports", body, "reports")
+    quarters = set(reports.periods(j, "quarter")) | {p for p in ready if reports.kind_of(p) == "quarter"}
+    quarters |= {stats.quarter(reports.parse_period(m)[0]) for m in months}
+    composed = {p: reports.compose(ROOT, j, p) for p in months | quarters}
+    this_month, this_quarter = reports.period_of(now, "month"), reports.period_of(now, "quarter")
+    # the one Build that is primary: the newest finished period with trades
+    # and no report, which is the report that is due. A quarter ends with its
+    # last month; when both are due the month comes first, the quarter reads
+    # its months
+    due = max((p for p in months | quarters if p not in ready
+               and p not in (this_month, this_quarter) and composed[p].trades),
+              key=lambda p: (reports.parse_period(p)[1], reports.kind_of(p) == "month"),
+              default=None)
+
+    def name_cell(p, bold=False):
+        title = reports.parse_period(p)[2]
+        if p in ready:
+            shown = f'<a href="/report/{U(p)}">{esc(title)}</a>'
+        else:
+            shown = f'<span class="{"" if composed[p].trades else "muted"}">{esc(title)}</span>'
+        if p in (this_month, this_quarter):
+            shown += ' <span class="chip">running</span>'
+        return shown
+
+    years = sorted({q[:4] for q in quarters}, reverse=True)
+    rows = ""
+    for year in years:
+        if len(years) > 1:
+            rows += (f'<tr class="group"><td colspan="9"><span class="label">{year}</span>'
+                     f'</td></tr>')
+        for q in sorted((q for q in quarters if q.startswith(year)), reverse=True):
+            start, end, _ = reports.parse_period(q)
+            span = (f"{reports.MONTH_NAMES[start.month - 1][:3]} to "
+                    f"{reports.MONTH_NAMES[end.month - 2][:3]}")
+            cell = (report_cell(q, ready, q == due)
+                    if composed[q].trades or q in ready else "<td></td>")
+            rows += (f'<tr class="quarter"><td>{name_cell(q)}'
+                     f'<span class="muted" style="margin-left:8px">{span}</span></td>'
+                     f'{shelf_cells(j, composed[q])}{cell}</tr>')
+            for m in sorted((m for m in months if stats.quarter(reports.parse_period(m)[0]) == q),
+                            reverse=True):
+                cell = (report_cell(m, ready, m == due)
+                        if composed[m].trades or m in ready else "<td></td>")
+                rows += (f'<tr class="sub"><td>{name_cell(m)}</td>'
+                         f'{shelf_cells(j, composed[m])}{cell}</tr>')
+    table = (f'<table class="shelf"><thead><tr><th>period</th><th class="num">trades</th>'
+             f'<th></th><th class="num">WR</th><th class="num">Σ R</th>'
+             f'<th class="num">EV</th><th class="num">Σ {H.sign(j.currency())}</th>'
+             f'<th class="num">cards</th><th>report</th></tr></thead><tbody>{rows}</tbody>'
+             f'</table>')
+    body = (f'<div class="card"><h2>Reports</h2>{table}'
+            f'<p class="caption">Every quarter and month since the first closed trade, '
+            f'with the figures the journal holds for it now, whether a report was '
+            f'built or not. A period counts the trades that closed inside it; the '
+            f'coloured figures beside a count are won, lost, break-even and, on the '
+            f'running period, the positions open now in blue; cards are the daily cards '
+            f'written against the days traded. Building a report writes the figures '
+            f'into a file under <code>journal/reports</code> with a place for your '
+            f'conclusions, marked with a dot here once written; rebuilding never '
+            f'touches them.</p></div>')
+    return page("Reports", body, "reports")
 
 
 # --- accounts and pairs ----------------------------------------------------
@@ -4661,10 +5055,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._go(f"/report/{U(period)}", "Report built")
             if len(parts) == 2 and parts[0] == "report":
                 conclusions = one(data, "conclusions")
+                had = bool(reports.previous_conclusions(ROOT, parts[1]))
                 reports.build(ROOT, journal(True), parts[1], conclusions=conclusions)
                 return self._go(f"/report/{U(parts[1])}",
                                 "Conclusions saved" if conclusions
-                                else "Report rebuilt")
+                                else "Conclusions cleared" if had else "Report rebuilt")
         except (RecordError, ValueError) as e:
             return self._send(page("Error", f'<div class="card">'
                                      f'<h2>Not saved</h2><p>{esc(e)}</p>'

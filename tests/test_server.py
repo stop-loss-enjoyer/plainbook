@@ -757,11 +757,14 @@ class ServerCase(unittest.TestCase):
         code, html = self.get("/report/2026-08")
         self.assertEqual(code, 200)
         for heading in ("By direction", "By entry TF", "By execution",
-                        "Best and worst trade", "Process", "R distribution",
-                        "deepest fall from a high"):
+                        "best / worst trade", "Process", "R distribution",
+                        "deepest fall from a high", "Trade by trade", "mistakes"):
             self.assertIn(heading, html, heading)
         self.assertIn("July 2026", html)                 # the period compared with
         self.assertIn("<svg", html)                      # the rings are drawn
+        self.assertIn('class="tape"', html)              # and the tape of the trades
+        # the figures lead: the strip of tiles stands before the first table
+        self.assertLess(html.index('class="tiles report"'), html.index("<table"))
         # the named trade is a link to the trade itself
         best = re.search(r'<a href="/trade/([^"]+)">', html)
         self.assertTrue(best)
@@ -1192,6 +1195,11 @@ class ServerCase(unittest.TestCase):
             _, html = self.get("/report/2026-08")
             self.assertIn("By playbook", html)
             self.assertIn('href="/playbook/pull"', html)
+            # the one ticked trade broke rule 2 at the entry: the report counts
+            # it as a mistake, names the rule and what the trade brought
+            self.assertIn("1 broke a rule", html)
+            self.assertIn("kept every rule", html)
+            self.assertIn('<span class="n muted">2</span>', html)
             for tid in (trade_id, bare):
                 shutil.rmtree(store.trade_dir(self.root, tid))
         finally:
@@ -1768,7 +1776,8 @@ class ServerCase(unittest.TestCase):
         self.post("/report/build", {"what": "month", "period_month": "2026-08"})
         code, html = self.get("/report/2026-08")
         self.assertEqual(code, 200)
-        self.assertIn("EV (average R, BE counted)", html)
+        # the EV stands beside the winrate in the strip, as on the front page
+        self.assertIn('<span class="muted">EV</span>', html)
         self.assertEqual(html.count('<th class="num">EV</th>'), 6)
         self.assertIn(f'<td class="num">{rows["NZDCAD"].average_r:+.2f}</td>', html)
 
@@ -1939,6 +1948,91 @@ class ServerCase(unittest.TestCase):
         self.assertNotIn("breakdown", row)
         self.assertIn(">6</a>", row)
         self.post("/week/2026-W20/delete", {})
+
+    def test_76_the_reports_tab_is_a_shelf_of_every_period(self):
+        """Every month and quarter since the first closed trade, its figures
+        live from the journal, a link where a report stands and the form that
+        builds one where none does."""
+        from plainbook import stats
+        _, html = self.get("/reports")
+        self.assertIn('href="/report/2026-08"', html)          # built by an earlier test
+        self.assertIn('action="/report/build"', html)
+        self.assertIn('name="period_month"', html)
+        self.assertIn('name="period_quarter"', html)
+        # the quarter stands over its months
+        self.assertLess(html.index("Q3 2026"), html.index("August 2026"))
+        # the figures come from the journal, the file only keeps the text
+        j = self.S.journal()
+        s = stats.summary(j, self.S.reports.trades_of_period(j, "2026-08"))
+        self.assertIn(f'>{s.sum_r:+.2f}</td>', html)
+        # the two select boxes of old are gone: one row, one button
+        self.assertNotIn("Build month", html)
+        self.assertNotIn("Build quarter", html)
+
+    def test_76b_a_stray_file_in_the_reports_folder_is_passed_over(self):
+        """A note or a copy left in journal/reports, and a header edited by
+        hand, must not take the shelf or the report down."""
+        from plainbook import reports
+        folder = os.path.join(self.root, store.JOURNAL, reports.DIR)
+        stray = [os.path.join(folder, "notes.md"), os.path.join(folder, "2026-08 copy.md"),
+                 os.path.join(folder, "2026-13.md")]
+        for f in stray:
+            with open(f, "w", encoding="utf-8") as h:
+                h.write("just a note\n")
+        broken = reports.path(self.root, "2026-06")
+        with open(broken, "w", encoding="utf-8") as h:
+            h.write("---\nno colon here\n---\n\n## Conclusions\n\nkept by hand\n")
+        try:
+            code, html = self.get("/reports")
+            self.assertEqual(code, 200)
+            self.assertNotIn("notes", html)
+            self.assertNotIn("2026-13", html)
+            self.assertIn('href="/report/2026-06"', html)
+            code, html = self.get("/report/2026-06")
+            self.assertEqual(code, 200)
+            self.assertIn("kept by hand", html)
+            for gone in ("/report/notes", "/report/2026-13"):
+                with self.assertRaises(urllib.error.HTTPError) as e:
+                    self.get(gone)
+                self.assertEqual(e.exception.code, 404)
+        finally:
+            for f in stray + [broken]:
+                os.remove(f)
+
+    def test_77_a_report_draws_its_trades_and_reads_its_conclusions(self):
+        """One bar per closed trade, each a way to the trade; the conclusions
+        a field until written, then text behind an Edit fold."""
+        from plainbook import stats
+        self.post("/report/build", {"what": "month", "period_month": "2026-08"})
+        _, html = self.get("/report/2026-08")
+        j = self.S.journal()
+        closed = self.S.reports.trades_of_period(j, "2026-08")
+        tape = re.search(r'<svg class="tape".*?</svg>', html, re.S).group(0)
+        bars = re.findall(r'<a href="/trade/([^"]+)"><rect', tape)
+        self.assertEqual(len(bars), len(closed))
+        self.assertEqual(self.get("/trade/" + bars[0])[0], 200)
+        self.assertIn(">stop<", tape)                         # the dashed -1 R line is named
+        # the strip says what the journal says, and the period before is there
+        s = stats.summary(j, closed)
+        self.assertIn(f"{s.sum_r:+.2f} R", html)
+        self.assertIn("July 2026", html)
+        # no conclusions: the field is open and there is nothing to fold
+        self.post("/report/2026-08", {"conclusions": ""})
+        _, html = self.get("/report/2026-08")
+        self.assertIn('<textarea name="conclusions"', html)
+        self.assertNotIn("<summary>Edit</summary>", html)
+        self.post("/report/2026-08",
+                  {"conclusions": "size flat, stops held\n\nnext: no second entry"})
+        _, html = self.get("/report/2026-08")
+        self.assertIn("<summary>Edit</summary>", html)
+        self.assertIn("<p>size flat, stops held</p>", html)
+        self.assertIn("<p>next: no second entry</p>", html)
+        field = re.search(r'<textarea name="conclusions".*?>(.*?)</textarea>',
+                          html, re.S).group(1)
+        self.assertIn("size flat", field)                    # an edit starts from the text
+        # the shelf marks the report whose conclusions are written
+        _, shelf = self.get("/reports")
+        self.assertIn('class="dot"', shelf)
 
 
 if __name__ == "__main__":

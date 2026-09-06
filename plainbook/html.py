@@ -440,6 +440,57 @@ mark{{background:rgba(111,157,255,.28);color:inherit;border-radius:2px}}
 .fold[open]>summary::before{{content:"−"}}
 .fold>summary .caption{{margin-left:auto}}
 
+/* reports: the period at reading size, the strip of tiles under it, two
+   pictures side by side, the tables after the story */
+.report-head{{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:0 0 14px}}
+.report-head h2{{margin:0 0 4px}}
+.report-head .pb-meta{{margin:0 0 2px}}
+.report-head .right{{margin-left:auto}}
+.tile.lead .value{{font-size:28px;white-space:nowrap}}
+.tile .value .ev{{font-weight:500}}
+/* a trade named in a tile is a way in, drawn as quietly as the name of an
+   account over a balance: text, lit under the pointer */
+.tile .sub a{{color:{INK2}}}
+.tile .sub a:hover{{color:{ACCENT}}}
+.pictures{{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;
+ margin-bottom:16px}}
+.pictures>.card{{margin-bottom:0;min-width:0}}
+@media (max-width:1100px){{.pictures{{grid-template-columns:1fr}}}}
+.twin>.card{{margin-bottom:16px}}
+/* six figures in one row; on a narrower screen two rows of three, so the
+   strip never leaves an empty corner and the names stay on one line */
+.tiles.report{{grid-template-columns:repeat(6,1fr)}}
+@media (max-width:1250px){{.tiles.report{{grid-template-columns:repeat(3,1fr)}}}}
+@media (max-width:700px){{.tiles.report{{grid-template-columns:repeat(2,1fr)}}}}
+.twin .tiles.narrow .tile{{flex:1 0 236px}}
+/* the playbook table is eight columns wide and does not fit half a page */
+@media (max-width:1150px){{.twin.books{{grid-template-columns:1fr}}}}
+.tape a rect:hover{{fill-opacity:1}}
+.rings.compact .ring{{flex:1 1 200px;min-width:0;padding:10px 12px}}
+.rings.compact .ring-body{{flex-direction:column;align-items:flex-start;gap:6px}}
+.rings.compact .donut-legend{{flex:none;width:100%}}
+.grades{{margin:8px 0 0;display:flex;gap:6px;flex-wrap:wrap}}
+.grades .chip b{{color:{INK};font-weight:600;margin-left:4px}}
+ul.errors{{margin:6px 0 0;padding-left:0;list-style:none;max-width:760px}}
+ul.errors li{{padding:6px 0;border-top:1px solid {GRID};font-size:13px;line-height:1.5;
+ color:{INK2}}}
+ul.errors li a{{font-family:{MONO};font-size:11px;color:{DIM};margin-right:8px}}
+ul.errors li a:hover{{color:{ACCENT}}}
+.days a{{color:{INK2}}}
+form.inline{{display:inline-block;margin:0}}
+table.shelf td.report{{white-space:nowrap}}
+table.shelf td.report .caption{{margin-right:8px}}
+table.shelf .btn.small{{margin-top:0}}
+table.shelf tr.quarter td:first-child{{font-weight:600}}
+table.shelf tr.quarter td:first-child .muted{{font-weight:400}}
+/* rebuilding a file that already stands is the rare action, so it is a word */
+form.inline .quiet{{background:none;border:0;padding:0;color:{DIM};cursor:pointer;
+ font:11px/1.4 system-ui,sans-serif}}
+form.inline .quiet:hover{{color:{INK};text-decoration:underline;text-underline-offset:3px}}
+.dot{{display:inline-block;width:6px;height:6px;border-radius:50%;background:{ACCENT};
+ vertical-align:1px;margin-right:5px}}
+.card.conclusions .pb-text{{color:{INK}}}
+
 /* the two rings of the R distribution */
 .rings{{display:flex;flex-wrap:wrap;gap:14px}}
 .ring{{flex:1 1 380px;min-width:300px;background:{GROUND};
@@ -968,6 +1019,89 @@ def equity_svg(series, width=980, height=260, cid="equity", sign="$",
     return svg + f'<script>hover_chart("{cid}");</script>'
 
 
+def tape_svg(bars, marks, width=980, height=230, stop=1.0):
+    """The trades of a period one bar each, in the order they closed.
+
+    bars: [(r, result, href, words)], words being the title of the bar. marks:
+    [(index, label)] where a new week or month begins, drawn as a thin line
+    before that bar with the label under it.
+
+    A win stands up from zero in green, a loss hangs down in red, a break-even
+    is an amber tick on the line: the same three colours the front page counts
+    a week in. The dashed line at -1 R is the stop as designed; a bar that
+    reaches past it was too much size, and it shows without a word. Every bar
+    opens its trade."""
+    if not bars:
+        return '<p class="muted">No closed trades in this period.</p>'
+    values = [r for r, _, _, _ in bars]
+    low = min(-1.5, math.floor(min(values) * 2) / 2)
+    high = max(1.0, math.ceil(max(values) * 2) / 2)
+    pad = (44, 12, 30, 44)                         # left, top, bottom, right
+    pw, ph = width - pad[0] - pad[3], height - pad[1] - pad[2]
+    left, right = pad[0], width - pad[3]
+    top, bottom = pad[1], pad[1] + ph
+    slot = pw / len(bars)
+    bar_w = max(2.0, min(slot * 0.62, 18.0))
+
+    def Y(v):
+        return top + ph * (high - v) / (high - low)
+
+    parts = [f'<rect width="{width}" height="{height}" fill="{SURFACE}"/>']
+    step = nice_step(high - low, target=5)
+    v = math.ceil(low / step) * step
+    while v <= high + 1e-9:
+        y = Y(v)
+        parts.append(f'<line x1="{left}" y1="{y:.1f}" x2="{right}" y2="{y:.1f}" '
+                     f'stroke="{GRID}" stroke-width="1"/>')
+        parts.append(f'<text x="{left - 6}" y="{y + 3:.1f}" fill="{DIM}" '
+                     f'font-size="10" font-family="{MONO}" text-anchor="end">'
+                     f'{r_label(v, step)}</text>')
+        v += step
+    # where a week or a month begins: a line before the bar, a word under it
+    edges = [i for i, _ in marks] + [len(bars)]
+    for k, (i, label) in enumerate(marks):
+        x = left + slot * i
+        if i:
+            parts.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{bottom}" '
+                         f'stroke="{AXIS}" stroke-width="1"/>')
+        span = slot * (edges[k + 1] - i)
+        if span >= 26:
+            parts.append(f'<text x="{x + span / 2:.1f}" y="{height - 9}" fill="{DIM}" '
+                         f'font-size="10" letter-spacing=".08em" text-anchor="middle">'
+                         f'{esc(label)}</text>')
+    zero, stop_y = Y(0.0), Y(-stop)
+    parts.append(f'<line x1="{left}" y1="{stop_y:.1f}" x2="{right}" y2="{stop_y:.1f}" '
+                 f'stroke="{DIM}" stroke-width="1" stroke-dasharray="3 4"/>')
+    parts.append(f'<text x="{right + 6}" y="{stop_y + 3:.1f}" fill="{DIM}" '
+                 f'font-size="10">stop</text>')
+    parts.append(f'<line x1="{left}" y1="{zero:.1f}" x2="{right}" y2="{zero:.1f}" '
+                 f'stroke="{AXIS}" stroke-width="1"/>')
+    for i, (r, result, href, words) in enumerate(bars):
+        x = left + slot * (i + 0.5) - bar_w / 2
+        title = f"<title>{esc(words)}</title>"
+        if result == "BE":
+            parts.append(f'<a href="{esc(href)}"><rect x="{x:.1f}" y="{zero - 1.5:.1f}" '
+                         f'width="{bar_w:.1f}" height="3" fill="{WARN}">{title}</rect></a>')
+            continue
+        y = Y(r)
+        colour = GOOD if result == "Win" else BAD
+        y0, y1 = min(y, zero), max(y, zero)
+        parts.append(f'<a href="{esc(href)}"><rect x="{x:.1f}" y="{y0:.1f}" '
+                     f'width="{bar_w:.1f}" height="{max(y1 - y0, 1.0):.1f}" '
+                     f'fill="{colour}" fill-opacity=".82">{title}</rect></a>')
+    return (f'<svg class="tape" viewBox="0 0 {width} {height}" width="100%" '
+            f'preserveAspectRatio="xMidYMid meet" role="img">' + "".join(parts) + "</svg>")
+
+
+def r_label(v, step):
+    """A figure on an R axis: whole numbers while the step is whole, the
+    decimals of the step otherwise, so +2.5 is not written as +2."""
+    decimals = 0
+    while decimals < 2 and abs(step * 10 ** decimals - round(step * 10 ** decimals)) > 1e-9:
+        decimals += 1
+    return f"{v:+.{decimals}f}" if abs(v) > 1e-9 else "0"
+
+
 HOVER = """
 function hover_chart(cid){
   const svg = document.getElementById(cid);
@@ -1056,12 +1190,13 @@ def donut_svg(segments, size=188, thickness=30, middle="", under=""):
             f'<title>{esc(label)}: {n} trades, {100.0 * n / total:.0f}%</title>'
             f'</circle>')
         offset += length
-    text = ""
+    # the figures in the middle follow the ring: 30px in a ring of 188
+    text, big = "", size * 30 / 188
     if middle:
-        text += (f'<text x="{c}" y="{c - 1}" fill="{INK}" font-size="30" '
+        text += (f'<text x="{c}" y="{c - 1}" fill="{INK}" font-size="{big:g}" '
                  f'font-family="{MONO}" text-anchor="middle">{esc(middle)}</text>')
     if under:
-        text += (f'<text x="{c}" y="{c + 17}" fill="{DIM}" font-size="11" '
+        text += (f'<text x="{c}" y="{c + big * 17 / 30:g}" fill="{DIM}" font-size="11" '
                  f'text-anchor="middle">{esc(under)}</text>')
     # only the ring turns, so that the reading starts at twelve o'clock; the
     # text in the middle stays upright
