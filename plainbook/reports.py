@@ -265,7 +265,7 @@ def discipline(root, journal, trades, r):
     # the dearest first: what cost the most R stands at the top
     rows.sort(key=lambda x: (x[3].sum_r, -x[2]))
     r.rules = rows
-    # a loss past the stop means the size was too large; the edge is the one
+    # a loss past the stop lost more than the risk allowed; the edge is the one
     # the rings cut at, so the two agree
     edge = stats.LOSS_BUCKETS[2][1]
     r.past_stop = sorted(

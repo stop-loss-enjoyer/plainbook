@@ -759,7 +759,7 @@ def r_rings(j, trades, compact=False):
                      'Break-even trades are in neither ring; what their commission cost '
                      'is in the EV. On the losses, -1 to -1.2 R is the stop as designed, '
                      'since commission and swap are paid on top of it; a loss past '
-                     '-1.2 R means the size was too large.')
+                     '-1.2 R lost more than the risk allowed.')
     return (f'<div class="card"><h2>R distribution</h2>'
             f'<p class="caption">{esc(head)}</p>'
             f'<div class="rings{" compact" if compact else ""}">'
@@ -3980,7 +3980,7 @@ def report_pictures(j, r):
     caption = (f'<p class="caption">One bar per closed trade, in the order of the '
                f'exits, a line where a new {word} begins. A break-even is the amber '
                f'tick on the zero line; the dashed line is the stop, -1 R. A bar past '
-               f'it means the size was too large. Each bar opens its trade.</p>')
+               f'it lost more than the risk allowed. Each bar opens its trade.</p>')
     left = (f'<div class="card"><h2>Trade by trade</h2>{report_tape(j, r)}'
             f'{caption if r.order else ""}</div>')
     return f'<div class="pictures">{left}{r_rings(j, r.trades, compact=True)}</div>'
@@ -4022,9 +4022,13 @@ def rules_card(j, r):
             f'{link_cell(trade_way(r, t), r_text(j.r(t.id) or 0.0), "num lose")}</tr>'
             for t in r.past_stop)
         body += (f'<h3>Past the stop</h3><table><tbody>{lines}</tbody></table>'
-                 f'<p class="caption">The stop with commission and swap on top lands '
-                 f'between -1 and -1.2 R; a loss past that means the size was too '
-                 f'large.</p>')
+                 f'<p class="caption">1 R is the risk you wrote on the trade. A stop '
+                 f'that worked as planned costs -1 R, with commission and swap up to '
+                 f'-1.2 R. A loss deeper than that lost more than the risk allowed: '
+                 f'the lot was too large for the stop, the stop was moved, or the '
+                 f'price slipped past it. The journal does not tell these apart; '
+                 f'open the trade to see which it was. Rules ticked as not met stand '
+                 f'in the table above.</p>')
     return f'<div class="card"><h2>Rules</h2>{body}</div>'
 
 

@@ -54,7 +54,7 @@ What changed and why. Newest first.
   mistakes, the cards written against the days traded, and the best and the
   worst trade. Under the strip every closed trade of the period stands as one
   bar, in the order of the exits, against a dashed line at -1 R, the stop: a
-  bar past it means the size was too large, and it shows without a label;
+  bar past it lost more than the risk allowed, and it shows without a label;
   a line marks every new week, or month in a quarter, and a bar opens its
   trade. The rings of the period stand beside it. Then **By playbook** with
   **Rules** next to it, every rule not met with what the trades that broke

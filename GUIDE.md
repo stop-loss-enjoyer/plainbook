@@ -524,7 +524,7 @@ Break-even trades are in neither ring, and their number is named above.
 **The losses are cut where a stop lands.** A trade taken to the stop comes back
 a little worse than -1R, because commission and swap are paid on top of it, so
 the bucket **-1…-1.2** means the stop as designed. Anything past -1.2R is a
-bucket of its own: that loss was not the stop but too much size, and it is the
+bucket of its own: that loss was more than the risk allowed, and it is the
 one number that says the risk was overrun. The two buckets above them are losses
 that never reached the stop: **0…-0.5** and **-0.5…-1**. A bucket reads from
 zero outwards and its far edge belongs to the next one, so exactly -1R is the
@@ -654,7 +654,8 @@ grades; and the best and the worst trade by R, each a link to the trade.
 
 **Mistakes** are what the journal itself recorded as one: a rule ticked as not
 met at the entry or at the close, or a loss of -1.2 R and worse, which is past
-the stop and therefore size. A trade that did both counts once; a trade never
+the stop: more was lost than the risk written on the trade, whether by size,
+a moved stop or slippage. A trade that did both counts once; a trade never
 ticked counts neither way, and the tile says how many trades under a playbook
 were never ticked. The
 count is plain ink and only the R of those trades is coloured: a report does
@@ -669,7 +670,7 @@ whenever a trade of the period names a playbook or a loss went past the stop.
 order of the exits: a win stands up in green, a loss hangs down in red, a
 break-even is an amber tick on the zero line, and a thin line marks where a new
 week begins, or a new month in a quarter. The dashed line is the stop, -1 R. A
-bar that reaches past it means the size was too large, and it shows without a
+bar that reaches past it lost more than the risk allowed, and it shows without a
 label.
 Hover a bar for the trade, click it to open it. Beside it stand **the rings**,
 the R distribution of the period, the same as on the Statistics tab.

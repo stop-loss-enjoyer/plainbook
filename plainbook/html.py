@@ -1029,7 +1029,8 @@ def tape_svg(bars, marks, width=980, height=230, stop=1.0):
     A win stands up from zero in green, a loss hangs down in red, a break-even
     is an amber tick on the line: the same three colours the front page counts
     a week in. The dashed line at -1 R is the stop as designed; a bar that
-    reaches past it was too much size, and it shows without a word. Every bar
+    reaches past it lost more than the risk allowed, and it shows without a
+    word. Every bar
     opens its trade."""
     if not bars:
         return '<p class="muted">No closed trades in this period.</p>'
