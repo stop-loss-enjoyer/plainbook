@@ -69,7 +69,10 @@ What changed and why. Newest first.
   at the entry or at the close, or a loss of -1.2 R and worse. A trade that did
   both counts once; a trade never ticked counts neither way, and the tile says
   how many trades under a playbook were never ticked. The count is plain
-  ink; only the R of those trades carries colour.
+  ink; only the R of those trades carries colour. The losses past the stop
+  are listed in the Rules card with a caption saying what such a loss is:
+  more lost than the risk written on the trade, by size, a moved stop or
+  slippage, which the journal does not tell apart.
 - **A report is drawn from the journal as it is now.** The page no longer
   reads its figures back from the file, so there is nothing to recalculate
   and the Recalculate button is gone. Building a report, and saving its
@@ -87,6 +90,20 @@ What changed and why. Newest first.
   the day the file was built and a dot once conclusions are written. The
   running month and quarter are marked, and only there the positions open
   now stand in blue beside the closed trades.
+
+### Fixed
+
+- **A management rule ticked as not held counts even when the entry checklist
+  was never ticked.** A trade tied to its playbook later and ticked only at
+  the close was left out of the rules figures, on the playbook page and in
+  the reports, while the *held* column counted it as a break. Every place now
+  reads the same way: a trade is ticked when either list was recorded, and a
+  break is any rule marked as not met.
+- **A stray file in `journal/reports` no longer takes the Reports tab down.**
+  A note or a copy left in the folder is passed over, a header edited by hand
+  into something the journal cannot read leaves the report readable, and an
+  address that is not a period answers 404. The file writes a dash for the
+  winrate of a period with no decided trade, as the page does.
 
 ## v1.5.1, 09.09.2026
 
