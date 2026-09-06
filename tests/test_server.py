@@ -1969,6 +1969,21 @@ class ServerCase(unittest.TestCase):
         self.assertNotIn("Build month", html)
         self.assertNotIn("Build quarter", html)
 
+    def test_75b_a_trade_opened_from_a_report_offers_the_way_back(self):
+        """A bar of the tape, the best trade, a loss past the stop: each link
+        carries its report, and the trade page answers with a button back to
+        it. Any other address in the query is ignored."""
+        _, html = self.get("/report/2026-08")
+        m = re.search(r'href="(/trade/[^"?]+)\?report=2026-08"', html)
+        self.assertIsNotNone(m)
+        way = m.group(1)
+        _, html = self.get(f"{way}?report=2026-08")
+        self.assertIn('<a class="btn" href="/report/2026-08">← August 2026</a>', html)
+        _, html = self.get(f"{way}?report=/evil")
+        self.assertNotIn("← ", html)
+        _, html = self.get(way)
+        self.assertNotIn('href="/report/', html)
+
     def test_76b_a_stray_file_in_the_reports_folder_is_passed_over(self):
         """A note or a copy left in journal/reports, and a header edited by
         hand, must not take the shelf or the report down."""

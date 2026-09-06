@@ -63,7 +63,8 @@ What changed and why. Newest first.
   wrote on the cards of the period; and your **Conclusions**, in one place
   whether written or not, read as text with an Edit fold once they are. The
   tables come after, Σ R the one coloured column. Nothing is graded and no
-  surface is coloured.
+  surface is coloured. A trade opened from a report carries a button back to
+  it, so a bar of the tape can be followed and the report picked up again.
 - **Mistakes are what the journal itself recorded.** A rule ticked as not met,
   at the entry or at the close, or a loss of -1.2 R and worse. A trade that did
   both counts once; a trade never ticked counts neither way, and the tile says

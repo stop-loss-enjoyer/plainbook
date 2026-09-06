@@ -695,7 +695,8 @@ direction in the report tables and the journal opens filtered to it, over the
 months of that report. That is how a row like "XAU, 5 trades, -4.56 R" turns
 back into the five trades it was counted from, with the idea you wrote before
 each entry. The best and the worst trade lead straight to the trade itself, a
-playbook row to the playbook's page, and a bar of the tape to its trade.
+playbook row to the playbook's page, and a bar of the tape to its trade. A
+trade opened from a report has a button back to that report in its header.
 
 ## Search
 

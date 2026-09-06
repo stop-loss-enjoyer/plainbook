@@ -593,7 +593,17 @@ def outcome_warning(t):
     return ""
 
 
-def trade_page(trade_id):
+def way_back(report):
+    """The button back to the report a trade was opened from. The address is
+    taken from the query and trusted only if it names a period, so a link
+    cannot send the reader anywhere else."""
+    if not report or not reports.is_period(report):
+        return ""
+    return (f'<a class="btn" href="/report/{U(report)}">'
+            f'← {esc(reports.parse_period(report)[2])}</a>')
+
+
+def trade_page(trade_id, report=""):
     j = journal()
     t = next((x for x in j.trades if x.id == trade_id), None)
     if t is None:
@@ -665,6 +675,7 @@ def trade_page(trade_id):
     if t.is_open:
         buttons = (f'<a class="btn primary" href="/close/{U(t.id)}">Close trade</a>'
                    + buttons)
+    buttons = way_back(report) + buttons
     body = (f'<div class="card{" is-open" if t.is_open else ""}">'
             f'<h2>{esc(t.id)}</h2>{outcome_warning(t)}'
             f'<table class="props">{table}</table></div>'
@@ -3865,7 +3876,7 @@ def extremes_tile(j, r):
         return tile("best / worst trade", "-", "no closed trades", "muted")
 
     def way(t):
-        return (f'<a href="/trade/{U(t.id)}">{esc(t.pair)} {esc(t.style)}, '
+        return (f'<a href="{trade_way(r, t)}">{esc(t.pair)} {esc(t.style)}, '
                 f'{t.closed:%d.%m}</a>')
     best = j.r(r.best.id) or 0.0
     value = f'<span class="{sum_class(best)}">{r_text(best)}</span>'
@@ -3938,6 +3949,12 @@ def conclusions_card(r, text, stamp):
     return f'<div class="card"><h2>Conclusions</h2>{form}{note}</div>'
 
 
+def trade_way(r, t):
+    """The address of a trade opened from a report: the report rides along, so
+    the trade page can offer the way back."""
+    return f"/trade/{U(t.id)}?report={U(r.period)}"
+
+
 def report_tape(j, r):
     """The trades of the period one bar each, cut into weeks or months."""
     if not r.order:
@@ -3953,7 +3970,7 @@ def report_tape(j, r):
         rr = j.r(t.id) or 0.0
         words = (f"{t.closed:%d.%m.%Y} {t.pair} {t.direction} · {t.style} · "
                  f"{t.result} {rr:+.2f} R · {amount(j, t.pnl, t.account, signed=True)}")
-        bars.append((rr, t.result, f"/trade/{U(t.id)}", words))
+        bars.append((rr, t.result, trade_way(r, t), words))
     return H.tape_svg(bars, marks, height=270)
 
 
@@ -3999,10 +4016,10 @@ def rules_card(j, r):
                 f'of their playbook stand in the rows.</p>')
     if r.past_stop:
         lines = "".join(
-            f'<tr>{link_cell(f"/trade/{U(t.id)}", f"{t.closed:%d.%m.%Y}")}'
-            f'{link_cell(f"/trade/{U(t.id)}", H.pair(t.pair))}'
-            f'{link_cell(f"/trade/{U(t.id)}", esc(t.style))}'
-            f'{link_cell(f"/trade/{U(t.id)}", r_text(j.r(t.id) or 0.0), "num lose")}</tr>'
+            f'<tr>{link_cell(trade_way(r, t), f"{t.closed:%d.%m.%Y}")}'
+            f'{link_cell(trade_way(r, t), H.pair(t.pair))}'
+            f'{link_cell(trade_way(r, t), esc(t.style))}'
+            f'{link_cell(trade_way(r, t), r_text(j.r(t.id) or 0.0), "num lose")}</tr>'
             for t in r.past_stop)
         body += (f'<h3>Past the stop</h3><table><tbody>{lines}</tbody></table>'
                  f'<p class="caption">The stop with commission and swap on top lands '
@@ -4884,7 +4901,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(str(len(journal().open_trades())), 200,
                               "text/plain; charset=utf-8")
         if len(parts) == 2 and parts[0] == "trade":
-            shown = trade_page(parts[1])
+            shown = trade_page(parts[1], (q.get("report") or [""])[0])
             return self._send(shown or "no such trade", 200 if shown else 404)
         if len(parts) == 2 and parts[0] == "report":
             shown = report_page(parts[1])
