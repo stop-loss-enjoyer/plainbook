@@ -232,7 +232,7 @@ and its version, no setup and no checklist: nobody ticked the rules for
 them, and they do not hold the version, so the rules stay a draft. Open each
 one and fill that in if you remember.
 
-**The figures.** The Statistics tab opens with *By playbook*: a row per
+**The figures.** The Statistics tab carries *By playbook*: a row per
 playbook with its setups beneath it, the trades taken under none last, and
 a *clean* column, the share of ticked trades that met every rule. The
 monthly and quarterly reports carry the same table. Next to *clean* stands
@@ -458,8 +458,9 @@ break-evens: a trade closed at zero still paid its commission and swap and never
 comes back at exactly zero R, so leaving it out would flatter the figure. Hover
 over it in a tile to see how the sum splits between wins, losses and
 break-evens. The total R tile carries the same figure under the sum, and every
-table of the Statistics tab and of a report has an EV column: by style, by pair,
-by account, and in a report also by direction, entry timeframe and execution. A
+table of the Statistics tab and of a report has an EV column: by period, pair,
+style, account, direction, entry timeframe, execution and time in the market,
+and a report cuts the same way by its own months. A
 pair gets its row, and its EV, from its first closed trade; nothing has to be
 added anywhere for a new one.
 
@@ -474,52 +475,95 @@ sum of two currencies has no name.
 
 ## The Statistics tab
 
-**By playbook.** First on the tab, when any trade names a playbook: a row per
-playbook with its setups beneath it, the trades under none last, with
-trades, WR, Σ R, EV, money, and the *clean* and *held* shares. A row leads to
-the playbook's page. The Playbooks section above says what the shares mean.
+**What the tab is for.** The front page says where you stand now, a report says
+how one month went, a playbook page says whether one system works. This tab is
+the only page with no period of its own and a free filter: cut the whole
+history any way you like, and see whether that cut has an edge and whether
+there is enough of it to believe. It is laid out the way a report is, in the
+same order: the cut as the title, a strip of figures, two pictures, the equity,
+then the playbooks with the rules and the tables.
 
-**Equity by account.** One picture per account, each on its own scale, because
-the small moves of a small account would vanish next to a 100k prop. The switch
-above picks a single account and applies to the tables below as well. Archived
-accounts are not drawn: the account is done with and there is nothing left to
-watch. Their trades stay in every figure underneath.
+**The cut is written out at the top.** Under the word Statistics stands the
+selection in words, `XAUUSD · swing · Broker · August 2026`, and every part of it
+is a link that drops that one part. The funnel to the right opens the whole
+form, **The trades** opens the selection as a list on the front page, and
+**CSV** writes the same selection into a file for a spreadsheet, a period cut
+included. The line under the title says how many
+trades closed, how many are still open and therefore out of every figure, the
+money the cut made when every trade sits on one account, between which dates
+the trades closed, and how many closed trades the filter left out. Those left
+out are what the grey figures in the strip are read against: a filtered page
+has no month before it, but it always has a rest.
 
-The dashed line across the picture is the balance the curve starts from: the
-opening balance of the account, or the balance it entered the first month of
-the filter with. The wash under the curve is green above that line and red
-below it, so which side of the start the account is on is read before a single
-number is. A hollow dot on the curve is money that moved outside a trade: a
-deposit, a withdrawal, a fee. The dashed line steps with it, up at a deposit
-and down at a withdrawal, so the wash stays what the trading did and taking
-money out does not paint the account red. The numbers at the end of the line
-are the balance now and how far it is from that line. The switch on the right
-reads the curve **by date** or **by trade**, one step per closed trade, which is
-how an equity curve is usually looked at: the calendar stretches a quiet month
-and squeezes a busy day, and by trade every trade takes the same room.
+**The strip.** Six figures, one tile each.
 
-The line is drawn softly, but it never invents a high or a low: the curve is
-bent only between the points it has. A peak on the picture is a peak that
-happened. Trades closed on the same day are laid out across that day in the
-order they were closed, because a journal records the date of a close and not
-the hour, and stacking them on one x would make a vertical wall out of an
-ordinary day.
+- **EV per trade** leads, because it is the one figure that stays comparable
+  when the filter changes: Σ R grows with the size of the cut and says nothing
+  between two cuts, so it stands in the line under it with the number of
+  trades.
+- **Winrate**, and beside it, a size down, the winrate this selection would
+  need to come out at zero, break-evens charged in. Over that figure the
+  trades pay, under it they do not, which is what the EV says in one number.
+  Under the tile the trades won, lost, break-even and still open, by colour.
+- **Payoff**: how many R a win brings for every R a loss costs, the average
+  win and the average loss under it. A ratio carries no sign; whether it is
+  enough is what the winrate needed beside it answers.
+- **Deepest fall from a high**: how far the selection went under its own high,
+  between which dates, whether it has been made back or how far under it still
+  stands, and the longest run of losses. The figure is never painted red: a
+  fall is negative by definition, so a colour would say nothing.
+- **Mistakes**, counted the way a report counts them: a rule ticked as not
+  met, at the entry or at the close, or a loss past the stop, a trade that did
+  both being one mistake; under the count, what those trades brought and how
+  many trades under a playbook were never ticked.
+- **Best and worst trade** by R, each a link to the trade.
 
-With a **from month** filter on, the curve starts at the balance the account
-entered that month with: everything before it is folded into the first point.
-With a filter by style, pair or direction, only the chosen trades move the line
-from there, so the picture says what those trades alone did to the account.
+A winrate or a payoff worked out from fewer than five decided trades is grey,
+because a percentage of two trades is not a rate. An empty tile is a hyphen
+with the reason under it.
 
-**Streaks.** Under the rings: the longest run of wins, the longest run of
-losses and the run the selection is on now, all in the order the trades closed.
+**Trade by trade, or week by week.** The left picture under the strip is the
+selection over time. With thirty closed trades or fewer, and on any cut to a
+week, every trade is one bar in the order of the exits against the line of the
+stop, the way a report draws its month, and each bar opens its trade. Past
+thirty the bars are weeks, months or quarters, the R of the trades that closed
+in each, oldest on the left, each bar named while the picture has room for a
+name and the months or years marked across it whether it has or not; the page
+opens on whichever grain
+the span of the selection asks for, and the switch in the corner reads it any
+other way. A period that closed nothing keeps its place and draws no bar,
+because a week the account stood still is part of the picture. The same
+figures as a table, newest first, stand among the tables at the foot of the
+page; the newest twelve periods are open and the rest fold under one line.
 
-**R distribution.** Two rings: the losses on the left, the wins on the right,
-each cut by the size of R. Pointing at a slice, or at its line in the list
-beside the ring, lights up both and dims the rest: five steps of one colour
-cannot be told apart by eye, and they do not have to be. In the middle of a ring stands the number of trades
-in it and their total R; beside it every slice is written out with its count,
-its share and its R. The further a bucket is from zero, the brighter the slice.
-Break-even trades are in neither ring, and their number is named above.
+**A bar or a row narrows the page to that period**, counted the same way it
+was counted, by the exit. This is the one cut that does not go through the
+months of the filter: those pick trades by the entry, the way the list of
+trades does, and a period picks by the exit, the way a report does. Mixing them
+would print a total that disagrees with the row you clicked on. The period
+stands in the title like every other part of the cut, drops itself the same
+way, and is shown in the filter form so that the count on the funnel adds up.
+A trade belongs to the period it closed in, so one entered in July and closed
+in August stands in August. Inside a month read by weeks, a week that straddles
+the edge of the month is drawn without a link: its own page would count the
+days outside the month too, and the figures would not be the bar's.
+
+**The trades** in the header opens the journal over the months of the period,
+narrowed to the months the filter already held. The journal picks by the
+entry, so that list is not quite the set this page counted: a trade entered in
+July and closed in August is counted here and stands in July there. The CSV
+button has no such trouble, since the file is written from the same selection
+the page counted.
+
+**R distribution.** Two rings beside the tape: the losses on the left, the
+wins on the right, each cut by the size of R. Pointing at a slice, or at its
+line in the list under the ring, lights up both and dims the rest: five steps
+of one colour cannot be told apart by eye, and they do not have to be. In the
+middle of a ring stands the number of trades in it and their total R; under
+it every slice is written out with its count, its share and its R, the unit
+being the one in the middle. The further a bucket is from zero, the brighter
+the slice. Break-even trades are in
+neither ring, and their number is named above.
 
 **The losses are cut where a stop lands.** A trade taken to the stop comes back
 a little worse than -1R, because commission and swap are paid on top of it, so
@@ -534,10 +578,74 @@ Read together the two rings answer the question a trader actually asks: are the
 losses one size, and do the wins reach far enough to pay for them. The rings in
 a monthly or quarterly report are cut the same way, on the trades of that period.
 
-**By style, by pair, by account.** Three tables under the rings, one row per
-value: the number of trades, the WR, Σ R, the EV and the result in money. A row
-appears as soon as a value has a closed trade in the selection, so a new pair
-is counted from its first trade.
+**Equity.** Across the page under the pictures: one curve per account, side
+by side, each on its own scale, because the small moves of a small account
+would vanish next to a 100k prop. The switch in the head picks a single
+account, which is the account filter itself, so the whole page follows it;
+the switch on the right reads the curve **by date** or **by trade**, one step
+per closed trade, which is how an equity curve is usually looked at: the
+calendar stretches a quiet month and squeezes a busy day, and by trade every
+trade takes the same room. Archived accounts are not drawn: the account is done
+with and there is nothing left to watch. Their trades stay in every figure on
+the page.
+
+The dashed line across the picture is the balance the curve starts from: the
+opening balance of the account, or the balance it entered the cut with. The
+wash under the curve is green above that line and red below it, so which side
+of the start the account is on is read before a single number is. A hollow dot
+on the curve is money that moved outside a trade: a deposit, a withdrawal, a
+fee. The dashed line steps with it, up at a deposit and down at a withdrawal,
+so the wash stays what the trading did and taking money out does not paint the
+account red. The numbers at the end of the line are the balance the curve ends
+at, which is the balance now unless the page is cut to a period, and how far it
+is from that line.
+
+The line is drawn softly, but it never invents a high or a low: the curve is
+bent only between the points it has. A peak on the picture is a peak that
+happened. Trades closed on the same day are laid out across that day in the
+order they were closed, because a journal records the date of a close and not
+the hour, and stacking them on one x would make a vertical wall out of an
+ordinary day.
+
+With a **from month** filter on, or a cut to a period, the curve starts at the
+balance the account entered it with: everything before is folded into the
+first point, and a period also ends the curve where it ended. With a filter by
+style, pair or direction, only the chosen trades move the line from there, so
+the picture says what those trades alone did to the account.
+
+**By playbook.** A row per playbook with its setups beneath it, the trades
+under none last, with trades, WR, Σ R, EV, money, and the *clean* and *held*
+shares. A row leads to the playbook's page. The Playbooks section above says
+what the shares mean.
+
+**Rules.** Beside it, the report's table: every rule ticked as not met in the
+selection with how many trades broke it and what they brought, the dearest
+first, and under them the trades that kept every rule, which is the measure.
+Only trades that went through a checklist stand there, at the entry or at the
+close; one tied to a playbook later and never ticked was never held against
+its rules. When trades of more than one playbook are in the cut, the name of
+the playbook stands before the number of the rule. **Past the stop**, a table
+of its own: the losses that went deeper than -1.2R, worst first, ten at most,
+each a way to its trade.
+
+**The tables.** By period, pair, style, account, direction, entry timeframe,
+execution and time in the market, in two columns. A row of the period, pair,
+style, account or direction table narrows the page to that value, and the
+name of the cut at the top drops it again; the other three are cut by fields
+the filter does not carry, so their rows carry no link. A table
+whose value the page is already cut to is not drawn, since its one row would
+only repeat the strip. Time in the market is counted in whole days between
+the entry and the exit, because an exit is often written without an hour.
+
+The cards from the playbooks down are dealt into the two columns by their
+height, so that the columns end together whatever the journal put in them: a
+long list of pairs, sixty weeks or ten losses past the stop changes which card
+stands where; the shorter column is left with no empty ground under it.
+
+**A selection with nothing closed in it says so.** Filter down to open
+positions, or to a pair you have not traded in the months chosen, and the page
+answers in one line instead of drawing a strip of hyphens and a curve made of
+deposits.
 
 ## Money in and out
 

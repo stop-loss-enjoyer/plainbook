@@ -45,6 +45,62 @@ What changed and why. Newest first.
 
 ### Changed
 
+- **The Statistics tab reads like a report.** It used to open on seven
+  drop-downs, then a table, a chart, two more tables and the same three
+  sentences printed under each of them, with no figure anywhere saying what
+  the selection had actually done. It now has the zones of a report, in the
+  report's order. The cut is written out as the title, `XAUUSD · swing ·
+  Broker · August 2026`, every part of it a link that drops that part, with
+  the funnel beside it and, under the title, how many trades closed, how
+  many are still open and out of the figures, the money when every trade sits
+  on one account, and how many closed trades the filter left out. Those left
+  out are what the grey figures in the strip are read against. The strip is
+  six figures: the EV per trade, the one number that stays comparable when
+  the filter changes; the winrate, and beside it the winrate these trades
+  would need to come out at zero; the payoff; the deepest fall from a high,
+  between which dates and whether it has been made back; the mistakes, as a
+  report counts them; and the best and worst trade, each a way in. Under the
+  strip the trades stand one bar each in the order of the exits while there
+  are thirty or fewer, and past that the weeks, months or quarters, each bar
+  named while the picture has room for a name, a period that closed nothing
+  keeping its place; the two rings of R beside it. A bar narrows the page to its period, counted by the exit the
+  way the bar was counted, and the curve then starts at the balance the
+  period began with, as a report draws it. Under the pictures the equity of
+  every account across the page, drawn side by side, the account switch in
+  the frame every other choice uses. Then the playbooks beside the rules,
+  which are rule by rule as in a report, and the tables: the losses past the
+  stop, the periods (the newest twelve open and the rest folded), pair,
+  style, account, direction, entry timeframe, execution and time in the
+  market. A row of the pair, style, account, direction or period table
+  narrows the page to itself and the title drops it again, and a table whose
+  value the page is already cut to is not drawn. The tables are dealt into
+  the two columns by their height, so the columns end together whatever the
+  journal put in them; the tables of a report are dealt the same way. A
+  selection with no closed trade in it says so in one line instead of
+  drawing a curve out of deposits alone. The CSV button now carries a period
+  cut as it is, so the file holds the trades the page counted and not the
+  entries of the months around them.
+- **The deepest fall is worked out in the order the tape draws.** Two trades
+  closed at the same stamp, which is what an exit written without an hour
+  gives, used to be taken loss first; they are now taken in the order of
+  their ids, the order the picture and the streaks already used. A report
+  rebuilt after this update can show a different figure for a period that
+  has such a pair in it, without a trade having changed.
+- **A winrate worked out from a handful of trades stands in grey**, on the
+  statistics, in the reports and on a playbook page. A row of one trade said
+  `100.0%` in the same ink as a row of twenty, and there was nothing to tell
+  them apart. Under five decided trades the figure is greyed, and a selection
+  with nothing decided in it gets a hyphen instead of `0.0%`, which read as a
+  run of losses.
+- **The two rings of R are one size now**, the compact one, since both pages
+  that draw them stand them beside another picture, and they read shorter:
+  one line under them instead of five, the R written once in the middle of
+  the ring instead of on every row of the list. What a stop costs and when a
+  loss ran past it is said under Past the stop, and at length in the guide.
+- **Streaks lost their card.** The longest run of losses is a clause under
+  the deepest fall from a high, where it belongs: both say how bad it got.
+  The longest run of wins and the run going on now are gone, the second of
+  them being the first rows of the journal.
 - **A report opens on a strip of figures.** A monthly or quarterly report
   used to be a summary table and a wall of tables under it, every number the
   same size, the profit and the mistakes to be looked for. It now opens on a
@@ -93,6 +149,12 @@ What changed and why. Newest first.
 
 ### Fixed
 
+- **Reset on the Statistics tab threw you onto the Journal.** The form of the
+  filters was written for the front page and carried its address wherever it
+  was drawn, so Reset changed the tab as well as the filter. It now belongs to
+  the page it stands on, and Show keeps the reading of the page it was pressed
+  on: the axis of the curve and the grain of the picture no longer fall back
+  to the default when a filter changes.
 - **A management rule ticked as not held counts even when the entry checklist
   was never ticked.** A trade tied to its playbook later and ticked only at
   the close was left out of the rules figures, on the playbook page and in

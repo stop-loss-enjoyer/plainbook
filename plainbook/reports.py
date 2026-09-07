@@ -10,7 +10,7 @@ and the place the owner's "Conclusions" live; that section is NEVER overwritten.
 """
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timedelta
 
 from . import html as H
@@ -214,7 +214,9 @@ def compose(root, journal, period):
     for k in r.cards:
         grades[k.grade or "not graded"] = grades.get(k.grade or "not graded", 0) + 1
     r.grades = sorted(grades.items())
-    discipline(root, journal, trades, r)
+    d = discipline(root, journal, trades)
+    for f in fields(Discipline):
+        setattr(r, f.name, getattr(d, f.name))
     # the order the account felt them: by the exit, the way the tape draws them
     r.order = sorted(trades, key=lambda t: (t.closed, t.id))
     return r
@@ -240,20 +242,42 @@ def playbook_rows(root, journal, trades):
     return out
 
 
-def discipline(root, journal, trades, r):
-    """How the trades of the period went through their checklists, and which
-    rules were broken at what cost.
+@dataclass
+class Discipline:
+    """How a set of trades went through the rules: the fields of a Report
+    that the Statistics tab reads off its own selection as well."""
+    ticked: int = 0
+    unticked: int = 0
+    kept: stats.Summary = None
+    broke: stats.Summary = None
+    rules: list = field(default_factory=list)      # [(playbook label, Rule, trades, Summary)]
+    past_stop: list = field(default_factory=list)
+    entry_broken: int = 0
+    close_broken: int = 0
+    mistakes: list = field(default_factory=list)
+    mistakes_sum: stats.Summary = None
+
+
+def discipline(root, journal, trades):
+    """How the trades went through their checklists, and which rules were
+    broken at what cost.
 
     Only ticked trades say anything, at the entry or at the close: one tied to
     its playbook later and never ticked anywhere was never held against the
     rules. A rule is counted by number, so only the trades
     ticked against the current version of a playbook stand in the rule rows,
     the way the playbook's own page counts them; the shares of clean and
-    broken trades take every ticked trade of the period."""
+    broken trades take every ticked trade of the period.
+
+    Closed trades only, the way stats.checklist counts them: a position still
+    in the market has no R to put against a rule, and every figure standing
+    beside this one counts what is closed. A report hands over the trades of
+    its period, which are closed by construction; the Statistics tab hands
+    over a selection, which is not."""
+    trades = [t for t in trades if not t.is_open]
+    c = stats.checklist(journal, trades)
     ticked = [t for t in trades if stats.ticked(t)]
-    r.ticked = len(ticked)
-    r.kept = stats.summary(journal, [t for t in ticked if not stats.broke(t)])
-    r.broke = stats.summary(journal, [t for t in ticked if stats.broke(t)])
+    r = Discipline(ticked=c.ticked, unticked=c.unticked, kept=c.kept, broke=c.broke)
     rows = []
     for p in store.all_playbooks(root, []):
         same = [t for t in trades
@@ -265,16 +289,9 @@ def discipline(root, journal, trades, r):
     # the dearest first: what cost the most R stands at the top
     rows.sort(key=lambda x: (x[3].sum_r, -x[2]))
     r.rules = rows
-    # a loss past the stop lost more than the risk allowed; the edge is the one
-    # the rings cut at, so the two agree
-    edge = stats.LOSS_BUCKETS[2][1]
-    r.past_stop = sorted(
-        (t for t in trades if t.result == "Lose"
-         and abs(journal.r(t.id) or 0.0) >= edge),
-        key=lambda t: journal.r(t.id) or 0.0)
+    r.past_stop = stats.past_stop(journal, trades)
     r.entry_broken = sum(1 for t in ticked if t.deviations)
     r.close_broken = sum(1 for t in ticked if t.exit_deviations)
-    r.unticked = sum(1 for t in trades if t.playbook and not stats.ticked(t))
     # what the journal itself calls a mistake: a rule ticked as not met, at
     # the entry or at the close, or a loss past the stop. A trade that did two
     # of these is one mistake; a trade never ticked is not one either way
@@ -285,6 +302,7 @@ def discipline(root, journal, trades, r):
             mistakes.append(t)
     r.mistakes = mistakes
     r.mistakes_sum = stats.summary(journal, mistakes)
+    return r
 
 
 def extremes(journal, trades):

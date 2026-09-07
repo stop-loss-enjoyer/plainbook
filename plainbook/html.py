@@ -165,6 +165,8 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 .tile .value{{font:600 22px/1.15 {MONO};margin-top:5px;
  font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
 .tile .sub{{color:{INK2};font-size:11px;margin-top:4px}}
+/* a figure and its R move to the next line together, never parted */
+.tile .sub .rest{{white-space:nowrap}}
 /* the EV shares the line with the winrate, a size down, and says by colour
    which side of zero it is on; it drops to its own line if the tile is narrow */
 .tile .value .ev{{font-size:13px;margin-left:8px;white-space:nowrap}}
@@ -442,26 +444,47 @@ mark{{background:rgba(111,157,255,.28);color:inherit;border-radius:2px}}
 
 /* reports: the period at reading size, the strip of tiles under it, two
    pictures side by side, the tables after the story */
-.report-head{{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:0 0 14px}}
-.report-head h2{{margin:0 0 4px}}
-.report-head .pb-meta{{margin:0 0 2px}}
-.report-head .right{{margin-left:auto}}
+/* the head of a page that is not a card: what is being looked at on the left,
+   what changes it on the right. Relative, because the filter popover hangs
+   off it the way it hangs off the head of a card */
+.page-head{{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;
+ margin:0 0 14px;position:relative}}
+.page-head h2{{margin:0 0 4px}}
+.page-head .pb-meta{{margin:0 0 2px}}
+.page-head .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
+/* the cut is written out in the title and every part of it drops itself:
+   text, lit under the pointer, like the name of an account over a balance */
+.page-head h1 a{{color:{INK}}}
+.page-head h1 a:hover{{color:{ACCENT}}}
+.page-head .pb-meta a{{color:{INK2}}}
+.page-head .pb-meta a:hover{{color:{ACCENT}}}
 .tile.lead .value{{font-size:28px;white-space:nowrap}}
 .tile .value .ev{{font-weight:500}}
 /* a trade named in a tile is a way in, drawn as quietly as the name of an
    account over a balance: text, lit under the pointer */
 .tile .sub a{{color:{INK2}}}
 .tile .sub a:hover{{color:{ACCENT}}}
-.pictures{{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;
+.pictures{{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,3fr);gap:16px;
  margin-bottom:16px}}
 .pictures>.card{{margin-bottom:0;min-width:0}}
 @media (max-width:1100px){{.pictures{{grid-template-columns:1fr}}}}
+/* the curves of the accounts in one row, each drawn at the width of its
+   cell; the count of columns is written on the element by the page, since
+   it is the number of accounts and not a property of the theme */
+.charts{{display:grid;gap:4px 16px}}
+.charts>div{{min-width:0}}
+.charts h3{{margin-top:0}}
+@media (max-width:900px){{.charts{{grid-template-columns:1fr !important}}}}
 .twin>.card{{margin-bottom:16px}}
 /* six figures in one row; on a narrower screen two rows of three, so the
-   strip never leaves an empty corner and the names stay on one line */
-.tiles.report{{grid-template-columns:repeat(6,1fr)}}
-@media (max-width:1250px){{.tiles.report{{grid-template-columns:repeat(3,1fr)}}}}
-@media (max-width:700px){{.tiles.report{{grid-template-columns:repeat(2,1fr)}}}}
+   strip never leaves an empty corner and the names stay on one line. Two
+   names for one strip: a test pins the report's, and "report" is not what
+   the strip of the statistics is */
+.tiles.report,.tiles.strip{{grid-template-columns:repeat(6,1fr)}}
+@media (max-width:1250px){{.tiles.report,.tiles.strip{{
+ grid-template-columns:repeat(3,1fr)}}}}
+@media (max-width:700px){{.tiles.report,.tiles.strip{{
+ grid-template-columns:repeat(2,1fr)}}}}
 .twin .tiles.narrow .tile{{flex:1 0 236px}}
 /* the playbook table is eight columns wide and does not fit half a page */
 @media (max-width:1150px){{.twin.books{{grid-template-columns:1fr}}}}
@@ -469,6 +492,9 @@ mark{{background:rgba(111,157,255,.28);color:inherit;border-radius:2px}}
 .rings.compact .ring{{flex:1 1 200px;min-width:0;padding:10px 12px}}
 .rings.compact .ring-body{{flex-direction:column;align-items:flex-start;gap:6px}}
 .rings.compact .donut-legend{{flex:none;width:100%}}
+/* the name of a bucket wraps rather than pushing its figures out of the box:
+   the legend stands in half a column here and the window can be narrower */
+.rings.compact .donut-legend td:first-child{{white-space:normal}}
 .grades{{margin:8px 0 0;display:flex;gap:6px;flex-wrap:wrap}}
 .grades .chip b{{color:{INK};font-weight:600;margin-left:4px}}
 ul.errors{{margin:6px 0 0;padding-left:0;list-style:none;max-width:760px}}
@@ -1019,12 +1045,26 @@ def equity_svg(series, width=980, height=260, cid="equity", sign="$",
     return svg + f'<script>hover_chart("{cid}");</script>'
 
 
-def tape_svg(bars, marks, width=980, height=230, stop=1.0):
+def tape_svg(bars, marks, width=980, height=230, stop=1.0, bar_max=18.0,
+             labels=()):
     """The trades of a period one bar each, in the order they closed.
 
     bars: [(r, result, href, words)], words being the title of the bar. marks:
     [(index, label)] where a new week or month begins, drawn as a thin line
-    before that bar with the label under it.
+    before that bar with the label under it. labels: one short name per bar,
+    written under it when a slot is wide enough to carry three letters;
+    fifteen months read as months only if each bar says which one it is.
+    A bar whose href is empty is drawn without a link.
+
+    An r of None keeps its place in the row and draws nothing: a period that
+    closed no trade is part of the picture, and a chart with the gaps squeezed
+    out would draw a year of trading as if it had been continuous.
+
+    `stop=None` draws no stop line and lets the axis follow the data: -1 R is
+    the stop of one trade and means nothing under a sum of them, where the
+    forced floor would flatten a good year. `bar_max` lets a dozen bars stand
+    as columns instead of sticks; the width of a slot still governs when there
+    are many.
 
     A win stands up from zero in green, a loss hangs down in red, a break-even
     is an amber tick on the line: the same three colours the front page counts
@@ -1032,17 +1072,22 @@ def tape_svg(bars, marks, width=980, height=230, stop=1.0):
     reaches past it lost more than the risk allowed, and it shows without a
     word. Every bar
     opens its trade."""
-    if not bars:
+    values = [r for r, _, _, _ in bars if r is not None]
+    if not values:
         return '<p class="muted">No closed trades in this period.</p>'
-    values = [r for r, _, _, _ in bars]
-    low = min(-1.5, math.floor(min(values) * 2) / 2)
-    high = max(1.0, math.ceil(max(values) * 2) / 2)
-    pad = (44, 12, 30, 44)                         # left, top, bottom, right
+    low = min(-1.5 if stop else 0.0, math.floor(min(values) * 2) / 2)
+    high = max(1.0 if stop else 0.0, math.ceil(max(values) * 2) / 2)
+    if high - low < 1e-9:              # one flat bar carries no scale of its own
+        high = low + 1.0
+    # the right margin held the word "stop" and is not needed without it;
+    # the bottom one holds a second row when every bar carries its name
+    slot = (width - 44 - (44 if stop else 16)) / len(bars)
+    named = bool(labels) and slot >= 30
+    pad = (44, 12, 44 if named else 30, 44 if stop else 16)  # left, top, bottom, right
     pw, ph = width - pad[0] - pad[3], height - pad[1] - pad[2]
     left, right = pad[0], width - pad[3]
     top, bottom = pad[1], pad[1] + ph
-    slot = pw / len(bars)
-    bar_w = max(2.0, min(slot * 0.62, 18.0))
+    bar_w = max(2.0, min(slot * 0.62, bar_max))
 
     def Y(v):
         return top + ph * (high - v) / (high - low)
@@ -1070,26 +1115,37 @@ def tape_svg(bars, marks, width=980, height=230, stop=1.0):
             parts.append(f'<text x="{x + span / 2:.1f}" y="{height - 9}" fill="{DIM}" '
                          f'font-size="10" letter-spacing=".08em" text-anchor="middle">'
                          f'{esc(label)}</text>')
-    zero, stop_y = Y(0.0), Y(-stop)
-    parts.append(f'<line x1="{left}" y1="{stop_y:.1f}" x2="{right}" y2="{stop_y:.1f}" '
-                 f'stroke="{DIM}" stroke-width="1" stroke-dasharray="3 4"/>')
-    parts.append(f'<text x="{right + 6}" y="{stop_y + 3:.1f}" fill="{DIM}" '
-                 f'font-size="10">stop</text>')
+    if named:
+        for i, label in enumerate(labels):
+            parts.append(f'<text x="{left + slot * (i + 0.5):.1f}" y="{height - 24}" '
+                         f'fill="{DIM}" font-size="10" letter-spacing=".04em" '
+                         f'text-anchor="middle">{esc(label)}</text>')
+    zero = Y(0.0)
+    if stop:
+        stop_y = Y(-stop)
+        parts.append(f'<line x1="{left}" y1="{stop_y:.1f}" x2="{right}" '
+                     f'y2="{stop_y:.1f}" stroke="{DIM}" stroke-width="1" '
+                     f'stroke-dasharray="3 4"/>')
+        parts.append(f'<text x="{right + 6}" y="{stop_y + 3:.1f}" fill="{DIM}" '
+                     f'font-size="10">stop</text>')
     parts.append(f'<line x1="{left}" y1="{zero:.1f}" x2="{right}" y2="{zero:.1f}" '
                  f'stroke="{AXIS}" stroke-width="1"/>')
     for i, (r, result, href, words) in enumerate(bars):
+        if r is None:
+            continue
         x = left + slot * (i + 0.5) - bar_w / 2
         title = f"<title>{esc(words)}</title>"
         if result == "BE":
-            parts.append(f'<a href="{esc(href)}"><rect x="{x:.1f}" y="{zero - 1.5:.1f}" '
-                         f'width="{bar_w:.1f}" height="3" fill="{WARN}">{title}</rect></a>')
-            continue
-        y = Y(r)
-        colour = GOOD if result == "Win" else BAD
-        y0, y1 = min(y, zero), max(y, zero)
-        parts.append(f'<a href="{esc(href)}"><rect x="{x:.1f}" y="{y0:.1f}" '
-                     f'width="{bar_w:.1f}" height="{max(y1 - y0, 1.0):.1f}" '
-                     f'fill="{colour}" fill-opacity=".82">{title}</rect></a>')
+            rect = (f'<rect x="{x:.1f}" y="{zero - 1.5:.1f}" width="{bar_w:.1f}" '
+                    f'height="3" fill="{WARN}">{title}</rect>')
+        else:
+            y = Y(r)
+            colour = GOOD if result == "Win" else BAD
+            y0, y1 = min(y, zero), max(y, zero)
+            rect = (f'<rect x="{x:.1f}" y="{y0:.1f}" width="{bar_w:.1f}" '
+                    f'height="{max(y1 - y0, 1.0):.1f}" fill="{colour}" '
+                    f'fill-opacity=".82">{title}</rect>')
+        parts.append(f'<a href="{esc(href)}">{rect}</a>' if href else rect)
     return (f'<svg class="tape" viewBox="0 0 {width} {height}" width="100%" '
             f'preserveAspectRatio="xMidYMid meet" role="img">' + "".join(parts) + "</svg>")
 
@@ -1210,13 +1266,15 @@ def donut_legend(rows, total):
     """The slices in words: a chip, the bucket, how many and what share.
 
     A ring alone leaves the reader guessing at the sizes, so the numbers stand
-    next to it and the colour only carries the order."""
+    next to it and the colour only carries the order. The R is not repeated
+    on every row: the middle of the ring carries the unit, and the row is
+    read beside it."""
     lines = "".join(
         f'<tr data-slice="{i}"><td><i style="background:{colour}"></i>{esc(label)}</td>'
         f'<td class="num">{n}</td>'
         f'<td class="num muted">{100.0 * n / total:.0f}%</td>'
         f'<td class="num {"win" if sum_r > 0 else "lose" if sum_r < 0 else "muted"}">'
-        f'{sum_r:+.1f} R</td></tr>'
+        f'{sum_r:+.1f}</td></tr>'
         for i, (label, n, sum_r, colour) in enumerate(rows) if n)
     return f'<table class="donut-legend"><tbody>{lines}</tbody></table>'
 

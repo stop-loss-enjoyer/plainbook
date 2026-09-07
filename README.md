@@ -82,10 +82,15 @@ the weekly process, what went well, errors, the best trade and the ones you
 missed, the key lesson, and the same trades assessment as the daily card. The
 PnL and the number of trades come from the week you traded, and stay editable.
 
-**Statistics that answer honest questions.** An equity curve per account, by
-date or by trade, coloured against the balance it started from, the
-distribution of R as two rings, losses and wins each cut by size, and slices by
-style, pair and account with the EV of every row.
+**Statistics that answer honest questions.** Cut the whole history any way you
+like and the page opens on what that cut did: the EV per trade, the winrate
+beside the winrate it would need to break even, the payoff, the deepest fall
+from a high, the mistakes and the best and worst trade, each read against the
+trades the filter left out. Then the trades one bar each, or the weeks, months
+or quarters once there are too many to tell apart, the distribution of R as
+two rings, losses and wins cut by size, an equity curve per account, by date
+or by trade, coloured against the balance it started from, and the tables,
+dealt into two columns that end together; a row narrows the page to itself.
 
 **A report read in a second.** A month or a quarter opens on its figures, one
 tile each: the result, the winrate with the EV and the deepest fall from a
@@ -137,8 +142,10 @@ to the record with the matching words shown around it.
 account adds up what today has already cost and what the open trades still put
 at risk, turns amber at four fifths of the limit and red when it is reached.
 
-**Streaks.** The run the selection is on now and the longest runs of wins
-and of losses, on the Statistics tab, counted in the order the trades closed.
+**The deepest fall from a high.** How far a selection went under its own high,
+in R. On the Statistics tab it also says between which dates, whether it has
+been made back and the longest run of losses of the selection; a report carries the
+figure against the period before.
 
 **The selection as CSV.** One button next to the filters writes the filtered
 list into a file for a spreadsheet, with every stored field and the computed
@@ -301,7 +308,9 @@ everything else.
 
 **EV** = Σ R / closed trades: what a trade brought on average, in R. It stands
 to the right of every win rate on the front page, and is a column of every
-table on the Statistics tab and in the reports. Unlike the win rate, it counts
+table on the Statistics tab and in the reports. A win rate worked out from
+fewer than five decided trades stands in grey, because a percentage of two
+trades is not a rate. Unlike the win rate, it counts
 the break-evens: a trade closed at zero still paid its commission and never
 comes back at exactly zero R.
 

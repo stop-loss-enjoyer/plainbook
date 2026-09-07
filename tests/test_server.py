@@ -14,7 +14,7 @@ import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -218,7 +218,7 @@ class ServerCase(unittest.TestCase):
         code, html = self.get("/stats")
         self.assertEqual(code, 200)
         self.assertIn("<svg", html)
-        self.assertIn("R distribution", html)
+        self.assertIn("<h2>R distribution</h2>", html)
 
     def test_12_open_trade_counter(self):
         code, body = self.get("/open-count")
@@ -510,15 +510,39 @@ class ServerCase(unittest.TestCase):
     def test_29_statistics_leaves_archived_accounts_off_the_charts(self):
         """An archived account is done with: nothing to watch on its curve.
         Its trades still count in the figures underneath."""
+        # the tab shows its pictures once something has closed, so give it one
+        _, html = self.get("/new")
+        _, where = self.post("/new", {
+            "token": self.form_token(html), "blocks": "1", "account": "broker",
+            "pair": "EURUSD", "direction": "long", "style": "swing",
+            "entry_tf": "H4", "risk": "1", "entry": "2026-08-18T10:00"})
+        tid = self.landed(where)
+        _, html = self.get(f"/close/{urllib.parse.quote(tid)}")
+        self.post(f"/close/{urllib.parse.quote(tid)}", {
+            "token": self.form_token(html), "result": "BE", "pnl": "0",
+            "exit": "2026-08-19", "conclusions": ""})
         code, html = self.get("/stats")
         self.assertEqual(code, 200)
-        tabs = re.search(r'Equity by account.*?</p>', html, re.S).group(0)
-        self.assertIn("Broker", tabs)
-        self.assertNotIn("Legacy", tabs)                 # archived
-        self.assertIn("Archived accounts are not drawn", html)
-        # picked by hand through the filter, it is shown again
-        _, html = self.get("/stats?account=legacy")
-        self.assertIn("Legacy", html)
+        card = re.search(r'<h2>Equity</h2>.*?</p>', html, re.S).group(0)
+        self.assertIn("<h3>Broker</h3>", card)
+        self.assertNotIn("Legacy", card)                 # archived: no curve, no switch
+        self.assertIn("Archived accounts are not drawn", card)
+        # picked by hand through the filter, it is shown again, with its curve
+        store.save_trade(self.root, Trade(
+            id="2026-08-02-01-audusd", account="legacy", pair="AUDUSD",
+            direction="long", style="swing", risk=1.0,
+            opened=datetime(2026, 8, 2), closed=datetime(2026, 8, 3),
+            result="Win", pnl=50))
+        self.S.drop_cache()
+        try:
+            _, html = self.get("/stats?account=legacy")
+            card = re.search(r'<h2>Equity</h2>.*?</p>', html, re.S).group(0)
+            self.assertIn('class="current" href="/stats?account=legacy">Legacy</a>', card)
+            self.assertIn("<h3>Legacy</h3>", card)
+            self.assertIn("<svg", card)
+        finally:
+            shutil.rmtree(store.trade_dir(self.root, "2026-08-02-01-audusd"))
+            self.S.drop_cache()
 
     def test_30_the_r_rings_split_wins_from_losses(self):
         """A win and a loss land in their own ring, with their R in the middle."""
@@ -536,8 +560,8 @@ class ServerCase(unittest.TestCase):
                 "exit": "2026-08-21", "conclusions": ""})
         code, html = self.get("/stats")
         self.assertEqual(code, 200)
-        rings = re.search(r'R distribution.*?</div></div>\s*<p class="caption">',
-                          html, re.S).group(0)
+        rings = re.search(r'<h2>R distribution</h2>.*?</div></div>\s*'
+                          r'<p class="caption">', html, re.S).group(0)
         self.assertIn("Losses", rings)
         self.assertIn("Wins", rings)
         self.assertIn("closed", rings)
@@ -765,6 +789,11 @@ class ServerCase(unittest.TestCase):
         self.assertIn('class="tape"', html)              # and the tape of the trades
         # the figures lead: the strip of tiles stands before the first table
         self.assertLess(html.index('class="tiles report"'), html.index("<table"))
+        # the tables of the appendix are dealt into two columns, the way the
+        # Statistics tab deals its own
+        appendix = html[html.rindex('<div class="twin"><div>'):]
+        for heading in ("<h2>Accounts</h2>", "<h2>By pair</h2>", "<h2>By style</h2>"):
+            self.assertIn(heading, appendix, heading)
         # the named trade is a link to the trade itself
         best = re.search(r'<a href="/trade/([^"]+)">', html)
         self.assertTrue(best)
@@ -1184,7 +1213,12 @@ class ServerCase(unittest.TestCase):
             self.assertIn('<th class="num">held</th>', html)
             self.S.drop_cache()
             _, html = self.get("/stats")
-            self.assertLess(html.index("By playbook"), html.index("Equity"))
+            # the playbooks head the zone of cards, the plain slices being
+            # the appendix under and beside them
+            self.assertIn('<div class="twin"><div><div class="card">'
+                          '<h2>By playbook</h2>', html)
+            self.assertLess(html.index('class="tiles strip"'),
+                            html.index("<h2>By playbook</h2>"))
             self.assertIn('href="/playbook/pull"', html)
             self.assertIn('<tr class="sub"><td>A</td>', html)
             self.assertIn(f'>{stats.NO_PLAYBOOK}</td>', html)
@@ -1493,7 +1527,7 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/")
         self.assertNotIn('<div class="name">streak</div>', html)
         _, html = self.get("/stats")
-        self.assertIn("longest run of wins", html)
+        self.assertIn("longest run of losses", html)
 
     # --- the weekly card ---
     def test_62_a_weekly_card_is_written_and_read_back(self):
@@ -1761,14 +1795,16 @@ class ServerCase(unittest.TestCase):
                                   "pnl": "-3", "exit": "2026-08-21",
                                   "conclusions": "flat, minus the commission"})
         j = self.S.journal()
-        rows = dict(stats.by_field(j, j.trades, lambda t: t.pair))
+        rows = dict(stats.by_values(j, j.trades, lambda t: [t.pair]))
         self.assertIn("NZDCAD", rows)
         code, html = self.get("/stats")
         self.assertEqual(code, 200)
         self.assertIn('<th class="num">EV</th>', html)
         self.assertNotIn("average R", html)
         for pair, s in rows.items():
-            row = re.search(rf'<tr><td>{re.escape(self.S.H.pair(pair))}</td>(.*?)</tr>',
+            # the label of a row is a link on the statistics, plain in a report
+            row = re.search(rf'<tr><td>(?:<a [^>]*>)?'
+                            rf'{re.escape(self.S.H.pair(pair))}(?:</a>)?</td>(.*?)</tr>',
                             html)
             self.assertTrue(row, pair)
             self.assertIn(f'<td class="num">{s.average_r:+.2f}</td>', row.group(1), pair)
@@ -2048,6 +2084,277 @@ class ServerCase(unittest.TestCase):
         # the shelf marks the report whose conclusions are written
         _, shelf = self.get("/reports")
         self.assertIn('class="dot"', shelf)
+
+    def test_77b_a_period_of_the_picture_narrows_the_statistics(self):
+        """A row of the periods answers on this page and with its own figures:
+        it cuts by the exit, the way it was counted, and not by the months of
+        the filter, which pick by the entry."""
+        _, html = self.get("/stats")
+        self.assertIn('href="/stats?closed=', html)
+        j = self.S.journal()
+        want = self.S.stats.summary(j, self.S.stats.closed_in(j.trades, "2026-08"))
+        _, html = self.get("/stats?closed=2026-08")
+        head = re.search(r'<div class="page-head">.*?</p>', html, re.S).group(0)
+        self.assertIn("August 2026", head)
+        self.assertIn(f"{want.trades} closed", head)
+        self.assertIn(f'{want.sum_r:+.2f} R</span> over {want.trades} closed', html)
+        # and it drops itself again from the title
+        self.assertIn('<a href="/stats" title="drop this">', head)
+
+    def test_78_a_loss_past_the_stop_with_no_exit_written_still_draws(self):
+        """A trade can carry a result and no exit date: the record loads, the
+        trade page prints a hyphen for the date, and the statistics must do
+        the same rather than refusing to draw the page."""
+        store.save_trade(self.root, Trade(
+            id="no-exit-loss", account="broker", pair="US100", direction="long",
+            style="swing", risk=1.0, opened=datetime(2026, 8, 11),
+            result="Lose", pnl=-500))            # about -5 R, well past the stop
+        self.S.drop_cache()
+        try:
+            code, html = self.get("/stats")
+            self.assertEqual(code, 200)
+            past = re.search(r"<h2>Past the stop</h2>.*?</table>", html, re.S).group(0)
+            self.assertIn("no-exit-loss", past)
+            self.assertIn(">-</a>", past)                    # the date it does not have
+            # the head says the trade is counted and not drawn, since the
+            # picture of the periods cannot place it
+            head = re.search(r'<p class="pb-meta">(.*?)</p>', html, re.S).group(1)
+            self.assertIn("1 with no exit date", head)
+            # the worst trade of the strip names it with a hyphen for the day
+            self.assertIn("US100 swing, -</a>", html)
+        finally:
+            shutil.rmtree(os.path.join(self.root, store.JOURNAL, "trades",
+                                       "no-exit-loss"))
+            self.S.drop_cache()
+
+    def test_79_a_period_cut_starts_the_curve_where_the_period_began(self):
+        """A bar of the picture cuts the page to its period, and the curve
+        beside it must then start where the period did, the way a report
+        draws it, not at the day the account was opened."""
+        _, html = self.get("/stats?closed=2026-08")
+        self.assertIn("since the period began", html)
+        self.assertNotIn("from start", html)
+        _, html = self.get("/stats?from=2026-08&to=2026-08")
+        self.assertIn("since the period began", html)
+        _, html = self.get("/stats")
+        self.assertIn("from start", html)
+
+    def test_79b_the_filter_form_belongs_to_the_tab_it_stands_on(self):
+        _, html = self.get("/stats?by=week&axis=trade&closed=2026-08")
+        form = re.search(r'<form class="filters"[^>]*>.*?</form>', html, re.S).group(0)
+        self.assertIn('action="/stats"', form)
+        self.assertIn('<a class="btn" href="/stats">Reset</a>', form)
+        self.assertEqual(sorted(re.findall(r'<input type="hidden" name="(\w+)"', form)),
+                         ["axis", "by", "closed"])
+        # the period is shown in the form, since the badge counts it
+        self.assertIn("<label>closed in</label>", form)
+        self.assertIn("August 2026", form)
+        self.assertIn('<span class="badge">1</span>', html)
+        # the front page carries its grouping and nothing of the other tab
+        _, html = self.get("/?group=month&closed=2026-08")
+        form = re.search(r'<form class="filters"[^>]*>.*?</form>', html, re.S).group(0)
+        self.assertIn('action="/"', form)
+        self.assertEqual(re.findall(r'<input type="hidden" name="(\w+)"', form), ["group"])
+
+    def test_79c_a_key_that_names_no_period_is_answered_with_the_journal(self):
+        """2026-13 and 2025-W53 look like periods and are none; typed into
+        the address they must not fell the page, nor be counted as a filter."""
+        for key in ("2026-13", "2025-W53", "2026-W00", "junk", "9999-12",
+                    "9999-W52", "9999-Q4"):
+            code, html = self.get(f"/stats?closed={key}")
+            self.assertEqual(code, 200, key)
+            self.assertIn("Every closed trade", html)
+            self.assertNotIn('class="badge"', html)
+
+    def test_80_a_period_travels_to_the_journal_as_the_months_it_covers(self):
+        S = self.S
+        self.assertEqual(S.period_window("2026-W31", "week"), ("2026-07", "2026-08"))
+        self.assertEqual(S.period_window("2026-W01", "week"), ("2025-12", "2026-01"))
+        self.assertEqual(S.period_window("2026-Q3", "quarter"), ("2026-07", "2026-09"))
+        self.assertEqual(S.period_name("2026-W01", "week"), "W01 29.12.2025")
+        self.assertEqual(S.period_name("2026-08", "month"), "August 2026")
+        rows = [(k, None) for k in ("2025-W52", "2026-W01", "2026-W02", "2026-W06")]
+        # W01 starts on the 29th of December, so January begins at W02
+        self.assertEqual(S.period_marks(rows, "week"),
+                         [(0, "Dec"), (2, "Jan 2026"), (3, "Feb")])
+        self.assertEqual(S.period_marks([("2025-12", None), ("2026-01", None)], "month"),
+                         [(0, "2025"), (1, "2026")])
+        q = {"closed": ["2026-W31"], "by": ["week"], "axis": ["trade"], "pair": ["EURUSD"]}
+        self.assertEqual(S.cut_only(q), "/?pair=EURUSD&from=2026-07&to=2026-08")
+        self.assertEqual(S.cut_only(q, "/export.csv"),
+                         "/export.csv?pair=EURUSD&from=2026-07&to=2026-08")
+        # the months of the filter narrow the window, never widen it
+        q = {"closed": ["2026-08"], "from": ["2026-07"], "to": ["2026-08"]}
+        self.assertEqual(S.cut_only(q), "/?from=2026-08&to=2026-08")
+        self.assertEqual(S.cut_href(q, ("closed",)), "/stats?from=2026-07&to=2026-08")
+        self.assertEqual(S.cut_href({"pair": ["EURUSD"]}, ("pair",)), "/stats")
+        self.assertIsNone(S.month_start("2026-13"))
+        # a week that straddles the edge of the month the page is cut to
+        # gets no link: its page would count days the bar never did
+        self.assertIsNone(S.period_href("2026-W31", "week", {"closed": ["2026-08"]}))
+        self.assertEqual(S.period_href("2026-W32", "week", {"closed": ["2026-08"]}),
+                         "/stats?closed=2026-W32")
+        self.assertEqual(S.period_href("2026-08", "month", {"closed": ["2026-Q3"]}),
+                         "/stats?closed=2026-08")
+
+    def test_80b_the_cards_of_a_zone_are_dealt_into_columns_that_end_together(self):
+        S = self.S
+
+        def card(name, rows):
+            body = "".join(f"<tr><td>{i}</td></tr>" for i in range(rows))
+            return f'<div class="card"><h2>{name}</h2><table>{body}</table></div>'
+        self.assertEqual(S.deal([]), "")
+        self.assertEqual(S.deal(["", card("only", 3), ""]), card("only", 3))
+        cards = [card("a", 12), card("b", 2), card("c", 3), card("d", 4),
+                 card("e", 2), card("f", 3)]
+        html = S.deal(cards)
+        # the columns are told apart by the one seam between them: a card
+        # begins with its class, so a bare div opens only the second column
+        self.assertTrue(html.startswith('<div class="twin"><div>'))
+        left, right = html[len('<div class="twin"><div>'):-len("</div></div>")].split("</div><div>")
+        tall = lambda side: sum(S.guess_height(c) for c in cards if c in side)
+        self.assertLessEqual(abs(tall(left) - tall(right)), min(map(S.guess_height, cards)))
+        # every card once, and inside a column in the order given
+        self.assertEqual(sorted(re.findall(r"<h2>(\w)</h2>", left + right)), list("abcdef"))
+        self.assertEqual(re.findall(r"<h2>(\w)</h2>", left),
+                         [n for n in "abcdef" if f"<h2>{n}</h2>" in left])
+        # the pinned pair heads the columns whatever their height
+        html = S.deal(cards, pinned=2)
+        self.assertTrue(html.startswith('<div class="twin"><div>' + card("a", 12)))
+        self.assertIn('</div><div>' + card("b", 2), html)
+
+    def test_80d_the_picture_opens_on_the_grain_the_selection_asks_for(self):
+        """One bar per trade while they can be told apart, and a coarser
+        grain past that: a history drawn at the wrong grain is either one
+        column or three hundred."""
+        S = self.S
+
+        def closed(n, months=1):
+            out = []
+            for i in range(n):
+                day = datetime(2026, 1, 1) + timedelta(days=i * 30 * months // max(n, 1))
+                out.append(Trade(id=f"t{i}", account="broker", pair="EURUSD",
+                                 direction="long", style="swing", risk=1.0,
+                                 opened=day, closed=day, result="Win", pnl=100))
+            return out
+        self.assertEqual(S.period_grain({}, closed(30, 12)), "trade")
+        self.assertEqual(S.period_grain({}, closed(31, 2)), "week")
+        self.assertEqual(S.period_grain({}, closed(60, 12)), "month")
+        self.assertEqual(S.period_grain({}, closed(60, 48)), "quarter")
+        # a week holds too few periods to draw: it opens on its trades
+        self.assertEqual(S.period_grain({"closed": ["2026-W35"]}, closed(60, 12)),
+                         "trade")
+        # what the switch says wins over all of it
+        self.assertEqual(S.period_grain({"by": ["quarter"]}, closed(3, 1)), "quarter")
+
+    def test_80e_the_periods_table_shows_the_newest_twelve_and_folds_the_rest(self):
+        S = self.S
+        j = S.journal()
+        trades = []
+        for i in range(14):
+            day = datetime(2025, 1, 1) + timedelta(days=31 * i)
+            trades.append(Trade(id=f"m{i}", account="broker", pair="EURUSD",
+                                direction="long", style="swing", risk=1.0,
+                                opened=day, closed=day, result="Win", pnl=100))
+        card = S.periods_table(S.Journal(j.accounts, trades, []), {}, trades, "month")
+        rows = re.findall(r'<a href="/stats\?closed=([^"]+)">', card)
+        self.assertEqual(len(rows), 14)
+        self.assertEqual(rows[0], "2026-02")                 # newest first
+        # twelve stand open, the rest under one line
+        self.assertEqual(card.index("<details"), card.rindex("<details"))
+        self.assertIn("<summary>2 more months</summary>", card)
+        shown = card[:card.index("<details")]
+        self.assertEqual(len(re.findall(r'<a href="/stats\?closed=', shown)), 12)
+        # a single period is not a table
+        self.assertEqual(S.periods_table(j, {}, trades[:1], "month"), "")
+
+    def test_80f_an_open_ticked_trade_is_not_a_mistake(self):
+        """A position still in the market has no R to put against a rule, and
+        every figure of the strip counts what is closed."""
+        store.save_trade(self.root, Trade(
+            id="open-ticked", account="broker", pair="EURUSD", direction="long",
+            style="swing", risk=1.0, opened=datetime(2026, 8, 25),
+            playbook="pull", playbook_version="1.0", deviations=[2]))
+        self.S.drop_cache()
+        try:
+            j = self.S.journal()
+            live = self.S.reports.discipline(self.root, j, j.trades)
+            closed = self.S.reports.discipline(
+                self.root, j, [t for t in j.trades if not t.is_open])
+            self.assertEqual(len(live.mistakes), len(closed.mistakes))
+            self.assertEqual(live.entry_broken, closed.entry_broken)
+            self.assertEqual([r[1].number for r in live.rules],
+                             [r[1].number for r in closed.rules])
+            self.assertFalse(any(t.id == "open-ticked" for t in live.mistakes))
+        finally:
+            shutil.rmtree(store.trade_dir(self.root, "open-ticked"))
+            self.S.drop_cache()
+
+    def test_80g_a_table_the_page_is_already_cut_to_is_not_drawn(self):
+        _, html = self.get("/stats")
+        self.assertIn("<h2>By pair</h2>", html)
+        _, html = self.get("/stats?pair=EURUSD")
+        self.assertNotIn("<h2>By pair</h2>", html)           # one row, the strip says it
+        self.assertIn('class="tiles strip"', html)           # and the page still stands
+
+    def test_80h_a_tile_says_which_way_its_figure_failed(self):
+        """The branches of the strip that no page of the demo reaches: a
+        winrate no winrate would save, a win that came back under zero, and
+        a fall still open at the end of a period that is not today."""
+        S = self.S
+
+        def made(rows):
+            trades = [Trade(id=f"t{i}", account="broker", pair="EURUSD",
+                            direction="long", style="swing", risk=1.0,
+                            opened=datetime(2026, 8, 1) + timedelta(days=i),
+                            closed=datetime(2026, 8, 1) + timedelta(days=i),
+                            result=result, pnl=float(pnl))
+                      for i, (result, pnl) in enumerate(rows)]
+            j = S.Journal({"broker": Account(id="broker", start_balance=10000)},
+                          trades, [])
+            return j, trades, S.stats.summary(j, trades)
+        # the break-evens eat more than a win brings
+        j, trades, sm = made([("Win", 300)] * 3 + [("Lose", -100)] * 3
+                             + [("BE", -90)] * 24)
+        self.assertGreater(sm.needed_wr, 100)
+        tile = S.wr_tile(j, trades, sm, None)
+        self.assertIn("needs over 100%", tile)
+        self.assertIn("the break-evens cost more than a win brings", tile)
+        # a win that came back under zero after commission: no ratio to give,
+        # and the blame is not the break-evens, there are none
+        j, trades, sm = made([("Win", -5)] * 5 + [("Lose", -100)] * 5)
+        self.assertEqual(sm.be, 0)
+        self.assertIsNone(sm.payoff)
+        self.assertGreater(sm.needed_wr, 100)
+        self.assertIn("a win came back at", S.payoff_tile(sm, None))
+        self.assertIn("a win brought less than nothing on average",
+                      S.wr_tile(j, trades, sm, None))
+        # a hole still open where the selection ends: "now" only when the
+        # selection runs to today
+        j, trades, sm = made([("Win", 300), ("Lose", -100), ("Lose", -100)])
+        fall = S.stats.drawdown(j, trades)
+        self.assertIn("under the high now", S.fall_tile(j, trades, sm, fall, True))
+        self.assertIn("under the high at the end", S.fall_tile(j, trades, sm, fall, False))
+
+    def test_80c_the_head_names_both_years_when_the_span_crosses_one(self):
+        store.save_trade(self.root, Trade(
+            id="2025-12-30-01-eurusd", account="broker", pair="EURUSD",
+            direction="long", style="swing", risk=1.0,
+            opened=datetime(2025, 12, 30), closed=datetime(2025, 12, 31),
+            result="Win", pnl=100))
+        self.S.drop_cache()
+        try:
+            _, html = self.get("/stats")
+            head = re.search(r'<p class="pb-meta">(.*?)</p>', html, re.S).group(1)
+            self.assertIn("31.12.2025 to ", head)
+            # the trades of the year before stand in the picture: a month
+            # that closed nothing keeps its place between them
+            _, html = self.get("/stats?by=month")
+            self.assertIn(">Dec<", html)
+            self.assertIn(">Jan<", html)
+        finally:
+            shutil.rmtree(store.trade_dir(self.root, "2025-12-30-01-eurusd"))
+            self.S.drop_cache()
 
 
 if __name__ == "__main__":

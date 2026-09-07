@@ -144,7 +144,7 @@ met.
 **On the page of a trade.** Both lists with a tick or a cross each, the
 reason given under a cross, in the version the trade was ticked against.
 
-**In the figures.** Statistics opens with *By playbook*: a row per playbook
+**In the figures.** Statistics carries *By playbook*: a row per playbook
 with its setups beneath it, the trades under none last, and two shares:
 *clean*, the share of ticked trades that met every rule at the entry, and
 *held*, the share of closed trades that ticked the management rules and

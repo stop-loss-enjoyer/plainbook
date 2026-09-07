@@ -7,7 +7,15 @@ Only closed trades count: an open one has neither a result nor an R.
 """
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
+
+
+# Below this many decided trades a winrate is a coincidence and not a rate:
+# one trade is 100% or 0%, three trades move by a third at a time. The figure
+# is greyed rather than hidden, because the trades behind it are real. It is
+# not a confidence interval: there is nothing here to compute one with, and a
+# band would be read as a promise.
+THIN = 5
 
 
 @dataclass
@@ -48,6 +56,53 @@ class Summary:
         below say how much of it came from each kind of trade."""
         return self.sum_r / self.trades if self.trades else 0.0
 
+    @property
+    def average_win(self):
+        """What a winning trade brought on average, in R, or None with no win."""
+        return self.sum_r_win / self.wins if self.wins else None
+
+    @property
+    def average_loss(self):
+        """What a losing trade cost on average, in R and negative, or None
+        with no loss."""
+        return self.sum_r_lose / self.losses if self.losses else None
+
+    @property
+    def payoff(self):
+        """How many R a win brings for every R a loss costs, or None when
+        there is no win and loss to weigh against each other.
+
+        Break-evens are on neither side of it, the same trades the winrate
+        leaves out; what they cost is in the EV."""
+        win, lose = self.average_win, self.average_loss
+        if win is None or lose is None or win <= 0 or lose >= 0:
+            return None
+        return win / -lose
+
+    @property
+    def needed_wr(self):
+        """The winrate this selection would need to come out at zero, in
+        percent, or None when there is no win and loss to weigh.
+
+            wins * W + losses * L + sum_r_be = 0,   wins = p * decided
+            p = (-L - sum_r_be / decided) / (W - L)
+
+        The break-evens are charged into it on purpose. Written the textbook
+        way, 100 / (1 + payoff), the figure would be worked out from the wins
+        and the losses alone while the EV beside it counts the break-evens
+        too, and a selection full of them could then read "needs 33%, has 40%"
+        two tiles away from a negative EV. With the term above, the winrate
+        stands over this figure exactly when the sum of R stands over zero."""
+        win, lose = self.average_win, self.average_loss
+        if win is None or lose is None or win - lose <= 0:
+            return None
+        return 100.0 * (-lose - self.sum_r_be / self.decided) / (win - lose)
+
+    @property
+    def thin(self):
+        """Too few decided trades for the winrate to be read as a rate."""
+        return self.decided < THIN
+
 
 def summary(journal, trades):
     s = Summary()
@@ -65,11 +120,6 @@ def summary(journal, trades):
         s.sum_r_be += r if t.result == "BE" else 0.0
         s.sum_pnl += t.pnl or 0.0
     return s
-
-
-def by_field(journal, trades, key):
-    """[(value, Summary)] ordered by the number of trades, descending."""
-    return by_values(journal, trades, lambda t: [key(t)])
 
 
 def by_values(journal, trades, key):
@@ -206,6 +256,45 @@ def rule_costs(journal, trades, rules):
     return rows, clean
 
 
+@dataclass
+class Checklist:
+    """How the closed trades of a selection went through the rules of the
+    playbooks they were opened under."""
+    ticked: int = 0         # went through a checklist, at the entry or at the close
+    unticked: int = 0       # named a playbook and was never ticked
+    kept: Summary = None    # ticked, every rule met
+    broke: Summary = None   # ticked, at least one rule not met
+
+
+def checklist(journal, trades):
+    """The trades of a selection against their rules.
+
+    Named checklist and not discipline, so that it is not read as the same
+    thing as reports.discipline, which composes a whole report. Open trades
+    are out of every count, because every figure standing beside this one
+    counts closed trades."""
+    closed = [t for t in trades if not t.is_open]
+    done = [t for t in closed if ticked(t)]
+    return Checklist(
+        ticked=len(done),
+        unticked=sum(1 for t in closed if t.playbook and not ticked(t)),
+        kept=summary(journal, [t for t in done if not broke(t)]),
+        broke=summary(journal, [t for t in done if broke(t)]))
+
+
+def past_stop(journal, trades):
+    """The losses that went deeper than the risk allowed, worst first.
+
+    The edge is the one the rings cut at, so the two agree by construction
+    and not by agreement: a stop that worked costs -1 R, up to -1.2 R once
+    commission and swap are paid on top of it. Past that, the loss was larger
+    than the trade was sized for."""
+    edge = LOSS_BUCKETS[2][1]
+    return sorted((t for t in trades if not t.is_open and t.result == "Lose"
+                   and abs(journal.r(t.id) or 0.0) >= edge),
+                  key=lambda t: journal.r(t.id) or 0.0)
+
+
 def _figure(limits, key):
     try:
         return float(str(limits.get(key, "")).replace(",", "."))
@@ -262,21 +351,56 @@ def review_due(playbook, count):
     return count // playbook.block > reviews_written(playbook)
 
 
-def drawdown_r(journal, trades):
-    """The deepest fall of the cumulative R curve, zero or negative.
+@dataclass
+class Fall:
+    """The deepest fall of the cumulative R curve, and when it happened."""
+    worst: float = 0.0          # zero or negative
+    peak_at: datetime = None    # the high it fell from, None when that was the start
+    trough_at: datetime = None
+    back_at: datetime = None    # when the curve regained that high, None while it has not
+    now: float = 0.0            # how far under its running high the curve ends
+
+
+def drawdown(journal, trades):
+    """The deepest fall of the cumulative R curve, with its dates.
 
     The trades are taken in the order they closed, because that is the order
     the account felt them: a trade opened first but closed last moves the curve
-    last. Says how far the equity went below its own high inside the selection,
-    which the total R of the period does not show."""
-    curve = sorted((t.closed, journal.r(t.id) or 0.0) for t in trades
-                   if not t.is_open and t.closed)
-    peak = total = worst = 0.0
-    for _, r in curve:
+    last. Says how far the selection went below its own high, when it got
+    there and whether it has come back, which the total R does not show. A
+    figure on its own answers how deep and not whether the hole is still open.
+    """
+    # two trades closed at the same stamp are taken in the order the tape
+    # draws them, by id, so the picture and the figure agree
+    curve = sorted(((t.closed, t.id, journal.r(t.id) or 0.0) for t in trades
+                    if not t.is_open and t.closed), key=lambda x: (x[0], x[1]))
+    f = Fall()
+    peak = total = 0.0
+    peak_at, from_peak, at = None, 0.0, None
+    for i, (day, _, r) in enumerate(curve):
         total += r
-        peak = max(peak, total)
-        worst = min(worst, total - peak)
-    return worst
+        # a curve that comes back exactly to its high stands on it again:
+        # the fall that follows is dated from there, not from the first time
+        if total >= peak - 1e-9:
+            peak, peak_at = max(peak, total), day
+        if total - peak < f.worst:
+            f.worst = total - peak
+            f.peak_at, f.trough_at = peak_at, day
+            from_peak, at = peak, i
+        f.now = total - peak
+    if at is not None:
+        total = 0.0
+        for i, (day, _, r) in enumerate(curve):
+            total += r
+            if i > at and total >= from_peak - 1e-9:
+                f.back_at = day
+                break
+    return f
+
+
+def drawdown_r(journal, trades):
+    """The deepest fall, in R, zero or negative."""
+    return drawdown(journal, trades).worst
 
 
 # The R buckets of the two rings. Coarse at the tails on purpose: a ring is
@@ -343,21 +467,26 @@ def equity(journal, account_id=None, trades=None, since=None):
             equity_events(journal, account_id, trades, since) if what != "start"]
 
 
-def equity_events(journal, account_id=None, trades=None, since=None):
+def equity_events(journal, account_id=None, trades=None, since=None, until=None):
     """The equity walk with a word on what moved each point.
 
     Every point is (date, balance, what): `what` is None for a trade, the
     Adjustment for money that moved outside a trade, "start" for the opening
     balance placed before the first event, or "since" for the balance the
     period was entered with. The chart marks the adjustments, so that a
-    deposit is not read as a big win; the balances are the ones of `equity`."""
+    deposit is not read as a big win; the balances are the ones of `equity`.
+
+    `until` ends the walk: a curve cut to August must not step on a deposit
+    made in September, which would hang past the last trade of the month."""
     chosen = None if trades is None else {t.id for t in trades}
     start = sum(acc.start_balance for a, acc in journal.accounts.items()
                 if account_id in (None, a))
     events = [(c.day, c.amount, c) for c in journal.adjustments
-              if account_id in (None, c.account)]
+              if account_id in (None, c.account)
+              and (until is None or c.day < until)]
     events += [(t.closed, t.pnl or 0.0, None) for t in journal.trades
                if not t.is_open and t.closed
+               and (until is None or t.closed < until)
                and (chosen is None or t.id in chosen
                     or (since is not None and t.closed < since))
                and account_id in (None, t.account)]
@@ -397,6 +526,151 @@ def streaks(journal, trades):
         else:
             best_loss = max(best_loss, length)
     return best_win, best_loss, (current, length)
+
+
+# How long a position was carried. Coarse on purpose, and cut where a
+# discretionary trader changes his mind about a trade: inside the day, over a
+# night or two, over a week. Every bucket holds its lower edge and not its
+# upper one.
+HOLD_BUCKETS = [("same day", 1), ("1 to 2 days", 3), ("3 to 5 days", 6),
+                ("6 days or more", None)]
+
+
+def held_days(t):
+    """Whole days from the entry to the exit, or None while the trade is open
+    or a date is missing.
+
+    Days and not hours: an exit is often written without an hour, and then it
+    is midnight, so a trade opened at nine and closed the same evening would
+    come out as minus fifteen hours. The dates alone are always there."""
+    if t.is_open or not t.closed or not t.opened:
+        return None
+    return (t.closed.date() - t.opened.date()).days
+
+
+def by_hold(journal, trades):
+    """[(label, Summary)] by how long a position was carried, in the order of
+    the buckets and not of their size: the length is the thing being read.
+    A bucket with no trade in it is left out."""
+    piles = {}
+    for t in trades:
+        days = held_days(t)
+        if days is None:
+            continue
+        _, label = _bucket(HOLD_BUCKETS, days)
+        piles.setdefault(label, []).append(t)
+    return [(label, summary(journal, piles[label]))
+            for label, _ in HOLD_BUCKETS if label in piles]
+
+
+def _period_start(day, group):
+    """The first moment of the week, month or quarter a day falls in."""
+    if group == "week":
+        return datetime(day.year, day.month, day.day) - timedelta(days=day.weekday())
+    if group == "quarter":
+        return datetime(day.year, 3 * ((day.month - 1) // 3) + 1, 1)
+    return datetime(day.year, day.month, 1)
+
+
+def _next_period(start, group):
+    if group == "week":
+        return start + timedelta(days=7)
+    if group == "quarter":
+        month = start.month + 3
+        return datetime(start.year + (month > 12), (month - 1) % 12 + 1, 1)
+    return datetime(start.year + (start.month == 12), start.month % 12 + 1, 1)
+
+
+def period_key(day, group):
+    """The key of the week, month or quarter a day falls in. The keys of one
+    grain sort in the order they read."""
+    if group == "week":
+        return week(day)
+    if group == "quarter":
+        return quarter(day)
+    return f"{day:%Y-%m}"
+
+
+_PERIOD_KEY = re.compile(r"^\d{4}-(?:W\d{2}|\d{2}|Q[1-4])$")
+
+
+def grain_of(key):
+    """Which grain a period key is of, or None when it is not one: 2026-W36
+    is a week, 2026-08 a month, 2026-Q3 a quarter.
+
+    The shape alone is not enough: 2026-13 and 2025-W53 look like keys and
+    name no period, and a key typed by hand into the address must be
+    answered with the whole journal, not with a traceback."""
+    if not _PERIOD_KEY.match(key or ""):
+        return None
+    group = "week" if "W" in key else "quarter" if "Q" in key else "month"
+    try:
+        _next_period(period_start(key, group), group)
+    except (ValueError, OverflowError):
+        return None
+    return group
+
+
+def period_start(key, group):
+    """The first moment of the period a key names."""
+    if group == "week":
+        return datetime.fromisocalendar(int(key[:4]), int(key[6:]), 1)
+    if group == "quarter":
+        return datetime(int(key[:4]), 3 * (int(key[6]) - 1) + 1, 1)
+    return datetime(int(key[:4]), int(key[5:]), 1)
+
+
+def period_bounds(key):
+    """The first moment of a period and the first moment after it, so that
+    what happened inside it is `start <= day < end`; None for a key that is
+    not a period."""
+    group = grain_of(key)
+    if not group:
+        return None
+    start = period_start(key, group)
+    return start, _next_period(start, group)
+
+
+def closed_in(trades, key):
+    """The trades of one period, by the exit.
+
+    The months of the filter pick trades by the entry, the way the list of
+    trades does; this picks them the way a report and the tile of the current
+    period do. Both exist on purpose: one narrows a list, the other narrows a
+    figure, and a page that mixed them would print a total that disagrees with
+    the row it was clicked on."""
+    group = grain_of(key)
+    if not group:
+        return list(trades)
+    return [t for t in trades if not t.is_open and t.closed
+            and period_key(t.closed, group) == key]
+
+
+def by_period(journal, trades, group="month"):
+    """[(period key, Summary)] over the closed trades, oldest first, and the
+    periods that closed nothing standing empty between them.
+
+    Measured by the exit, the way a report counts a month and the front page
+    counts this week, so a row here holds exactly the trades of the report of
+    that period. by_values with a lambda comes close, but it orders by the
+    number of trades and leaves the entry or the exit to the caller, which is
+    where invariant 11 gets broken; the choice is made here, once, where it
+    can be tested. A period with nothing in it keeps its place: a month the
+    account stood still is part of the picture, and a chart with the gaps
+    squeezed out would draw a year of trading as if it had been continuous."""
+    closed = [t for t in trades if not t.is_open and t.closed]
+    if not closed:
+        return []
+    piles = {}
+    for t in closed:
+        piles.setdefault(period_key(t.closed, group), []).append(t)
+    last = max(t.closed for t in closed)
+    rows, cursor = [], _period_start(min(t.closed for t in closed), group)
+    while cursor <= last:
+        key = period_key(cursor, group)
+        rows.append((key, summary(journal, piles.get(key, []))))
+        cursor = _next_period(cursor, group)
+    return rows
 
 
 def months(trades):

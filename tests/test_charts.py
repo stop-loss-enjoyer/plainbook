@@ -4,7 +4,7 @@
 import os
 import sys
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -12,7 +12,7 @@ from plainbook import html as H
 from plainbook import stats
 from plainbook.balances import Journal
 from plainbook.html import smooth_path, spread_days
-from plainbook.model import Account, Trade
+from plainbook.model import Account, Adjustment, Trade
 
 
 def cubics(d):
@@ -365,6 +365,269 @@ class ReportCase(unittest.TestCase):
         self.assertIn(f'fill="{H.WARN}"', svg)                  # the break-even tick
         # the scale reaches past the deepest loss and never stops short of -1.5
         self.assertIn(">-2<", svg)
+
+
+class SelectionCase(unittest.TestCase):
+    """The figures the Statistics tab leans on: what a win is worth against a
+    loss, how long a position is carried, and how a run of periods reads."""
+
+    def setUp(self):
+        self.accounts = {"broker": Account(id="broker", start_balance=10000)}
+
+    def trade(self, tid, result, pnl, opened, closed, **over):
+        return Trade(id=tid, account="broker", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=opened, closed=closed,
+                     result=result, pnl=pnl, **over)
+
+    def journal(self, trades):
+        return Journal(self.accounts, trades, [])
+
+    def month(self, results, month=8):
+        return self.journal([
+            self.trade(f"t{i}", "Win" if pnl > 0 else "Lose" if pnl < 0 else "BE",
+                       pnl, datetime(2026, month, i), datetime(2026, month, i))
+            for i, pnl in enumerate(results, 1)])
+
+    def test_the_payoff_weighs_a_win_against_a_loss(self):
+        j = self.month([200, -100, 100, -100])
+        s = stats.summary(j, j.trades)
+        self.assertAlmostEqual(s.average_win, s.sum_r_win / 2)
+        self.assertAlmostEqual(s.average_loss, s.sum_r_lose / 2)
+        self.assertAlmostEqual(s.payoff, s.average_win / -s.average_loss)
+        self.assertGreater(s.payoff, 1.4)                # two R won against one lost
+        # nothing to weigh with only one side of the market answered
+        wins = self.journal([self.trade("w", "Win", 100, datetime(2026, 8, 1),
+                                        datetime(2026, 8, 1))])
+        self.assertIsNone(stats.summary(wins, wins.trades).payoff)
+        self.assertIsNone(stats.summary(wins, wins.trades).needed_wr)
+
+    def test_the_winrate_needed_charges_the_break_evens_in(self):
+        """The figure has to agree with the sign of the EV, or two tiles of one
+        strip say opposite things about the same trades."""
+        results = [100] * 10 + [-100] * 10 + [-10] * 10
+        j = self.journal([
+            self.trade(f"t{i}", "Win" if pnl > 0 else "Lose" if pnl < -50 else "BE",
+                       pnl, datetime(2026, 8, 1 + i // 3), datetime(2026, 8, 1 + i // 3))
+            for i, pnl in enumerate(results)])
+        s = stats.summary(j, j.trades)
+        self.assertEqual(s.wr, 50.0)
+        self.assertLess(s.average_r, 0)             # the break-evens paid for it
+        self.assertGreater(s.needed_wr, 50.0)       # so the winrate is not enough
+        # the textbook figure, worked out without them, says the winrate is
+        # enough while the EV says it is not
+        self.assertLess(100 / (1 + s.payoff), s.wr)
+        self.assertLess(100 / (1 + s.payoff), s.needed_wr)
+
+    def test_a_winrate_off_a_handful_of_trades_is_thin(self):
+        j = self.month([100, -100, 100, -100])
+        self.assertTrue(stats.summary(j, j.trades).thin)
+        j = self.month([100, -100, 100, -100, 100])
+        self.assertFalse(stats.summary(j, j.trades).thin)
+
+    def test_the_fall_says_when_it_happened_and_whether_it_came_back(self):
+        j = self.month([200, -100, -100, 100, 200])
+        f = stats.drawdown(j, j.trades)
+        self.assertAlmostEqual(f.worst, stats.drawdown_r(j, j.trades))
+        self.assertLess(f.worst, -1.9)
+        self.assertEqual(f.peak_at, datetime(2026, 8, 1))    # the high it fell from
+        self.assertEqual(f.trough_at, datetime(2026, 8, 3))
+        self.assertEqual(f.back_at, datetime(2026, 8, 5))
+        self.assertAlmostEqual(f.now, 0.0)                   # ends on its high
+        # a hole that is still open has no day it was made back on
+        j = self.month([200, -100, -100])
+        f = stats.drawdown(j, j.trades)
+        self.assertIsNone(f.back_at)
+        self.assertLess(f.now, 0)
+        # a run that only goes up never fell
+        f = stats.drawdown(*(lambda k: (k, k.trades))(self.month([100, 100])))
+        self.assertEqual((f.worst, f.peak_at, f.back_at), (0.0, None, None))
+
+    def test_a_period_that_closed_nothing_keeps_its_place(self):
+        j = self.journal([
+            self.trade("a", "Win", 100, datetime(2026, 7, 20), datetime(2026, 7, 21)),
+            self.trade("b", "Lose", -100, datetime(2026, 9, 1), datetime(2026, 9, 2))])
+        rows = stats.by_period(j, j.trades, "month")
+        self.assertEqual([key for key, _ in rows], ["2026-07", "2026-08", "2026-09"])
+        self.assertEqual([s.trades for _, s in rows], [1, 0, 1])
+        # a quarter holds them both, a week keeps the gap between them
+        self.assertEqual([key for key, _ in stats.by_period(j, j.trades, "quarter")],
+                         ["2026-Q3"])
+        weeks = stats.by_period(j, j.trades, "week")
+        self.assertEqual(weeks[0][0], "2026-W30")
+        self.assertEqual(weeks[-1][0], "2026-W36")
+        self.assertEqual(sum(s.trades for _, s in weeks), 2)
+        self.assertEqual(stats.by_period(j, [], "month"), [])
+
+    def test_a_period_key_names_its_grain_and_cuts_by_the_exit(self):
+        j = self.journal([
+            self.trade("in", "Win", 100, datetime(2026, 7, 30), datetime(2026, 8, 3)),
+            self.trade("out", "Lose", -100, datetime(2026, 8, 1), datetime(2026, 9, 1))])
+        self.assertEqual(stats.grain_of("2026-W36"), "week")
+        self.assertEqual(stats.grain_of("2026-08"), "month")
+        self.assertEqual(stats.grain_of("2026-Q3"), "quarter")
+        self.assertIsNone(stats.grain_of("august"))
+        # by the exit: the trade entered in July belongs to August
+        self.assertEqual([t.id for t in stats.closed_in(j.trades, "2026-08")], ["in"])
+        self.assertEqual([t.id for t in stats.closed_in(j.trades, "2026-09")], ["out"])
+        self.assertEqual(len(stats.closed_in(j.trades, "2026-Q3")), 2)
+        # a key that is not a period leaves the selection alone
+        self.assertEqual(len(stats.closed_in(j.trades, "august")), 2)
+        self.assertEqual(len(stats.closed_in(j.trades, "")), 2)
+        # the shape of a key is not enough: a thirteenth month and a week
+        # the year does not have name no period either
+        for key in ("2026-13", "2026-00", "2025-W53", "2026-W00", "2026-Q5"):
+            self.assertIsNone(stats.grain_of(key), key)
+            self.assertIsNone(stats.period_bounds(key), key)
+        self.assertEqual(stats.period_bounds("2026-W01"),
+                         (datetime(2025, 12, 29), datetime(2026, 1, 5)))
+        self.assertEqual(stats.period_bounds("2026-08"),
+                         (datetime(2026, 8, 1), datetime(2026, 9, 1)))
+        self.assertEqual(stats.period_bounds("2026-Q4"),
+                         (datetime(2026, 10, 1), datetime(2027, 1, 1)))
+
+    def test_a_week_that_straddles_the_new_year_keeps_its_iso_year(self):
+        j = self.journal([
+            self.trade("a", "Win", 100, datetime(2025, 12, 22), datetime(2025, 12, 28)),
+            self.trade("b", "Lose", -100, datetime(2026, 1, 5), datetime(2026, 1, 6))])
+        rows = stats.by_period(j, j.trades, "week")
+        self.assertEqual([key for key, _ in rows], ["2025-W52", "2026-W01", "2026-W02"])
+        self.assertEqual([s.trades for _, s in rows], [1, 0, 1])
+        # a bar of the picture finds exactly the trades it was drawn from
+        for key, s in rows:
+            self.assertEqual(len(stats.closed_in(j.trades, key)), s.trades, key)
+        self.assertEqual([key for key, _ in stats.by_period(j, j.trades, "quarter")],
+                         ["2025-Q4", "2026-Q1"])
+
+    def test_the_fall_is_dated_from_the_last_time_the_curve_stood_on_its_high(self):
+        # +2, -1, +1 puts the curve back on its high on the third day: the
+        # fall that follows began there, not on the first
+        j = self.month([200, -100, 100, -300, 300])
+        f = stats.drawdown(j, j.trades)
+        self.assertEqual(f.peak_at, datetime(2026, 8, 3))
+        self.assertEqual(f.trough_at, datetime(2026, 8, 4))
+        self.assertEqual(f.back_at, datetime(2026, 8, 5))
+        # two losses first: the high it fell from is the start, not a trade
+        j = self.month([-100, -100, 250])
+        f = stats.drawdown(j, j.trades)
+        self.assertIsNone(f.peak_at)
+        self.assertEqual(f.trough_at, datetime(2026, 8, 2))
+        self.assertEqual(f.back_at, datetime(2026, 8, 3))
+
+    def test_a_curve_cut_to_a_period_ends_with_it(self):
+        j = Journal(self.accounts, [
+            self.trade("a", "Win", 100, datetime(2026, 8, 1), datetime(2026, 8, 2))],
+            [Adjustment(id="dep", day=datetime(2026, 9, 3), account="broker", kind="deposit",
+                        amount=500, comment="")])
+        walk = stats.equity_events(j, "broker", j.trades, datetime(2026, 8, 1),
+                                   datetime(2026, 9, 1))
+        self.assertEqual([what for _, _, what in walk], ["since", None])
+        self.assertEqual(walk[-1][1], 10100)
+        # without an end the deposit of September steps the line
+        walk = stats.equity_events(j, "broker", j.trades, datetime(2026, 8, 1))
+        self.assertEqual(walk[-1][1], 10600)
+        # the end holds for the trades too, selection or none: the walk of a
+        # whole account must not step on a trade closed after the period
+        j = Journal(self.accounts, [
+            self.trade("in", "Win", 100, datetime(2026, 8, 1), datetime(2026, 8, 2)),
+            self.trade("out", "Win", 700, datetime(2026, 8, 30), datetime(2026, 9, 1))], [])
+        walk = stats.equity_events(j, "broker", None, datetime(2026, 8, 1),
+                                   datetime(2026, 9, 1))
+        self.assertEqual(walk[-1][1], 10100)
+
+    def test_a_period_counts_the_trade_that_closed_in_it(self):
+        """A trade carried across the edge belongs to the month it closed in,
+        the way a report counts it."""
+        j = self.journal([self.trade("a", "Win", 100, datetime(2026, 7, 30),
+                                     datetime(2026, 8, 3))])
+        self.assertEqual([key for key, _ in stats.by_period(j, j.trades, "month")],
+                         ["2026-08"])
+
+    def test_how_long_a_position_was_carried(self):
+        days = [(0, "same day"), (1, "1 to 2 days"), (2, "1 to 2 days"),
+                (3, "3 to 5 days"), (5, "3 to 5 days"), (6, "6 days or more")]
+        trades = [self.trade(f"t{n}", "Win", 100, datetime(2026, 8, 1, 9),
+                             datetime(2026, 8, 1) + timedelta(days=n))
+                  for n, _ in days]
+        j = self.journal(trades)
+        for t, (n, label) in zip(trades, days):
+            self.assertEqual(stats.held_days(t), n)
+            self.assertEqual(stats.by_hold(j, [t])[0][0], label)
+        # the buckets come out in the order of their length, not of their size
+        self.assertEqual([label for label, _ in stats.by_hold(j, j.trades)],
+                         ["same day", "1 to 2 days", "3 to 5 days", "6 days or more"])
+        # an open trade has no length yet
+        live = Trade(id="o", account="broker", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=datetime(2026, 8, 28))
+        self.assertIsNone(stats.held_days(live))
+
+    def test_the_checklist_counts_only_what_was_ticked(self):
+        clean = self.trade("clean", "Win", 100, datetime(2026, 8, 1),
+                           datetime(2026, 8, 1), playbook="pull", deviations=[])
+        broke = self.trade("broke", "Lose", -100, datetime(2026, 8, 2),
+                           datetime(2026, 8, 2), playbook="pull", deviations=[2])
+        loose = self.trade("loose", "Win", 100, datetime(2026, 8, 3),
+                           datetime(2026, 8, 3), playbook="pull")
+        live = Trade(id="o", account="broker", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=datetime(2026, 8, 28),
+                     playbook="pull", deviations=[])
+        j = self.journal([clean, broke, loose, live])
+        c = stats.checklist(j, j.trades)
+        self.assertEqual((c.ticked, c.unticked), (2, 1))     # the open one is out
+        self.assertEqual((c.kept.trades, c.broke.trades), (1, 1))
+        self.assertGreater(c.kept.average_r, c.broke.average_r)
+
+    def test_a_loss_past_the_stop_is_the_one_the_rings_cut_out(self):
+        # the balance is 10 000 and the risk 1%, so a loss of 120 is -1.2 R
+        # exactly: it is past the stop, and 119 stands one hundredth short
+        j = self.journal([
+            self.trade("stop", "Lose", -119, datetime(2026, 8, 1), datetime(2026, 8, 1))])
+        self.assertEqual(stats.past_stop(j, j.trades), [])
+        j = self.journal([
+            self.trade("edge", "Lose", -120, datetime(2026, 8, 1), datetime(2026, 8, 1))])
+        self.assertEqual([t.id for t in stats.past_stop(j, j.trades)], ["edge"])
+        # the deepest first, and an open position is not a loss yet
+        live = Trade(id="o", account="broker", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=datetime(2026, 8, 2))
+        j = self.journal([
+            self.trade("edge", "Lose", -120, datetime(2026, 8, 1), datetime(2026, 8, 1)),
+            self.trade("deep", "Lose", -300, datetime(2026, 8, 2), datetime(2026, 8, 2)),
+            live])
+        self.assertEqual([t.id for t in stats.past_stop(j, j.trades)], ["deep", "edge"])
+
+
+class TapeCase(unittest.TestCase):
+    """The tape draws trades and periods with the same code."""
+
+    def test_a_period_that_closed_nothing_keeps_its_slot(self):
+        bars = [(2.0, "Win", "/report/2026-07", "July"), (None, "", "", "August"),
+                (-1.0, "Lose", "/report/2026-09", "September")]
+        svg = H.tape_svg(bars, [(0, "2026")], stop=None)
+        self.assertEqual(svg.count("<a href="), 2)      # the empty period draws none
+        self.assertNotIn(">stop<", svg)                 # no stop under a sum of trades
+        self.assertNotIn("stroke-dasharray", svg)
+
+    def test_a_single_flat_bar_still_has_a_scale(self):
+        svg = H.tape_svg([(0.0, "BE", "/x", "x")], [], stop=None)
+        self.assertIn("<svg", svg)
+        self.assertIn("No closed trades", H.tape_svg([(None, "", "", "")], [], stop=None))
+
+    def test_a_bar_carries_its_name_while_there_is_room_for_one(self):
+        names = [f"M{i}" for i in range(15)]
+        bars = [(1.0, "Win", f"/p/{i}", n) for i, n in enumerate(names)]
+        svg = H.tape_svg(bars, [(0, "2026")], width=810, stop=None, labels=names)
+        for n in names:
+            self.assertIn(f">{n}</text>", svg)
+        # sixty bars in the same width leave no room, so only the marks stay
+        many = [f"W{i}" for i in range(60)]
+        svg = H.tape_svg([(1.0, "Win", "/p", n) for n in many], [(0, "Jul")],
+                         width=810, stop=None, labels=many)
+        self.assertNotIn(">W7</text>", svg)
+        self.assertIn(">Jul</text>", svg)
+        # a bar with no address is drawn and is not a link
+        svg = H.tape_svg([(1.0, "Win", "", "edge"), (2.0, "Win", "/p", "in")], [],
+                         stop=None)
+        self.assertEqual(svg.count("<a href="), 1)
+        self.assertEqual(svg.count("<rect"), 3)         # the ground and two bars
 
 
 if __name__ == "__main__":
