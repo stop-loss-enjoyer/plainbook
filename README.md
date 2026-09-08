@@ -151,6 +151,14 @@ figure against the period before.
 list into a file for a spreadsheet, with every stored field and the computed
 ones: R, the balance at entry, the risk in money.
 
+**Something to show another trader.** Share, on a trade, over the filtered
+list, or on a report, writes one HTML file with the screenshots carried inside
+it: it opens on any machine, offline, with no journal running, and prints to a
+PDF that reads like the journal. Money never travels in it, not the PnL, the
+risk in money, a balance or the size of an account, only R and the percent the
+risk was written as. You see the document, and what it will weigh, before you
+send it.
+
 **Every account in its own currency.** The sign follows the account; a figure
 that spans accounts carries the currency they share, or none when they differ.
 

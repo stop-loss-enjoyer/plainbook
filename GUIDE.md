@@ -486,9 +486,14 @@ then the playbooks with the rules and the tables.
 **The cut is written out at the top.** Under the word Statistics stands the
 selection in words, `XAUUSD · swing · Broker · August 2026`, and every part of it
 is a link that drops that one part. The funnel to the right opens the whole
-form, **The trades** opens the selection as a list on the front page, and
-**CSV** writes the same selection into a file for a spreadsheet, a period cut
-included. The line under the title says how many
+form, **Reset** drops the cut whole and puts every closed trade back, **The
+trades** shows the selection as a list, and **CSV** writes the same selection
+into a file for a spreadsheet, a period cut included. Reset stands only while
+there is something to drop, and it stands on a cut that matched nothing too,
+which is where it is wanted most. With a
+period chosen the list stands at the foot of this page and the button jumps
+down to it; without one it is the journal's own list that opens, since there
+the two pages hold the same trades. The line under the title says how many
 trades closed, how many are still open and therefore out of every figure, the
 money the cut made when every trade sits on one account, between which dates
 the trades closed, and how many closed trades the filter left out. Those left
@@ -514,8 +519,11 @@ has no month before it, but it always has a rest.
   fall is negative by definition, so a colour would say nothing.
 - **Mistakes**, counted the way a report counts them: a rule ticked as not
   met, at the entry or at the close, or a loss past the stop, a trade that did
-  both being one mistake; under the count, what those trades brought and how
-  many trades under a playbook were never ticked.
+  both being one mistake; under the count, what the losses ran past the stop
+  by, what those trades brought, and how many trades under a playbook were
+  never ticked. The two figures answer different questions: the first is what
+  the overruns themselves cost, the second is everything those trades did,
+  wins included.
 - **Best and worst trade** by R, each a link to the trade.
 
 A winrate or a payoff worked out from fewer than five decided trades is grey,
@@ -548,12 +556,22 @@ in August stands in August. Inside a month read by weeks, a week that straddles
 the edge of the month is drawn without a link: its own page would count the
 days outside the month too, and the figures would not be the bar's.
 
-**The trades** in the header opens the journal over the months of the period,
-narrowed to the months the filter already held. The journal picks by the
-entry, so that list is not quite the set this page counted: a trade entered in
-July and closed in August is counted here and stands in July there. The CSV
-button has no such trouble, since the file is written from the same selection
-the page counted.
+**The trades of a period stand at the foot of the page.** With a period cut,
+under all the tables, is the list of what that period closed: the very set
+every figure above was worked out on, newest exit first. It leads with two
+dates, the exit it was counted by and the entry beside it, so a trade that ran
+across the edge of the month is seen for what it is. The newest thirty stand
+open and the rest fold under one line. A row opens its trade, and the trade
+carries a button back to this cut, the whole cut and not only its period: the
+statistics of August and the statistics of August on one pair are two pages
+under one title.
+
+This is why **The trades** no longer hands you to the journal when a period is
+chosen. The journal picks by the entry, so its August is a different set of
+trades: one entered in July and closed in August is counted here and stands in
+July there. Without a period cut the two pages hold the same trades and the
+button still opens the journal. The CSV button never had the trouble, since
+the file is written from the same selection the page counted.
 
 **R distribution.** Two rings beside the tape: the losses on the left, the
 wins on the right, each cut by the size of R. Pointing at a slice, or at its
@@ -626,7 +644,12 @@ close; one tied to a playbook later and never ticked was never held against
 its rules. When trades of more than one playbook are in the cut, the name of
 the playbook stands before the number of the rule. **Past the stop**, a table
 of its own: the losses that went deeper than -1.2R, worst first, ten at most,
-each a way to its trade.
+each a way to its trade. Beside the R of each stands **over**, what that loss
+cost past -1.2R, and the head of the card carries the total of them. The stop
+itself is not the mistake: -1R is the attempt working as it was meant to, and
+commission and swap carry it to -1.2R, which the trade was still sized for.
+What lies past that edge is the only part discipline was there to keep, so a
+loss back at -1.35R overran the risk by 0.15R and not by the whole of it.
 
 **The tables.** By period, pair, style, account, direction, entry timeframe,
 execution and time in the market, in two columns. A row of the period, pair,
@@ -771,7 +794,8 @@ not grade a month. The **Rules** card names every rule the trades ticked
 against the current version of their playbook did not meet, how many trades
 broke it and what they brought, the costliest first, against the
 last row, the trades that kept every rule; the losses past the stop are listed
-under it as **Past the stop**, each a link to the trade. The card stands
+under it as **Past the stop**, each a link to the trade and each with what it
+cost past -1.2R beside its R, the total said under the table. The card stands
 whenever a trade of the period names a playbook or a loss went past the stop.
 
 **Trade by trade** is every closed trade of the period as one bar, in the
@@ -805,7 +829,70 @@ months of that report. That is how a row like "XAU, 5 trades, -4.56 R" turns
 back into the five trades it was counted from, with the idea you wrote before
 each entry. The best and the worst trade lead straight to the trade itself, a
 playbook row to the playbook's page, and a bar of the tape to its trade. A
-trade opened from a report has a button back to that report in its header.
+trade opened from a report has a button back to that report in its header,
+and one opened from the Statistics tab, from a row of the list, a bar of the
+tape or the best and worst tile, has a button back to the cut it came from.
+
+**The trades of the month stand at the foot of the report**, the same card the
+Statistics tab carries under a period cut: every trade the month closed,
+newest exit first, with the exit and the entry side by side, thirty open and
+the rest folded. The tape above says the shape of the month, this says which
+trades made it. **The trades** in the header jumps down to it, and a row opens
+its trade with the way back to this report. It is worked out from the journal
+on every look, like everything else on the page; the file the report saves
+keeps the figures and your conclusions, not the list, since the trades are
+already in the journal and a stored copy would be one more thing to drift.
+
+## Showing your journal to somebody
+
+Sooner or later a trade has to be shown to another trader, and the journal has
+no way out of this machine on purpose. **Share** makes one: a single file that
+holds the record and its screenshots inside itself. It opens in any browser on
+any computer, with no journal running and no network, and it can be sent the
+way any file is sent.
+
+**Share stands in three places.** On a trade, next to Edit: the trade whole,
+the plan it followed and the setup it was taken under, the idea with its
+screenshots by timeframe, the checklist with what was met and what was not and
+why, the exit shot and your conclusions. Over the list on
+the front page, next to CSV: whatever the filters are showing right now, with
+the figures of that selection above it. And on a report: the month or the
+quarter with its figures, your conclusions and every trade it closed.
+
+**You see what leaves before it leaves.** Share opens the document itself, with
+one strip across the top: how much the file will weigh, whether the screenshots
+go with it, and the **Download** button. The strip is not part of the file. On
+a selection and a report you can drop the screenshots and send the figures
+alone, which turns a file of forty megabytes into one of forty kilobytes; a
+single trade always carries them, since they are the reason to show it at all.
+When the trades go in full, the file reads as pages: it opens on the report,
+a line of the list opens its trade alone, and the head of the trade leads to
+the list and to the trades before and after it. The browser's Back works
+too. Printed, every page goes to paper, one trade a sheet.
+
+**Download says what it is doing.** The file is put together the moment you
+press it, and a big one takes a moment, so the button counts itself up
+(*Building the file... 60%*) and says *Saved* when the browser has it. Pressing
+it again while it works does nothing, and the whole journal with every
+screenshot in it is the only case where the counting is worth watching.
+
+**Money never leaves.** Not the PnL of a trade, not the risk in money, not a
+balance and not the size of an account. What travels is R, the result measured
+against the risk you took, the percent the risk was written as, and the words
+you wrote. Account names travel, since a trader reading your journal should
+know which account a trade sat on. This is not a switch, it is how the document
+is built: it carries only what it names, so a field added to a trade tomorrow
+will not quietly walk out in it.
+
+**A PDF, when a file is not what you want.** Open the downloaded file and print
+it, `Ctrl+P`, then save as PDF. The document knows it is being printed and
+turns itself into ink on paper: white ground, dark text, and in a selection
+every trade starting its own page. That is the way to a PDF that looks like the
+journal, and it needs nothing installed.
+
+**A document is a copy, not a window.** It holds the record as it was the
+moment you saved it. Write another line into the trade and the file you already
+sent will not know about it; make it again and send the new one.
 
 ## Search
 

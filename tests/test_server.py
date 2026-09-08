@@ -2166,11 +2166,11 @@ class ServerCase(unittest.TestCase):
             self.assertIn("Every closed trade", html)
             self.assertNotIn('class="badge"', html)
 
-    def test_80_a_period_travels_to_the_journal_as_the_months_it_covers(self):
+    def test_80_a_period_travels_as_itself_and_is_never_turned_into_months(self):
+        """The cut carried off this page keeps its period. It used to become
+        the months the period covered, so that the front page could take it,
+        and those months are the entries of a different set of trades."""
         S = self.S
-        self.assertEqual(S.period_window("2026-W31", "week"), ("2026-07", "2026-08"))
-        self.assertEqual(S.period_window("2026-W01", "week"), ("2025-12", "2026-01"))
-        self.assertEqual(S.period_window("2026-Q3", "quarter"), ("2026-07", "2026-09"))
         self.assertEqual(S.period_name("2026-W01", "week"), "W01 29.12.2025")
         self.assertEqual(S.period_name("2026-08", "month"), "August 2026")
         rows = [(k, None) for k in ("2025-W52", "2026-W01", "2026-W02", "2026-W06")]
@@ -2180,12 +2180,20 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(S.period_marks([("2025-12", None), ("2026-01", None)], "month"),
                          [(0, "2025"), (1, "2026")])
         q = {"closed": ["2026-W31"], "by": ["week"], "axis": ["trade"], "pair": ["EURUSD"]}
-        self.assertEqual(S.cut_only(q), "/?pair=EURUSD&from=2026-07&to=2026-08")
+        # how the page happens to be drawn stays behind, the cut travels whole
         self.assertEqual(S.cut_only(q, "/export.csv"),
-                         "/export.csv?pair=EURUSD&from=2026-07&to=2026-08")
-        # the months of the filter narrow the window, never widen it
+                         "/export.csv?pair=EURUSD&closed=2026-W31")
+        self.assertEqual(S.stats_way(q)(Trade(id="x y", account="broker",
+                                              pair="EURUSD", direction="long",
+                                              style="swing", risk=1.0,
+                                              opened=datetime(2026, 8, 1))),
+                         "/trade/x%20y?pair=EURUSD&closed=2026-W31")
+        # a key that names no period is not carried at all
+        self.assertEqual(S.cut_only({"closed": ["2026-13"], "pair": ["EURUSD"]},
+                                    "/export.csv"), "/export.csv?pair=EURUSD")
         q = {"closed": ["2026-08"], "from": ["2026-07"], "to": ["2026-08"]}
-        self.assertEqual(S.cut_only(q), "/?from=2026-08&to=2026-08")
+        self.assertEqual(S.cut_only(q, "/export.csv"),
+                         "/export.csv?from=2026-07&to=2026-08&closed=2026-08")
         self.assertEqual(S.cut_href(q, ("closed",)), "/stats?from=2026-07&to=2026-08")
         self.assertEqual(S.cut_href({"pair": ["EURUSD"]}, ("pair",)), "/stats")
         self.assertIsNone(S.month_start("2026-13"))
@@ -2196,6 +2204,119 @@ class ServerCase(unittest.TestCase):
                          "/stats?closed=2026-W32")
         self.assertEqual(S.period_href("2026-08", "month", {"closed": ["2026-Q3"]}),
                          "/stats?closed=2026-08")
+
+    def test_80i_a_period_lists_its_trades_on_the_page_that_counted_them(self):
+        """The card is the very set the figures were worked out on, by the
+        exit, so its rows and the count in the head cannot disagree. Without
+        a period cut there is no card, because every other cut is the same
+        trades on either page and The trades still opens the journal."""
+        S = self.S
+        j = S.journal()
+        _, html = self.get("/stats?closed=2026-08")
+        self.assertIn('<a class="btn" href="#trades"', html)
+        card = html[html.index('<div class="card" id="trades">'):]
+        want = S.stats.summary(j, S.stats.closed_in(j.trades, "2026-08")).trades
+        self.assertEqual(len(re.findall(r'<tr><td class="cell">', card)), want)
+        self.assertIn(f">{want} closed in August 2026</span>", card)
+        # the exit leads and the entry stands beside it, which is the whole
+        # difference between this list and the journal's
+        self.assertIn("<th>closed</th><th>entered</th>", card)
+        # no cut, no card, and the button still hands the reader to the journal
+        for where in ("/stats", "/stats?pair=EURUSD", "/stats?closed=2026-13"):
+            _, html = self.get(where)
+            self.assertNotIn('id="trades"', html)
+            self.assertNotIn('href="#trades"', html)
+            self.assertIn("the same selection as a list", html)
+
+    def test_75c_a_report_lists_the_trades_of_its_month(self):
+        """A report is a period, so it carries the same card the Statistics
+        tab carries under a cut: the trades it closed, counted by the exit,
+        each one the way back to this report."""
+        S = self.S
+        j = S.journal()
+        _, html = self.get("/report/2026-08")
+        self.assertIn('href="#trades"', html)
+        card = html[html.index('<div class="card" id="trades">'):]
+        want = len(S.reports.trades_of_period(j, "2026-08"))
+        self.assertEqual(len(re.findall(r'<tr><td class="cell">', card)), want)
+        self.assertIn(f">{want} closed in August 2026</span>", card)
+        self.assertIn("<th>closed</th><th>entered</th>", card)
+        # a row carries the report, so the trade answers with the way back
+        way = re.search(r'<a href="(/trade/[^"]+)"', card).group(1)
+        self.assertIn("?report=2026-08", way)
+        _, html = self.get(way.replace("&amp;", "&"))
+        self.assertIn('<a class="btn" href="/report/2026-08">← August 2026</a>', html)
+
+    def test_80l_a_cut_carries_a_visible_way_out_of_itself(self):
+        """Clicking a month used to be a door that locked: the title drops the
+        cut but reads as a heading, and the form's Reset is behind the funnel.
+        The head carries one, and only while there is something to drop."""
+        # the form inside the funnel has a Reset of its own, so the button is
+        # looked for by its own markup and not by the word
+        button = ('<a class="btn" href="/stats" title="drop the whole cut and '
+                  'read every closed trade">Reset</a>')
+        for where in ("/stats?closed=2026-08", "/stats?pair=EURUSD",
+                      "/stats?closed=2026-08&pair=EURUSD&by=week"):
+            _, html = self.get(where)
+            self.assertIn(button, html, where)
+        # nothing to drop, no button, and a key that names no period is nothing
+        for where in ("/stats", "/stats?closed=2026-13", "/stats?by=month"):
+            _, html = self.get(where)
+            self.assertNotIn(button, html, where)
+
+    def test_80j_a_trade_opened_from_the_statistics_offers_the_whole_cut_back(self):
+        """August and August on one pair are two pages under one title, so a
+        way back that carried only the period would land on the wrong one.
+        A key that names no period is not carried at all."""
+        _, html = self.get("/stats?closed=2026-08&pair=EURUSD")
+        card = html[html.index('<div class="card" id="trades">'):]
+        way = re.search(r'<a href="(/trade/[^"]+)"', card).group(1).replace("&amp;", "&")
+        self.assertIn("pair=EURUSD", way)
+        self.assertIn("closed=2026-08", way)
+        _, html = self.get(way)
+        self.assertIn('<a class="btn" href="/stats?pair=EURUSD&closed=2026-08">'
+                      '← Statistics: August 2026</a>', html)
+        # a bare trade has nothing to go back to, and a report wins over a cut
+        trade = way.split("?")[0]
+        _, html = self.get(trade)
+        self.assertNotIn("← ", html)
+        _, html = self.get(f"{trade}?closed=/evil")
+        self.assertNotIn("← ", html)
+        _, html = self.get(f"{trade}?report=2026-08&closed=2026-08")
+        self.assertIn('href="/report/2026-08">← August 2026</a>', html)
+        self.assertNotIn("← Statistics", html)
+
+    def test_80k_a_long_period_folds_the_tail_of_its_list(self):
+        """A quarter is a hundred trades and more: the newest thirty stand
+        open and the rest go behind one line, the way the table of periods
+        folds its own tail."""
+        S = self.S
+        j = S.journal()
+        _, html = self.get("/stats?closed=2026-Q3")
+        card = html[html.index('<div class="card" id="trades">'):]
+        want = S.stats.summary(j, S.stats.closed_in(j.trades, "2026-Q3")).trades
+        self.assertEqual(len(re.findall(r'<tr><td class="cell">', card)), want)
+        # the journal these tests share is too short to fold, so the tail is
+        # asked of a quarter built for it, the way the periods table asks
+        n = S.PERIOD_TRADES_ROWS + 5
+        trades = [Trade(id=f"q{i}", account="broker", pair="EURUSD",
+                        direction="long", style="swing", risk=1.0,
+                        opened=datetime(2026, 7, 1) + timedelta(days=2 * i),
+                        closed=datetime(2026, 7, 1) + timedelta(days=2 * i),
+                        result="Win", pnl=100) for i in range(n)]
+        long = S.Journal(j.accounts, trades, [])
+        card = S.period_trades_card(long, trades, "Q3 2026",
+                                    lambda t: f"/trade/{t.id}")
+        self.assertEqual(len(re.findall(r'<tr><td class="cell">', card)), n)
+        self.assertIn("<summary>5 more trades</summary>", card)
+        # one fold, and the thirty newest stand before it
+        self.assertEqual(card.index("<details"), card.rindex("<details"))
+        shown = card[:card.index("<details")]
+        self.assertEqual(len(re.findall(r'<tr><td class="cell">', shown)),
+                         S.PERIOD_TRADES_ROWS)
+        # the newest exit leads, so the last trade written is the first row
+        first = re.search(r'<tbody><tr>.*?</tr>', shown, re.S).group(0)
+        self.assertIn(f">{trades[-1].closed:%d.%m.%Y}</a>", first)
 
     def test_80b_the_cards_of_a_zone_are_dealt_into_columns_that_end_together(self):
         S = self.S
@@ -2355,6 +2476,63 @@ class ServerCase(unittest.TestCase):
         finally:
             shutil.rmtree(store.trade_dir(self.root, "2025-12-30-01-eurusd"))
             self.S.drop_cache()
+
+    # --- what leaves the journal ---
+
+    def a_trade_with_shots(self):
+        """A trade that has pictures: the point of a document is that they
+        travel with it."""
+        folder = os.path.join(self.root, "journal", "trades")
+        for trade in sorted(os.listdir(folder)):
+            shots = os.path.join(folder, trade, store.SHOTS)
+            if os.path.isdir(shots) and os.listdir(shots):
+                return trade
+        self.fail("no trade with a screenshot in the test journal")
+
+    def test_90_a_trade_is_shown_as_one_file(self):
+        """The preview, then the file: same document, and the file carries its
+        own pictures so it opens on a machine with no journal."""
+        trade = self.a_trade_with_shots()
+        code, html = self.get(f"/share/trade/{trade}")
+        self.assertEqual(code, 200)
+        self.assertIn('class="bar"', html)          # the strip over a preview
+        self.assertIn(f'src="/shot/{trade}/', html)
+        code, html = self.get(f"/share/trade/{trade}?file=1")
+        self.assertEqual(code, 200)
+        self.assertNotIn('class="bar"', html)       # no buttons in what is sent
+        self.assertNotIn('src="/shot/', html)
+        self.assertIn("data:image/png;base64,", html)
+
+    def test_91_the_file_arrives_named(self):
+        trade = self.a_trade_with_shots()
+        with urllib.request.urlopen(
+                self.url(f"/share/trade/{trade}?file=1")) as r:
+            said = r.headers.get("Content-Disposition")
+        self.assertIn("attachment", said)
+        self.assertIn(f"plainbook-{trade}.html", said)
+
+    def test_92_the_selection_and_the_report_are_shown_too(self):
+        code, html = self.get("/share/journal?shots=0")
+        self.assertEqual(code, 200)
+        self.assertIn("Trades", html)
+        built = sorted(os.listdir(os.path.join(self.root, "journal", "reports")))
+        period = built[0].removesuffix(".md")
+        code, html = self.get(f"/share/report/{period}?shots=0")
+        self.assertEqual(code, 200)
+        self.assertIn("The trades", html)
+
+    def test_93_a_selection_with_nothing_in_it_is_refused(self):
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.get("/share/journal?pair=NOTHING")
+        self.assertEqual(caught.exception.code, 404)
+
+    def test_94_the_way_to_a_document_is_on_the_page(self):
+        """A button on the trade, one over the list, one on the report."""
+        trade = self.a_trade_with_shots()
+        _, html = self.get(f"/trade/{trade}")
+        self.assertIn(f'href="/share/trade/{trade}"', html)
+        _, html = self.get("/")
+        self.assertIn('href="/share/journal"', html)
 
 
 if __name__ == "__main__":

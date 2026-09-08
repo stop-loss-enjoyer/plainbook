@@ -80,6 +80,13 @@ const api = {
   errors,
 };
 const check = (cond, what) => { if (!cond) throw new Error("check failed: " + what); console.log("ok: " + what); };
+// The day this run happens on. The trade below is opened and closed inside it,
+// and the card is written for it. Written as a fixed date once, the check went
+// red the morning after: the exit was earlier than the entry, which the journal
+// refuses, and rightly.
+const now = new Date();
+const DAY = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"),
+             String(now.getDate()).padStart(2, "0")].join("-");
 
 async function run(p) {
   const has = async (expr, word) => (await p.evaluate(expr)).toLowerCase().includes(word.toLowerCase());
@@ -146,6 +153,7 @@ async function run(p) {
   check(await p.evaluate(`document.querySelector('.checklist:not([hidden]) [data-risk]').classList.contains('over')`), "risk 2 over the cap of 1 turns red");
   await p.evaluate(`var r=document.querySelector('[name=risk]'); r.value='1'; r.dispatchEvent(new Event('input',{bubbles:true}))`);
   await p.evaluate(`document.querySelector('[name=pair]').value='EURUSD'; document.querySelector('[name=idea_text_1]').value='a test idea'`);
+  await p.evaluate(`document.querySelector('[name=entry]').value=${JSON.stringify(DAY + "T09:00")}`);
   await p.submit();
   const tradeUrl = await p.url();
   check(tradeUrl.startsWith("/trade/"), "trade opened: " + tradeUrl);
@@ -161,7 +169,7 @@ async function run(p) {
   check(await has(`document.querySelector('#exit-checklist .tally').textContent`, "0 of 1"), "exit tally 0 of 1");
   check(!(await p.evaluate(`document.querySelector('[name=why_break-test_5]').hidden`)), "why shown under the unheld management rule");
   await p.evaluate(`document.querySelector('[name=why_break-test_5]').value='moved it at the news'`);
-  await p.evaluate(`document.querySelector('[name=result]').value='Lose'; document.querySelector('[name=pnl]').value='-100'; document.querySelector('[name=exit]').value='2026-09-07T12:00'`);
+  await p.evaluate(`document.querySelector('[name=result]').value='Lose'; document.querySelector('[name=pnl]').value='-100'; document.querySelector('[name=exit]').value=${JSON.stringify(DAY + "T12:00")}`);
   await p.submit();
   page = (await p.evaluate(`document.body.innerText`)).toLowerCase();
   check(page.includes("1 rule not held".toLowerCase()), "trade page: 1 rule not held");
@@ -229,12 +237,14 @@ async function run(p) {
 
   // ---- 7. the report card: the trades of the day offered to the two fields
   // that name a trade, the best one and the assessment
-  await p.goto(B + "/card/2026-09-07");            // the day the trade above closed
+  await p.goto(B + "/card/" + DAY);                 // the day the trade above closed
   check(await p.evaluate(`!!document.querySelector('select.pick[data-into=best]')`),
     "the card offers the day's trades to the best trade");
   const label = await p.evaluate(`document.querySelector('select.pick option:nth-child(2)').value`);
   await p.evaluate(`var i=document.querySelector('.pick'); i.value=${JSON.stringify(label)}; i.dispatchEvent(new Event('change',{bubbles:true}))`);
-  check(await p.evaluate(`document.querySelector('textarea[name=best]').value`) === label + " ",
+  // the day may already have a card with words in it, so what is checked is
+  // that the pick was inserted, not that it is the whole field
+  check(await has(`document.querySelector('textarea[name=best]').value`, label),
     "picking a trade writes it into the best trade: " + label);
   check(await p.evaluate(`document.querySelector('.pick').value`) === "",
     "the picker goes back to empty, so it saves nothing of its own");
@@ -249,9 +259,36 @@ async function run(p) {
   await p.evaluate(`var t=document.querySelector('[name=assess_trade]'); t.value=${JSON.stringify(label)}; t.dispatchEvent(new Event('input',{bubbles:true}))`);
   await p.evaluate(`document.querySelector('[name=grade]').value='B'`);
   await p.submit();
-  check((await p.url()).startsWith("/card/2026-09-07"), "the card saved: " + (await p.url()));
+  check((await p.url()).startsWith("/card/" + DAY), "the card saved: " + (await p.url()));
   check(await has(`document.querySelector('textarea[name=best]').value`, label),
     "the card came back with the trade in the best trade");
+
+  // ---- the Download button of a preview, the one place a page fetches a
+  // file for itself. The anchor click is caught, so a checking run saves
+  // nothing to disk.
+  await p.goto(B + "/share/journal?shots=0");
+  check(await p.evaluate(`!!document.querySelector('.bar a.primary')`),
+    "the preview carries the Download button");
+  await p.evaluate(`window.__saved = null;
+    HTMLAnchorElement.prototype.click = function(){
+      window.__saved = {name: this.download, href: this.href}; };`);
+  const saving = await p.evaluate(`(async () => {
+    const link = document.querySelector('.bar a.primary');
+    const done = share_save(link);
+    const during = link.textContent;
+    const busy = link.classList.contains('busy');
+    await done;
+    return [during, busy, link.textContent,
+            window.__saved && window.__saved.name,
+            window.__saved && window.__saved.href.slice(0, 5)].join("|");
+  })()`);
+  const [during, busy, after, name, kind] = saving.split("|");
+  check(during.startsWith("Building the file"), "the button says it is building: " + during);
+  check(busy === "true", "the button is marked busy while it builds");
+  check(after === "Saved", "the button says the file was saved");
+  check(name.startsWith("plainbook-trades-") && name.endsWith(".html"),
+    "the file is handed over named: " + name);
+  check(kind === "blob:", "the page saves a file it built itself");
 }
 
 let failed = false;

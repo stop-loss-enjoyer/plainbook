@@ -595,6 +595,35 @@ class SelectionCase(unittest.TestCase):
         self.assertEqual([t.id for t in stats.past_stop(j, j.trades)], ["deep", "edge"])
 
 
+    def test_an_overrun_costs_only_what_it_ran_past_the_stop(self):
+        """The stop is the attempt and the attempt was allowed: -1 R is the
+        plan working, and commission carries it to -1.2 R. Only what lies
+        past that edge was lost to the risk being overrun."""
+        # one trade a journal, so that the balance is 10 000 and the risk 1%
+        # when it opens and the R of it is exact
+        def only(pnl, result="Lose"):
+            j = self.journal([self.trade("t", result, pnl,
+                                         datetime(2026, 8, 1), datetime(2026, 8, 1))])
+            return j, j.trades[0]
+        # at the edge the loss reached the stop and did not pass it
+        self.assertAlmostEqual(stats.past_stop_over(*only(-120)), 0.0, 4)
+        self.assertAlmostEqual(stats.past_stop_over(*only(-135)), -0.15, 4)
+        self.assertAlmostEqual(stats.past_stop_over(*only(-100)), 0.0, 4)
+        # a win never overran anything, whatever it brought
+        self.assertAlmostEqual(stats.past_stop_over(*only(200, "Win")), 0.0, 4)
+        j = self.journal([
+            self.trade("deep", "Lose", -135, datetime(2026, 8, 1), datetime(2026, 8, 1)),
+            self.trade("also", "Lose", -140, datetime(2026, 8, 2), datetime(2026, 8, 2)),
+            self.trade("won", "Win", 200, datetime(2026, 8, 3), datetime(2026, 8, 3))])
+        past = stats.past_stop(j, j.trades)
+        cost = stats.past_stop_cost(j, past)
+        self.assertEqual(len(past), 2)
+        self.assertAlmostEqual(cost, sum(stats.past_stop_over(j, t) for t in past), 9)
+        # the price of the overruns and what those trades brought are two
+        # different figures, and the overrun is the smaller of them by far
+        self.assertGreater(cost, stats.summary(j, past).sum_r + 2.0)
+
+
 class TapeCase(unittest.TestCase):
     """The tape draws trades and periods with the same code."""
 

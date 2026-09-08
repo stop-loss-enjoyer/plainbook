@@ -176,6 +176,7 @@ class Report:
     broke: stats.Summary = None     # the ticked ones that broke a rule, at the entry or the close
     rules: list = field(default_factory=list)      # [(playbook label, Rule, trades, Summary)]
     past_stop: list = field(default_factory=list)  # losses of -1.2 R and worse
+    past_stop_cost: float = 0.0     # what those losses cost beyond the stop itself
     entry_broken: int = 0           # ticked trades that broke a rule at the entry
     close_broken: int = 0           # closed trades that broke a management rule
     unticked: int = 0               # tied to a playbook, never ticked
@@ -252,6 +253,7 @@ class Discipline:
     broke: stats.Summary = None
     rules: list = field(default_factory=list)      # [(playbook label, Rule, trades, Summary)]
     past_stop: list = field(default_factory=list)
+    past_stop_cost: float = 0.0                   # R lost beyond the stop itself
     entry_broken: int = 0
     close_broken: int = 0
     mistakes: list = field(default_factory=list)
@@ -290,6 +292,7 @@ def discipline(root, journal, trades):
     rows.sort(key=lambda x: (x[3].sum_r, -x[2]))
     r.rules = rows
     r.past_stop = stats.past_stop(journal, trades)
+    r.past_stop_cost = stats.past_stop_cost(journal, r.past_stop)
     r.entry_broken = sum(1 for t in ticked if t.deviations)
     r.close_broken = sum(1 for t in ticked if t.exit_deviations)
     # what the journal itself calls a mistake: a rule ticked as not met, at
@@ -402,9 +405,12 @@ def to_markdown(r, journal, conclusions):
             lines.append("")
     if r.past_stop:
         lines += ["### Losses past the stop", "",
-                  "| trade | pair | R |", "|---|---|---|"]
-        lines += [f"| {t.id} | {t.pair} | {journal.r(t.id):+.2f} |" for t in r.past_stop]
-        lines.append("")
+                  "| trade | pair | R | over |", "|---|---|---|---|"]
+        lines += [f"| {t.id} | {t.pair} | {journal.r(t.id):+.2f} "
+                  f"| {stats.past_stop_over(journal, t):+.2f} |"
+                  for t in r.past_stop]
+        lines += ["", f"Over the stop as designed, -1.2 R: "
+                      f"{r.past_stop_cost:+.2f} R.", ""]
     lines += ["### Process", ""]
     if not r.cards:
         lines += [f"No cards written for this period, and {r.days_traded} "

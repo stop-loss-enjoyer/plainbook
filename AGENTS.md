@@ -67,6 +67,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/reports.py` | monthly and quarterly reports: `compose` reads the figures off the journal on every look, `build` writes them into the file that is the archive and holds the conclusions |
 | `plainbook/html.py` | the palette, the CSS, the page shell, the SVG charts |
 | `plainbook/flags.py` | the round flag icons of a trading symbol, and what a symbol is taken apart into |
+| `plainbook/share.py` | the document a record leaves in: one file, its pictures inside it, no money in it |
 | `plainbook/server.py` | routes, pages, forms: everything HTTP |
 | `tools/check_public.py` | the guard that keeps records out of the repository |
 | `tools/check_journal.py` | loads every record the way the server does and names the ones that do not read |
@@ -75,7 +76,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `tools/import_csv.py` | old trades brought in from a CSV table (a Notion export, a spreadsheet), written as the interface writes them |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
-reports, balances, store → model → mdfile`. Nothing points back up. If you find
+reports, share, balances, store → model → mdfile`. Nothing points back up. If you find
 yourself importing `server` from anywhere, the design has gone wrong.
 
 Routes live in `Handler.do_GET` and `Handler.do_POST` at the bottom of
@@ -128,13 +129,30 @@ data. Each one is followed by what it prevents.
     is raised, which is what the tests and the checking tool want.
     *Prevents:* one mistyped date leaving every page blank with the reason only
     in the log, which is what happened before 1.4.3.
-11. **A period is measured by the exit** in a report, in the period tile of
+11. **What leaves the journal is built in `share.py`, and it names every
+    field it shows.** The module holds no money at all: it never imports
+    `html.money` and never reads `pnl`, `risk_money` or a balance, and a
+    field reaches a document only because a function there asks for it.
+    Never turn that around into a page of the journal with the money
+    stripped out. *Prevents:* a field added to a trade walking out of the
+    owner's journal a year later because nobody remembered a document
+    existed.
+
+12. **A period is measured by the exit** in a report, in the period tile of
     the front page and in the cards; the list of trades, its filters and the
     totals of its groups go by the entry. *Prevents:* a report whose result in
     money and balance change disagree by the trades that ran across its edge,
     which is what they did before 1.4.6.
 
-12. **A trade's `deviations` is None or a list, and the two mean different
+    The one list read by the exit is **Trades of this period** on the
+    Statistics tab (`period_trades_card`), because it is the very set the
+    figures above it were worked out on. It is flat, so it has no group
+    totals to disagree with anything, it is ordered by the exit, and it
+    prints both dates. Do not helpfully put it back on the entry: the cut
+    used to be carried to the journal as the months it covered, and that
+    list was a different set of trades under the same title.
+
+13. **A trade's `deviations` is None or a list, and the two mean different
     things.** None: the trade was tied to its playbook without a checklist
     (the key is absent from the file). A list, empty included: the rules
     were ticked, and these are the ones not met (the key stands, empty for

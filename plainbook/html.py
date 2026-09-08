@@ -42,18 +42,19 @@ MONO = ('ui-monospace,"JetBrains Mono","CaskaydiaMono Nerd Font",'
 
 
 def mark(size=20, ink=INK, accent=ACCENT):
-    """The sign of the journal: a sheet of plain text with one candle on it.
+    """The sign of the journal: three lines of plain text and one candle
+    standing where the cursor would be.
 
-    The sheet is the file every record lives in, the candle is what the file
-    is about. Drawn in two colours of the palette and nothing else, so it
-    sits in the header without asking for attention."""
+    The lines are the record, the candle is what the record is about. The
+    body runs from the first line to the last, so the two read as one block.
+    Drawn in two colours of the palette and nothing else, so it sits in the
+    header without asking for attention."""
     return (f'<svg class="mark" viewBox="0 0 20 20" width="{size}" height="{size}" '
             f'fill="none" stroke-width="1.6" stroke-linejoin="round" '
             f'stroke-linecap="round" aria-hidden="true">'
-            f'<path d="M4.5 2.5h7.5l3.5 3.5v11.5h-11z" stroke="{ink}"/>'
-            f'<path d="M12 2.5V6h3.5" stroke="{ink}"/>'
-            f'<path d="M10 6.8v1.8M10 13.8v1.8" stroke="{accent}" stroke-width="1.3"/>'
-            f'<rect x="8" y="8.6" width="4" height="5.2" rx=".7" fill="{accent}"/>'
+            f'<path d="M3 5h7M3 10h7M3 15h4" stroke="{ink}"/>'
+            f'<path d="M14.6 2.3v2.5M14.6 15.2v2.5" stroke="{accent}" stroke-width="1.3"/>'
+            f'<rect x="12.6" y="4.8" width="4" height="10.4" rx=".8" fill="{accent}"/>'
             f'</svg>')
 
 
@@ -74,19 +75,22 @@ body{{margin:0;background:{GROUND};color:{INK};
 a{{color:{ACCENT};text-decoration:none}}
 a:hover{{color:#9ab9ff}}
 .wrap{{max-width:1460px;margin:0 auto;padding:0 20px 56px}}
+/* the header is sticky and 49px tall, so an address ending in an anchor would
+   otherwise land with the heading it names hidden underneath it */
+html{{scroll-padding-top:57px}}
 
 /* header: the sign, the name, the tabs; 48px tall, and the table heads
    below know that number */
 header{{display:flex;align-items:stretch;gap:18px;flex-wrap:wrap;
  position:sticky;top:0;z-index:8;background:{GROUND};
  border-bottom:1px solid {EDGE};min-height:49px;margin-bottom:18px}}
-header .logo{{display:inline-flex;align-items:center;gap:9px;color:{INK};
- font:600 15px/1 {MONO};letter-spacing:-.02em;padding-right:4px}}
+header .logo{{display:inline-flex;align-items:center;gap:10px;color:{INK};
+ font:600 18px/1 {MONO};letter-spacing:-.02em;padding-right:4px}}
 header .logo .mark{{display:block}}
 /* the version, beside the name and in the way of nobody: a person asking
    for help can say which one they have the moment the page opens */
 header .logo .ver{{font:500 10px/1 {MONO};color:{DIM};letter-spacing:0;
- margin-top:3px}}
+ margin-top:5px}}
 header .logo:hover{{color:{INK}}}
 header .logo:hover .mark path,header .logo:hover .mark rect{{stroke:{ACCENT}}}
 header .logo:hover .mark rect{{fill:{ACCENT}}}
@@ -596,7 +600,7 @@ def page(title, body, tab="journal", header_right="", notice="", said="",
 <script>{HOVER}{PAGE_SCRIPT}</script></head><body>
 {flags.SPRITE}{said}
 <div class="wrap">
-<header><a href="/" class="logo" title="the journal">{mark(22)}plainbook<span class="ver">{__version__}</span></a><nav>{nav}</nav>
+<header><a href="/" class="logo" title="the journal">{mark(26)}plainbook<span class="ver">{__version__}</span></a><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
 {notice}{body}
 </div>

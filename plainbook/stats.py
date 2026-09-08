@@ -295,6 +295,27 @@ def past_stop(journal, trades):
                   key=lambda t: journal.r(t.id) or 0.0)
 
 
+def past_stop_over(journal, trade):
+    """How far one loss went beyond the stop it was sized for, never above
+    zero.
+
+    The stop itself is not the mistake: -1 R is the attempt working as it was
+    meant to, and commission and swap carry it to -1.2 R, which the trade was
+    still sized for. Only what lies past that edge was lost to the risk being
+    overrun, and it is the part discipline could have kept. The edge is the
+    one the rings cut at, so a loss counted as past the stop and the price
+    put on it are measured by the same number.
+    """
+    edge = LOSS_BUCKETS[2][1]
+    r = journal.r(trade.id)
+    return 0.0 if r is None else min(0.0, r + edge)
+
+
+def past_stop_cost(journal, past):
+    """What a list of losses past the stop cost beyond the stop itself."""
+    return sum(past_stop_over(journal, t) for t in past)
+
+
 def _figure(limits, key):
     try:
         return float(str(limits.get(key, "")).replace(",", "."))

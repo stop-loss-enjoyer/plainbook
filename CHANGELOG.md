@@ -6,6 +6,67 @@ What changed and why. Newest first.
 
 ### Added
 
+- **A trade, a selection or a report leaves the journal as one file you can
+  show another trader.** Share, on a trade beside Edit, over the list beside
+  CSV, and on a report, builds a document of it: one HTML file with the
+  screenshots carried inside it, so it opens on any computer with no journal
+  running and nothing fetched from the network. A trade goes whole, with the plan it
+  followed, the idea by timeframe, the checklist and what each broken rule
+  cost you in words, and the conclusions. A selection and a report go as their figures,
+  their breakdowns and the list of trades, with the trades in full under them
+  when you want the screenshots too, or without them when the file has to stay
+  small. A file of forty trades with their screenshots would be a long
+  scroll with no way to tell one trade from the next, so it reads as pages
+  instead: it opens on the report, a line of the list opens its trade alone,
+  and the head of the trade leads back to the list or on to the trades either
+  side of it. Printed, every page goes to paper. What never travels is money: no PnL, no risk in money, no balance and
+  no account size, only R and the percent the risk was written as. Share opens
+  the document first, with a strip on top saying what the file will weigh, so
+  nothing is sent unseen. Download builds the file in the page and counts
+  itself up while it does, since a browser handed a plain link shows nothing
+  at all until the file has arrived. Printing the file, `Ctrl+P`, turns it
+  into ink on paper and gives you a PDF that reads like the journal.
+- **The trades of a period stand on the page that counted them.** Picking a
+  month on the Statistics tab and pressing The trades used to hand you to the
+  journal, with no way back and, worse, with a different set of trades: the
+  journal picks by the day you opened and the statistics count by the day you
+  closed, so the same August held 38 trades on one page and 40 on the other.
+  The list now stands at the foot of the Statistics page itself, and it is the
+  very set every figure above was worked out on. It leads with two dates, the
+  exit and the entry, so a trade that ran across the edge of the month is seen
+  for what it is; the newest thirty stand open and the rest fold. Without a
+  period chosen the button still opens the journal, where the two pages hold
+  the same trades.
+- **A report ends with the trades of its month.** The same card the Statistics
+  tab grew, on the page that has always been a period: every trade the month
+  closed, newest exit first, the exit and the entry side by side, thirty open
+  and the rest folded. The tape at the top of a report says the shape of the
+  month, one bar per trade; this says which trades those bars were. The trades
+  in the header jumps down to it, and a row opens its trade with the button
+  back to the report. It is read off the journal on every look like the rest
+  of the page, so the saved file still keeps the figures and your conclusions
+  and not a copy of the list.
+- **A cut on the Statistics tab has a visible way out of itself.** Clicking a
+  month narrowed the page and left no obvious way back: the words of the cut
+  in the title do drop themselves, but they read as a heading, and the Reset
+  of the filter form is behind the funnel. **Reset** now stands in the header
+  beside it, whenever there is something to drop, and puts every closed trade
+  back. It stands on a cut that matched nothing as well, which is the one
+  screen with no rows to click your way out of.
+- **A trade opened from the Statistics tab has a way back to the cut.** From a
+  row of that list, from a bar of the trade by trade picture, from the best
+  and worst tile: the whole cut travels and comes back, the pair and the
+  account with the month, so August on EURUSD returns to August on EURUSD and
+  not to a different page under the same title.
+- **A loss past the stop is priced by what it ran past, not by the whole of
+  it.** The stop is the attempt and the attempt was allowed: -1 R is the plan
+  working, and commission and swap carry it to -1.2 R, which the trade was
+  still sized for. The Past the stop table now carries an **over** column
+  saying what each loss cost beyond that edge, with the total in the head of
+  the card, and the Mistakes tile says it too. Five losses back at -1.35, -1.31,
+  -1.26, -1.25 and -1.21 R are -6.38 R of losses and 0.38 R of overrun, and it
+  is the second figure that says what the discipline cost.
+
 - **The name of an account leads to its statistics.** On the front page the
   name over the balance is a link: it opens the Statistics tab with that
   account chosen, its own equity curve and its own figures, instead of the
@@ -44,6 +105,13 @@ What changed and why. Newest first.
   trade at all.
 
 ### Changed
+
+- **The sign of the journal is three lines of text and one candle.** The
+  sheet with the folded corner read as a document icon from any office suite,
+  and the candle on it was lost at the size of a browser tab. The new sign is
+  the record beside what the record is about: three lines of plain text and a
+  candle standing where the cursor would be, on the same two colours as
+  before. It is a little larger in the header, and so is the name beside it.
 
 - **The Statistics tab reads like a report.** It used to open on seven
   drop-downs, then a table, a chart, two more tables and the same three

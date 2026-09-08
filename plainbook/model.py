@@ -173,6 +173,17 @@ class Plan:
     extra: dict = field(default_factory=dict)
 
     @property
+    def label(self):
+        """A plan in one line, for a list, for the menu of the trade form and
+        for the trade that followed it."""
+        span = f"{self.day:%d.%m.%Y}"
+        if self.until and self.until != self.day:
+            span += f" to {self.until:%d.%m.%Y}"
+        bits = [span, "" if self.pair == PAIR_NOT_SET else self.pair,
+                self.title, self.narrative]
+        return " · ".join(b for b in bits if b)
+
+    @property
     def last_day(self):
         return self.until or self.day
 
@@ -277,6 +288,17 @@ class Playbook:
         out.extend(self.filters)
         out.extend(self.management)
         return out
+
+    def checklist(self, setup):
+        """The rules a trade is held to: those of its setup, then the filters.
+        A playbook whose setups have no names has one, and every trade takes
+        it. The management rules are not here: they are ticked at the close."""
+        named = any(x.name for x in self.setups)
+        rules = []
+        for x in self.setups:
+            if not named or x.name == setup:
+                rules.extend(x.rules)
+        return rules + list(self.filters)
 
     @property
     def offered(self):

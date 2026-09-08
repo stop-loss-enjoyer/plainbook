@@ -19,7 +19,7 @@ import urllib.parse
 from datetime import datetime, timedelta
 
 from . import html as H
-from . import reports, stats, store
+from . import reports, share, stats, store
 from .balances import Journal
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
                     Playbook, Setup, Rule, PLAYBOOK_STATUSES, LIMITS,
@@ -287,15 +287,36 @@ def link_cell(href, inner, cls=""):
     return f'<td class="{("cell " + cls).strip()}"><a href="{href}">{inner}</a></td>'
 
 
-def trade_row(j, t):
+def trade_cells(j, t):
+    """Everything a trade shows in a list except the date it is read by.
+
+    The lists read a trade by the entry and the trades of a period by the
+    exit; from the account onwards the two say exactly the same things, and
+    they have to keep saying them the same way."""
     r = j.r(t.id)
+    return [(esc(t.account), ""),
+            (H.pair(t.pair), ""), (esc(t.direction), ""), (esc(t.style), ""),
+            (esc(t.entry_tf), ""), (f"{t.risk:g}%", "num"),
+            (esc(t.result or "open"), result_class(t)),
+            (H.money(t.pnl, signed=True), f"num {result_class(t)}"),
+            ("-" if r is None else f"{r:+.2f}", "num")]
+
+
+def trades_head(j, dates=("date",)):
+    """The head of a list of trades. `dates` names the columns in front of
+    the figures: one on a list read by the entry, two on the trades of a
+    period, which lead with the exit they were counted by."""
+    return ('<thead><tr>'
+            + "".join(f'<th>{esc(name)}</th>' for name in dates)
+            + '<th>account</th><th>pair</th><th>direction</th><th>style</th>'
+            '<th>TF</th><th class="num">risk</th><th>result</th>'
+            f'<th class="num">PnL {H.sign(j.currency())}</th>'
+            '<th class="num">R</th></tr></thead>')
+
+
+def trade_row(j, t):
     href = f"/trade/{U(t.id)}"
-    cells = [(f"{t.opened:%d.%m.%Y}", ""), (esc(t.account), ""),
-             (H.pair(t.pair), ""), (esc(t.direction), ""), (esc(t.style), ""),
-             (esc(t.entry_tf), ""), (f"{t.risk:g}%", "num"),
-             (esc(t.result or "open"), result_class(t)),
-             (H.money(t.pnl, signed=True), f"num {result_class(t)}"),
-             ("-" if r is None else f"{r:+.2f}", "num")]
+    cells = [(f"{t.opened:%d.%m.%Y}", "")] + trade_cells(j, t)
     return ("<tr>" + "".join(link_cell(href, inner, cls) for inner, cls in cells)
             + "</tr>")
 
@@ -314,10 +335,7 @@ def sum_word(x):
 def trades_table(j, trades, group="week"):
     if not trades:
         return '<p class="muted">Nothing matches the filter.</p>'
-    rows = ['<table><thead><tr><th>date</th><th>account</th><th>pair</th>'
-            '<th>direction</th><th>style</th><th>TF</th><th class="num">risk</th>'
-            f'<th>result</th><th class="num">PnL {H.sign(j.currency())}</th>'
-            '<th class="num">R</th></tr></thead><tbody>']
+    rows = [f'<table>{trades_head(j)}<tbody>']
     buckets = {}
     for t in trades:
         buckets.setdefault(group_key(t.opened, group), []).append(t)
@@ -550,7 +568,10 @@ def home_page(q):
             f'<span class="right">{filters_box(j, q)}'
             f'{group_switch(q, group)}'
             f'<a class="btn" href="{esc(export)}" title="the selection as CSV">'
-            f'CSV</a></span></div>')
+            f'CSV</a>'
+            f'<a class="btn" href="{esc(share_href("/share/journal", q, group=None))}" '
+            f'title="the selection as one file, to show another trader">'
+            f'Share</a></span></div>')
     body = (account_tiles(j) + open_positions(j) + tiles +
             '<div class="card">' + head +
             trades_table(j, trades, group) + "</div>")
@@ -562,7 +583,7 @@ def home_page(q):
 def ticked_rules(p, t):
     """The rules the trade was held to, each marked met or not, or a line
     saying nobody ticked them."""
-    rules = checklist_rules(p, t.setup)
+    rules = p.checklist(t.setup)
     head = (f'<p class="pb-meta"><a href="/playbook/{U(p.id)}">{esc(playbook_label(p))}</a>'
             f' <b>{esc(p.version)}</b>'
             + (f' · <b>{esc(t.setup)}</b>' if t.setup else "") + '</p>')
@@ -633,7 +654,28 @@ def way_back(report):
             f'← {esc(reports.parse_period(report)[2])}</a>')
 
 
-def trade_page(trade_id, report=""):
+def back_to_stats(q):
+    """The button back to the cut a trade was opened from on the Statistics
+    tab.
+
+    The whole cut travels and not only its period: August, and August on
+    EURUSD, are two pages under the same title with different figures, and a
+    way back that dropped the pair would land on the wrong one. Only the
+    fields the statistics filter by are carried, and the period only when it
+    names one, so a query cannot send the reader anywhere else."""
+    params = {k: v[:] for k, v in q.items() if k in CUT_FIELDS}
+    period = (q.get("closed") or [""])[0]
+    grain = stats.grain_of(period)
+    if grain:
+        params["closed"] = [period]
+    if not params:
+        return ""
+    where = "/stats?" + urllib.parse.urlencode(params, doseq=True)
+    word = f": {esc(period_name(period, grain))}" if grain else ""
+    return f'<a class="btn" href="{where}">← Statistics{word}</a>'
+
+
+def trade_page(trade_id, q):
     j = journal()
     t = next((x for x in j.trades if x.id == trade_id), None)
     if t is None:
@@ -697,7 +739,9 @@ def trade_page(trade_id, report=""):
                                    f'{U(os.path.basename(m.group(1)))}" alt="screenshot">',
                          esc(t.conclusions)).replace("\n", "<br>")
 
-    buttons = (f'<a class="btn" href="/edit/{U(t.id)}">Edit</a>'
+    buttons = (f'<a class="btn" href="/share/trade/{U(t.id)}" '
+               f'title="the trade as one file, to show another trader">Share</a>'
+               f'<a class="btn" href="/edit/{U(t.id)}">Edit</a>'
                f'<form method="post" action="/trade/{U(t.id)}/delete" '
                f'style="display:inline" onsubmit="return confirm('
                f'\'Delete trade {esc(t.id)}? The folder moves to .trash.\')">'
@@ -705,7 +749,9 @@ def trade_page(trade_id, report=""):
     if t.is_open:
         buttons = (f'<a class="btn primary" href="/close/{U(t.id)}">Close trade</a>'
                    + buttons)
-    buttons = way_back(report) + buttons
+    # a report names itself, a cut has no name of its own, so the report is
+    # asked first: a trade is never opened from both at once
+    buttons = (way_back((q.get("report") or [""])[0]) or back_to_stats(q)) + buttons
     body = (f'<div class="card{" is-open" if t.is_open else ""}">'
             f'<h2>{esc(t.id)}</h2>{outcome_warning(t)}'
             f'<table class="props">{table}</table></div>'
@@ -841,28 +887,30 @@ def cut_href(q, drop=(), where="/stats"):
                     if params else "")
 
 
-def cut_only(q, where="/", period_travels=False):
+def cut_only(q, where="/"):
     """The cut alone, carried to another page: what is filtered, never how
     this page happens to be drawn.
 
-    A period cut is by the exit. The file of a selection carries it as it
-    is, since the export cuts by the exit too; the list of trades has no
-    such filter, so there the period travels as the months it covers,
-    narrowed to the months the filter already held. That list is then the
-    entries of those months, which is not quite what this page counted, and
-    the button says so."""
+    A period cut is by the exit and travels as it is. It used to be turned
+    into the months it covers so that the front page could take it, and that
+    list was the entries of those months, which is a different set of trades
+    from the one the figures were worked out on. The trades of a period are
+    now listed on the page that counted them, so nothing has to be
+    translated: the file of the selection cuts by the exit as well, and a
+    trade carries the cut only to offer the way back to it."""
     params = {k: v[:] for k, v in q.items() if k in CUT_FIELDS}
     period = (q.get("closed") or [""])[0]
-    grain = stats.grain_of(period)
-    if grain and period_travels:
+    if stats.grain_of(period):
         params["closed"] = [period]
-    elif grain:
-        since, until = period_window(period, grain)
-        was_from, was_to = (params.get("from") or [""])[0], (params.get("to") or [""])[0]
-        params["from"] = [max(since, was_from) if was_from else since]
-        params["to"] = [min(until, was_to) if was_to else until]
     return where + ("?" + urllib.parse.urlencode(params, doseq=True)
                     if params else "")
+
+
+def stats_way(q):
+    """The address a trade of this page opens at: the cut rides along, so the
+    trade page can offer the way back to it. The statistics' own `trade_way`,
+    which does the same for a report."""
+    return lambda t: cut_only(q, f"/trade/{U(t.id)}")
 
 
 def cut_parts(j, q):
@@ -947,12 +995,24 @@ def stats_head(j, q, trades, rest):
         bits.append(f'read against <a href="{cut_href(q, CUT_FIELDS + ["closed"])}" '
                     f'title="the whole journal">the other {rest.trades} closed '
                     f'{word}</a>')
-    period = stats.grain_of((q.get("closed") or [""])[0])
-    listed = ("the trades entered in the months of this period, as a list"
-              if period else "the same selection as a list")
-    right = (filters_box(j, q, "/stats")
-             + f'<a class="btn" href="{cut_only(q)}" title="{listed}">The trades</a>'
-             + f'<a class="btn" href="{cut_only(q, "/export.csv", True)}" '
+    # with a period cut the trades stand at the foot of this page, counted by
+    # the exit the way the figures above them were; without one the cut is the
+    # same set of trades on either page, so the button hands the reader to the
+    # journal, where the tab bar is the way back
+    if stats.grain_of((q.get("closed") or [""])[0]):
+        listed = '<a class="btn" href="#trades" title="the trades this period ' \
+                 'closed, at the foot of this page">The trades</a>'
+    else:
+        listed = f'<a class="btn" href="{cut_only(q)}" ' \
+                 f'title="the same selection as a list">The trades</a>'
+    # the way out stands beside the way in. Every part of the cut already
+    # drops itself from the title and the form has a Reset of its own, but
+    # both are easy to miss: the title reads as a heading and the form is
+    # behind the funnel, so clicking a month was a door that locked
+    reset = ('<a class="btn" href="/stats" title="drop the whole cut and read '
+             'every closed trade">Reset</a>' if active_filters(q) else "")
+    right = (filters_box(j, q, "/stats") + reset + listed
+             + f'<a class="btn" href="{cut_only(q, "/export.csv")}" '
              f'title="the selection as CSV">CSV</a>')
     return (f'<div class="page-head"><div><h2>Statistics</h2>'
             f'<h1 class="pb-name">{title}</h1>'
@@ -1061,7 +1121,7 @@ def fall_tile(j, trades, s, fall, ends_now):
                 " · ".join(x for x in (when, back, run) if x))
 
 
-def stats_tiles(j, trades, rest, d, fall, ends_now):
+def stats_tiles(j, q, trades, rest, d, fall, ends_now):
     """The headline strip: six figures that say what this selection did, each
     read against the trades the filter left out. The last two are the
     report's own tiles, so the two pages are read the same way."""
@@ -1071,7 +1131,7 @@ def stats_tiles(j, trades, rest, d, fall, ends_now):
             + ev_tile(s, rest) + wr_tile(j, trades, s, rest)
             + payoff_tile(s, rest) + fall_tile(j, trades, s, fall, ends_now)
             + mistakes_tile(d, s)
-            + extremes_tile(j, best, worst, s.trades, lambda t: f"/trade/{U(t.id)}")
+            + extremes_tile(j, best, worst, s.trades, stats_way(q))
             + "</div>")
 
 
@@ -1124,16 +1184,6 @@ def period_name(key, group):
     if group == "week":
         return f"{key.split('-')[1]} {period_monday(key):%d.%m.%Y}"
     return reports.parse_period(key)[2]
-
-
-def period_window(key, group):
-    """The months of a period, as the journal filters by them. A week that
-    runs across the turn of a month is two of them, or the trades of its
-    other half would be missing from the list it opens."""
-    if group == "week":
-        monday = period_monday(key)
-        return f"{monday:%Y-%m}", f"{monday + timedelta(days=6):%Y-%m}"
-    return reports.period_months(key)
 
 
 def period_href(key, group, q):
@@ -1209,7 +1259,7 @@ def periods_card(j, q, trades, group):
         # the marks name weeks over a couple of months and months past that
         short = (order[-1].closed - order[0].closed).days <= 70
         tape = trade_tape(j, order, "month" if short else "quarter",
-                          lambda t: f"/trade/{U(t.id)}", width=810, height=290)
+                          stats_way(q), width=810, height=290)
         caption = (f'One bar per closed trade in the order of the exits, a line '
                    f'where a new {"week" if short else "month"} begins; the dashed '
                    f'line is the stop, -1 R. Each bar opens its trade.')
@@ -1274,7 +1324,67 @@ def periods_table(j, q, trades, group):
             f'<p class="caption">{caption}</p></div>')
 
 
-def past_stop_card(j, trades):
+# The trades of a period stand open until they stop being a list and start
+# being an archive; the tail folds, the way the table of periods folds its own.
+PERIOD_TRADES_ROWS = 30
+
+
+def closed_row(j, t, way):
+    """A row of a list read by the exit.
+
+    The exit leads because it is what the period was counted by, and the
+    entry stands beside it because the distance between the two dates is the
+    whole difference between this list and the journal's."""
+    href = way(t)
+    cells = [(f"{t.closed:%d.%m.%Y}" if t.closed else "-", ""),
+             (f"{t.opened:%d.%m.%Y}", "muted")] + trade_cells(j, t)
+    return ("<tr>" + "".join(link_cell(href, inner, cls)
+                             for inner, cls in cells) + "</tr>")
+
+
+# Said under the list on the Statistics tab and under the same list on a
+# report, so that the two never drift apart.
+PERIOD_TRADES_WHY = (
+    "The trades these figures counted, newest exit first. A period goes by "
+    "the exit, so a trade entered before it and closed inside it stands here, "
+    "where the journal listed over the same months would not have it. A row "
+    "opens its trade, which carries the way back.")
+
+
+def period_trades_card(j, trades, name, way):
+    """The trades a period closed, newest exit first: the very set the figures
+    of that period were worked out on.
+
+    A report is a period and always has one; the Statistics tab has one only
+    under a period cut, which is the one selection the journal's own list
+    cannot express, since the filter there picks by the entry. `way` gives
+    the address a row opens, and it is what carries the reader back: to the
+    report on one page, to the cut on the other.
+
+    Flat, with no groups: a group heading is built from the entry date, and
+    a July heading inside an August card would say the opposite of what the
+    card is for."""
+    order = sorted(trades, key=lambda t: (t.closed or datetime.min, t.id),
+                   reverse=True)
+    if not order:
+        return ""
+    shown, rest = order[:PERIOD_TRADES_ROWS], order[PERIOD_TRADES_ROWS:]
+    head = trades_head(j, ("closed", "entered"))
+    body = "".join(closed_row(j, t, way) for t in shown)
+    table = f'<table>{head}<tbody>{body}</tbody></table>'
+    if rest:
+        more = "".join(closed_row(j, t, way) for t in rest)
+        table += (f'<details class="fold"><summary>{len(rest)} more '
+                  f'{"trade" if len(rest) == 1 else "trades"}</summary>'
+                  f'<table>{head}<tbody>{more}</tbody></table></details>')
+    return (f'<div class="card" id="trades"><div class="card-head">'
+            f'<h2>Trades of this period</h2>'
+            f'<span class="right caption">{len(order)} closed in '
+            f'{esc(name)}</span></div>{table}'
+            f'<p class="caption">{PERIOD_TRADES_WHY}</p></div>')
+
+
+def past_stop_card(j, q, trades):
     """The losses that went deeper than the risk allowed, worst first, each a
     way to its trade. Ten at most: on a report the list is a month's and
     every row is worth opening, on the whole history it is an archive."""
@@ -1282,9 +1392,15 @@ def past_stop_card(j, trades):
     if not past:
         return ""
     shown = past[:10]
-    cut = f"The ten deepest of {len(past)}. " if len(past) > len(shown) else ""
-    return (f'<div class="card"><h2>Past the stop</h2>'
-            f'<table><tbody>{past_stop_rows(j, shown, lambda t: f"/trade/{U(t.id)}")}'
+    cut = f"The ten deepest of {len(past)}, and the total over them all. " \
+        if len(past) > len(shown) else ""
+    cost = stats.past_stop_cost(j, past)
+    return (f'<div class="card"><div class="card-head">'
+            f'<h2>Past the stop</h2><span class="right caption">'
+            f'{len(past)} over the stop by '
+            f'<span class="{sum_class(cost)}">{r_text(cost)}</span></span></div>'
+            f'<table>{PAST_STOP_HEAD}'
+            f'<tbody>{past_stop_rows(j, shown, stats_way(q))}'
             f'</tbody></table>'
             f'<p class="caption">{cut}{PAST_STOP_WHY}</p></div>')
 
@@ -1471,7 +1587,7 @@ def stats_page(q):
     rules = stats_rules_card(j, d)
     # the playbooks beside the rules, as on the report; everything after them
     # is dealt into the two columns by height
-    cards = [books, rules, past_stop_card(j, trades),
+    cards = [books, rules, past_stop_card(j, q, trades),
              periods_table(j, q, trades, grain),
              stats_slice(j, "By pair", slices["By pair"], link),
              stats_slice(j, "By style", slices["By style"], link),
@@ -1485,7 +1601,7 @@ def stats_page(q):
                          caption="Whole days between the entry and the exit: an "
                                  "exit is often written without an hour.")]
     body = (stats_head(j, q, trades, rest)
-            + stats_tiles(j, trades, rest, d, stats.drawdown(j, trades), ends_now)
+            + stats_tiles(j, q, trades, rest, d, stats.drawdown(j, trades), ends_now)
             + f'<div class="pictures">{periods_card(j, q, trades, grain)}'
             f'{r_rings(j, trades)}</div>'
             + equity_card(j, q, trades, (q.get("account") or [""])[0], axis, since, until)
@@ -1497,7 +1613,14 @@ def stats_page(q):
             'a winrate from fewer than five decided trades stands in grey. The '
             'winrate after "needs" is the one this selection would have to '
             'hold to come out at zero R. The months in the filter pick trades '
-            'by the entry, a period of the picture by the exit.</p>')
+            'by the entry, a period of the picture by the exit, and the list '
+            'of a period at the foot of this page goes by the exit throughout.'
+            '</p>'
+            # last and across the page: eleven columns do not fit half of it,
+            # and guess_height would price thirty rows high enough to throw
+            # the two columns above out of step
+            + (period_trades_card(j, trades, period_name(period, grain_cut),
+                                   stats_way(q)) if grain_cut else ""))
     return page("Statistics", body, "stats")
 
 
@@ -1587,7 +1710,7 @@ def search_page(q):
         texts = [k.id, k.title, k.pair, k.plan, k.updates, k.review] \
             + [b.text for b in k.analysis]
         if hit(texts):
-            found.append(("plan", f"/plan/{U(k.id)}", plan_label(k),
+            found.append(("plan", f"/plan/{U(k.id)}", k.label,
                           _snippet(texts[3:] + texts[1:2], needle)))
     for b in store.all_playbooks(ROOT, []):
         texts = [b.id, b.name, b.intro, b.review] \
@@ -1844,17 +1967,6 @@ def playbook_of_trade(t):
     return p
 
 
-def checklist_rules(p, setup):
-    """The rules a trade is held to: those of its setup, then the filters. A
-    playbook whose setups have no names has one, and every trade takes it."""
-    named = any(x.name for x in p.setups)
-    rules = []
-    for x in p.setups:
-        if not named or x.name == setup:
-            rules.extend(x.rules)
-    return rules + list(p.filters)
-
-
 def check_row(pid, r, met, field="met", reason=""):
     """One rule of the checklist: the box, the few words, the whole rule
     behind the question mark, and a line for why the rule was not met, shown
@@ -2029,7 +2141,7 @@ def trade_form(t=None, token=""):
     if editing and t.plan and t.plan not in {k.id for k in plans}:
         plans = plans + [Plan(id=t.plan, day=t.opened)]
     plan_ids = [k.id for k in plans]
-    plan_names = {k.id: plan_label(k) for k in plans}
+    plan_names = {k.id: k.label for k in plans}
 
     # the playbooks offered are the ones in use; the one a trade being edited
     # was ticked against is drawn as it was then, retired or revised since
@@ -2437,7 +2549,7 @@ def apply_playbook(t, data, editing):
             met.add(int(x))
         except ValueError:
             pass
-    t.deviations = [r.number for r in checklist_rules(p, t.setup) if r.number not in met]
+    t.deviations = [r.number for r in p.checklist(t.setup) if r.number not in met]
     keep_reasons(t, data, pid, t.deviations, {r.number for r in p.management})
 
 
@@ -2476,7 +2588,7 @@ def apply_management(t, data, editing):
             pass
     t.exit_deviations = [r.number for r in p.management if r.number not in held]
     keep_reasons(t, data, p.id, t.exit_deviations,
-                 {r.number for r in checklist_rules(p, t.setup)})
+                 {r.number for r in p.checklist(t.setup)})
 
 
 def apply_fields(t, data, editing=False):
@@ -2685,15 +2797,6 @@ def close_trade(t, data):
 # question that matters about a plan: what came out of it.
 
 
-def plan_label(k):
-    """A plan in one line, for a list and for the menu of the trade form."""
-    span = f"{k.day:%d.%m.%Y}"
-    if k.until and k.until != k.day:
-        span += f" to {k.until:%d.%m.%Y}"
-    bits = [span, "" if k.pair == PAIR_NOT_SET else k.pair, k.title, k.narrative]
-    return " · ".join(b for b in bits if b)
-
-
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
 
 
@@ -2718,7 +2821,7 @@ def with_shots(text, base):
 def plan_title(plan_id):
     """The name of a plan for a link. A plan deleted later leaves its id."""
     try:
-        return plan_label(store.load_plan(ROOT, plan_id))
+        return store.load_plan(ROOT, plan_id).label
     except (OSError, ValueError):
         return plan_id
 
@@ -2853,10 +2956,7 @@ def plan_page(plan_id):
     rows = "".join(trade_row(j, t) for t in
                    sorted(trades, key=lambda t: t.opened, reverse=True))
     trades_card = (f'<div class="card"><h2>Trades of this plan</h2>'
-                   f'<table><thead><tr><th>date</th><th>account</th><th>pair</th>'
-                   f'<th>direction</th><th>style</th><th>TF</th>'
-                   f'<th class="num">risk</th><th>result</th>'
-                   f'<th class="num">PnL {H.sign(j.currency())}</th><th class="num">R</th></tr></thead>'
+                   f'<table>{trades_head(j)}'
                    f'<tbody>{rows}</tbody></table>'
                    f'<p class="caption">{esc(plan_result(j, trades))}</p></div>'
                    if trades else
@@ -2870,7 +2970,7 @@ def plan_page(plan_id):
                f'\'Delete plan {esc(k.id)}? The folder moves to .trash.\')">'
                f'<button class="btn danger">Delete</button></form>')
     body = (f'<div class="card{" is-open" if k.covers(datetime.now()) else ""}">'
-            f'<h2>{esc(k.title or plan_label(k))}</h2>'
+            f'<h2>{esc(k.title or k.label)}</h2>'
             f'<table class="props">{table}</table></div>'
             + (f'<div class="card"><h2>Analysis</h2>{analysis}</div>'
                if analysis else "")
@@ -3216,10 +3316,7 @@ def playbook_trades_card(j, trades):
     rows = "".join(trade_row(j, t) for t in
                    sorted(trades, key=lambda t: t.opened, reverse=True))
     return (f'<div class="card"><h2>Trades of this playbook</h2>'
-            f'<table><thead><tr><th>date</th><th>account</th><th>pair</th>'
-            f'<th>direction</th><th>style</th><th>TF</th>'
-            f'<th class="num">risk</th><th>result</th>'
-            f'<th class="num">PnL {H.sign(j.currency())}</th><th class="num">R</th></tr></thead>'
+            f'<table>{trades_head(j)}'
             f'<tbody>{rows}</tbody></table>'
             f'<p class="caption">{esc(plan_result(j, trades))}</p></div>')
 
@@ -4444,6 +4541,11 @@ def mistakes_tile(d, s):
     red is a grade, and a report does not grade. A trade never ticked says
     nothing either way, and the tile says so rather than reading as clean.
 
+    The two prices say different things and both are named. What the losses
+    ran past the stop by is the cost of the overruns themselves; what the
+    mistake trades brought is everything they did, wins included, which is
+    the figure a month is read by.
+
     `d` is the discipline of the trades, a report or the reading of a
     selection, and `s` their summary: the tile is the same on both pages."""
     if not d.ticked and not d.past_stop:
@@ -4459,7 +4561,11 @@ def mistakes_tile(d, s):
     if broke:
         bits.append(f"{broke} broke a rule")
     if d.past_stop:
-        bits.append(f"{len(d.past_stop)} past the stop")
+        # the price of an overrun is what it cost past the stop, not the whole
+        # of the loss: the stop was the attempt, and the attempt was allowed
+        bits.append(f'{len(d.past_stop)} past the stop, '
+                    f'<span class="{sum_class(d.past_stop_cost)}">'
+                    f'{r_text(d.past_stop_cost)}</span> over it')
     if n:
         bits.append(f'{"that trade" if n == 1 else "those trades"} '
                     f'<span class="{sum_class(d.mistakes_sum.sum_r)}">'
@@ -4487,7 +4593,8 @@ def process_tile(r):
 def extremes_tile(j, best, worst, count, way):
     """The two trades worth opening again, by R: a figure each, and the trade
     under it as the way in. `way` gives the address of a trade: from a report
-    it carries the way back, from the statistics it is the trade alone."""
+    it carries the way back to the report, from the statistics the cut it was
+    opened from."""
     if not best:
         return tile("best / worst trade", "-", "no closed trades", "muted")
 
@@ -4528,7 +4635,15 @@ def report_nav(r, ready):
     if before in ready:
         parts.append(f'<a class="btn" href="/report/{U(before)}">'
                      f'← {esc(reports.parse_period(before)[2])}</a>')
+    parts.append(f'<a class="btn" href="/share/report/{U(r.period)}" '
+                 f'title="the report as one file, to show another trader">'
+                 f'Share</a>')
     parts.append('<a class="btn" href="/reports">All reports</a>')
+    # the page is long and the list is at the foot of it, so the head carries
+    # the way down, the way the Statistics tab does over the same card
+    if r.trades:
+        parts.append('<a class="btn" href="#trades" title="the trades this '
+                     'period closed, at the foot of this page">The trades</a>')
     if r.kind == "month":
         quarter = stats.quarter(r.start)
         if quarter in ready:
@@ -4612,7 +4727,9 @@ PAST_STOP_WHY = (
     "1 R is the risk you wrote on the trade; a stop that worked costs -1 R, "
     "with commission and swap up to -1.2 R. A loss deeper than that lost more "
     "than the risk allowed: the lot was too large, the stop was moved, or the "
-    "price slipped past it. Open the trade to see which.")
+    "price slipped past it. Open the trade to see which. "
+    "The stop itself is the attempt and not the mistake, so over is what the "
+    "loss cost past -1.2 R, which is the part that was there to be kept.")
 
 
 def rules_table(j, d):
@@ -4645,17 +4762,28 @@ def rules_table(j, d):
             f'of their playbook stand in the rows.</p>')
 
 
+PAST_STOP_HEAD = ('<thead><tr><th>date</th><th>pair</th><th>style</th>'
+                  '<th class="num">R</th><th class="num">over</th></tr></thead>')
+
+
 def past_stop_rows(j, past, way):
-    """The losses past the stop as rows, each a way to its trade."""
+    """The losses past the stop as rows, each a way to its trade.
+
+    `over` is what the loss cost beyond the stop it was sized for. The stop
+    is the attempt and not the mistake, so a trade back at -1.35 R overran
+    the risk by 0.15 R and not by the whole of it."""
     lines = ""
     for t in past:
         # a trade can carry a result and no exit date, and the page of the
         # trade prints a hyphen for it rather than refusing to draw
         day = f"{t.closed:%d.%m.%Y}" if t.closed else "-"
-        lines += (f'<tr>{link_cell(way(t), day)}'
-                  f'{link_cell(way(t), H.pair(t.pair))}'
-                  f'{link_cell(way(t), esc(t.style))}'
-                  f'{link_cell(way(t), r_text(j.r(t.id) or 0.0), "num lose")}</tr>')
+        over = stats.past_stop_over(j, t)
+        href = way(t)
+        lines += (f'<tr>{link_cell(href, day)}'
+                  f'{link_cell(href, H.pair(t.pair))}'
+                  f'{link_cell(href, esc(t.style))}'
+                  f'{link_cell(href, r_text(j.r(t.id) or 0.0), "num lose")}'
+                  f'{link_cell(href, r_text(over), "num " + sum_class(over))}</tr>')
     return lines
 
 
@@ -4665,9 +4793,11 @@ def rules_card(j, r):
     body = rules_table(j, r)
     if r.past_stop:
         lines = past_stop_rows(j, r.past_stop, lambda t: trade_way(r, t))
-        body += (f'<h3>Past the stop</h3><table><tbody>{lines}</tbody></table>'
-                 f'<p class="caption">{PAST_STOP_WHY} Rules ticked as not met '
-                 f'stand in the table above.</p>')
+        body += (f'<h3>Past the stop</h3>'
+                 f'<table>{PAST_STOP_HEAD}<tbody>{lines}</tbody></table>'
+                 f'<p class="caption">{PAST_STOP_WHY} Together they cost '
+                 f'{r_text(r.past_stop_cost)} beyond the stop. Rules ticked as '
+                 f'not met stand in the table above.</p>')
     return f'<div class="card"><h2>Rules</h2>{body}</div>'
 
 
@@ -4808,7 +4938,11 @@ def report_page(period):
                 'the journal filtered to it over the same months. A period counts the '
                 'trades that closed inside '
                 'it; WR is wins against wins and losses, EV is Σ R over every closed '
-                'trade, break-evens included.</p>')
+                'trade, break-evens included.</p>'
+                # the month itself, trade by trade, under the figures it made:
+                # the tape above says the shape of it, this says which trades
+                + period_trades_card(j, r.trades, r.name,
+                                     lambda t: trade_way(r, t)))
     return page(r.name, story + appendix, "reports", report_nav(r, ready))
 
 
@@ -5385,6 +5519,240 @@ def remove_word(data):
     return f"{word} is no longer offered in the trade form."
 
 
+# --- sharing ---------------------------------------------------------------
+# What a trader is shown is built in share.py, which holds no money at all.
+# Here is only the way to it: the preview you look at before sending anything,
+# and the file the button downloads.
+#
+# The preview and the file are the same document built twice. The preview
+# points at the journal for its pictures, so it opens at once; the download
+# carries them inside itself, so it opens on a machine that has no journal.
+
+
+def share_href(where, q, **changes):
+    """The same address with those fields changed. A field set to None goes."""
+    params = {k: v[:] for k, v in q.items()}
+    for name, value in changes.items():
+        if value is None:
+            params.pop(name, None)
+        else:
+            params[name] = [value]
+    query = urllib.parse.urlencode(params, doseq=True)
+    return where + ("?" + query if query else "")
+
+
+def share_switch(where, q, shots):
+    """Whether the screenshots go with the file.
+
+    They are the reason to send a trade at all, and they are nearly all of the
+    weight, so a long selection is offered as a list of figures instead."""
+    here = '<a class="on" href="{href}">{word}</a>'
+    there = '<a href="{href}">{word}</a>'
+    parts = []
+    for value, word in (("1", "With screenshots"), ("0", "Figures only")):
+        shape = here if (value == "1") == bool(shots) else there
+        parts.append(shape.format(href=esc(share_href(where, q, shots=value)),
+                                  word=word))
+    return "".join(parts)
+
+
+# The button that saves a document. A plain link would hand the whole wait to
+# the browser, which shows nothing at all until the file has arrived: press it
+# on a journal of fifty megabytes and the only sign of life is that nothing
+# happens. So the file is fetched by the page instead, the button says how far
+# it has got, and the browser is handed a finished file to save.
+#
+# It lives here and not in share.py because it belongs to the preview: the
+# document that leaves the journal carries no script at all.
+SHARE_SCRIPT = """
+async function share_save(link){
+  if (link.dataset.busy) return;
+  if (!window.fetch || !window.URL || !URL.createObjectURL){
+    location.href = link.href;                 // an old browser: the plain way
+    return;
+  }
+  link.dataset.busy = "1";
+  const said = link.textContent;
+  link.classList.add("busy");
+  link.textContent = "Building the file...";
+  try {
+    const answer = await fetch(link.href);
+    if (!answer.ok) throw new Error(answer.status);
+    const size = Number(answer.headers.get("Content-Length") || 0);
+    let file;
+    if (size && answer.body && answer.body.getReader){
+      const reader = answer.body.getReader();
+      const parts = [];
+      let got = 0;
+      for (;;){
+        const step = await reader.read();
+        if (step.done) break;
+        parts.push(step.value);
+        got += step.value.length;
+        link.textContent = "Building the file... " +
+                           Math.round(100 * got / size) + "%";
+      }
+      file = new Blob(parts, {type: "text/html"});
+    } else {
+      file = await answer.blob();
+    }
+    const url = URL.createObjectURL(file);
+    const save = document.createElement("a");
+    save.href = url;
+    save.download = link.dataset.name || "plainbook.html";
+    save.click();
+    // the browser needs the address until it has written the file out
+    setTimeout(() => URL.revokeObjectURL(url), 20000);
+    link.textContent = "Saved";
+  } catch (e) {
+    link.textContent = "Could not build it";
+  }
+  setTimeout(() => { link.textContent = said; }, 2500);
+  link.classList.remove("busy");
+  delete link.dataset.busy;
+}
+"""
+
+
+def share_bar(where, q, back, size, shots=None, name=""):
+    """The strip above a preview: what the file will weigh, whether the
+    screenshots go with it, and the button that saves it.
+
+    It is added to the preview by the server and never to the document, so
+    what is sent carries no buttons and no addresses of this machine."""
+    word = (f'This is what leaves the journal, about '
+            f'{esc(share.size_text(size))} as a file.')
+    switch = share_switch(where, q, shots) if shots is not None else ""
+    save = esc(share_href(where, q, file="1"))
+    return (f'<script>{SHARE_SCRIPT}</script>'
+            f'<div class="bar"><span class="word">{word}</span>{switch}'
+            f'<a class="primary" href="{save}" data-name="{esc(name)}" '
+            f'onclick="share_save(this); return false">Download</a>'
+            f'<a href="{esc(back)}">Back</a></div>')
+
+
+# how long a selection may be before it is offered without its screenshots.
+# A dozen trades with their charts is a few megabytes and worth sending whole;
+# a year of them is a hundred, and nobody sends that
+SHOTS_UP_TO = 15
+
+
+def share_wanted(q, trades=None):
+    """The two things read off the address: the file itself, and the pictures.
+
+    A single trade always carries them, since they are the reason to show it.
+    A selection carries them while it is short, because a year of trades with
+    every screenshot in it is a file nobody can send; the strip over the
+    preview switches them back on either way."""
+    asked = (q.get("shots") or [""])[0]
+    carry = (q.get("file") or [""])[0] == "1"
+    if asked:
+        return carry, asked == "1"
+    return carry, trades is None or len(trades) <= SHOTS_UP_TO
+
+
+def share_books():
+    """The playbook of a trade, read once each: a selection of forty trades
+    would otherwise read the same file forty times."""
+    seen = {}
+
+    def book_of(t):
+        if not t.playbook:
+            return None
+        if t.playbook not in seen:
+            seen[t.playbook] = playbook_of_trade(t)
+        return seen[t.playbook]
+    return book_of
+
+
+def share_name(stem):
+    """The name the file is saved under. Ids are file names already, so this
+    only keeps the header simple."""
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-") or "journal"
+    return f"plainbook-{stem}.html"
+
+
+def share_trade(trade_id, q):
+    """One trade whole, the way it is given to another trader."""
+    j = journal()
+    t = next((x for x in j.trades if x.id == trade_id), None)
+    if t is None:
+        return None
+    carry, _ = share_wanted(q)
+    name = share_name(t.id)
+    note = ""
+    if not carry:
+        note = share_bar(f"/share/trade/{U(t.id)}", q, f"/trade/{U(t.id)}",
+                         share.weigh(ROOT, [t]), name=name)
+    book = playbook_of_trade(t) if t.playbook else None
+    return name, share.trade_document(ROOT, j, t, book, carry, note)
+
+
+def share_filters(j, q):
+    """The cut in words, for the line under the title of the document."""
+    said = []
+    for name, _, label in FILTER_FIELDS:
+        value = (q.get(name) or [""])[0]
+        if value:
+            if name == "account" and value in j.accounts:
+                value = j.accounts[value].name or value
+            said.append(f"{label} {value}")
+    since = (q.get("from") or [""])[0]
+    until = (q.get("to") or [""])[0]
+    if since and until:
+        said.append(f"{since} to {until}")
+    elif since:
+        said.append(f"from {since}")
+    elif until:
+        said.append(f"to {until}")
+    return " · ".join(said)
+
+
+def share_selection(q):
+    """The journal as it is filtered right now: the figures, the list, and
+    every trade under them when the screenshots are asked for."""
+    j = journal()
+    trades = apply_filters(j, q)
+    if not trades:
+        return None
+    carry, shots = share_wanted(q, trades)
+    said = share_filters(j, q)
+    span = [(q.get("from") or [""])[0], (q.get("to") or [""])[0]]
+    stem = "-".join(x for x in span if x) or datetime.now().strftime("%Y-%m-%d")
+    name = share_name("trades-" + stem)
+    note = ""
+    if not carry:
+        note = share_bar("/share/journal", q, share_href("/", q, file=None,
+                                                         shots=None),
+                         share.weigh(ROOT, trades, shots), shots, name)
+    return (name,
+            share.selection_document(
+                ROOT, j, trades, "Trades",
+                esc(said or "the whole journal"), share_books(), shots,
+                carry, note))
+
+
+def share_report(period, q):
+    """A month or a quarter, with the conclusions written under it."""
+    if not reports.is_period(period):
+        return None
+    head, body = reports.read(ROOT, period)
+    if body is None:
+        return None
+    j = journal()
+    r = reports.compose(ROOT, j, period)
+    carry, shots = share_wanted(q, r.trades)
+    name = share_name(period)
+    note = ""
+    if not carry:
+        note = share_bar(f"/share/report/{U(period)}", q, f"/report/{U(period)}",
+                         share.weigh(ROOT, r.trades, shots), shots, name)
+    return (name,
+            share.report_document(ROOT, j, r,
+                                  reports.previous_conclusions(ROOT, period),
+                                  share_books(), shots, carry, note))
+
+
 # --- HTTP ------------------------------------------------------------------
 
 def U(s):
@@ -5430,6 +5798,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
         with open(path, "rb") as f:
             self._send(f.read(), 200, kind)
 
+    def _share(self, parts, q):
+        """The document of a record: the preview to look at, or the file
+        itself when Download asks for it."""
+        made = None
+        if len(parts) == 3 and parts[1] == "trade" and store.safe_dir_name(parts[2]):
+            made = share_trade(parts[2], q)
+        elif len(parts) == 3 and parts[1] == "report" and store.safe_dir_name(parts[2]):
+            made = share_report(parts[2], q)
+        elif len(parts) == 2 and parts[1] == "journal":
+            made = share_selection(q)
+        if made is None:
+            return self._send("nothing to share", 404,
+                              "text/plain; charset=utf-8")
+        name, text = made
+        if (q.get("file") or [""])[0] != "1":
+            return self._send(text)
+        return self._send(text, 200, "text/html; charset=utf-8",
+                          [("Content-Disposition",
+                            f'attachment; filename="{name}"')])
+
     def _same_origin(self):
         """A simple guard against another page in the same browser."""
         origin = self.headers.get("Origin") or self.headers.get("Referer") or ""
@@ -5456,6 +5844,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(stats_page(q))
         if path == "/search":
             return self._send(search_page(q))
+        if parts and parts[0] == "share":
+            return self._share(parts, q)
         if path == "/export.csv":
             j = journal()
             stamp = datetime.now().strftime("%Y-%m-%d")
@@ -5538,7 +5928,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(str(len(journal().open_trades())), 200,
                               "text/plain; charset=utf-8")
         if len(parts) == 2 and parts[0] == "trade":
-            shown = trade_page(parts[1], (q.get("report") or [""])[0])
+            shown = trade_page(parts[1], q)
             return self._send(shown or "no such trade", 200 if shown else 404)
         if len(parts) == 2 and parts[0] == "report":
             shown = report_page(parts[1])
