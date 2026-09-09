@@ -691,6 +691,66 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(len(store.all_trades(self.root)), before + 1)
 
+    def test_36a_an_open_trade_is_copied_from_its_own_form(self):
+        """The copy forgotten at the entry: the block stands in the edit form
+        of an open trade, an account that holds the position already is
+        named and not offered, and a closed trade has no block."""
+        origin = self.open_trade(entry="2026-08-30T12:00", pair="AUDUSD",
+                                 idea_text_1="the copy will carry this")
+        q = urllib.parse.quote(origin)
+        _, form = self.get(f"/edit/{q}")
+        self.assertIn("Duplicate on other accounts", form)
+        self.assertIn('name="dup" value="prop-100k"', form)
+        token = self.form_token(form)
+        shot = self.paste_shot(token, "idea-1")
+        before = {t.id for t in store.all_trades(self.root)}
+        _, where = self.post(f"/edit/{q}", {
+            "token": token, "blocks": "1", "account": "broker", "pair": "AUDUSD",
+            "direction": "long", "style": "swing", "entry_tf": "H4", "risk": "1",
+            "entry": "2026-08-30T12:00", "idea_tf_1": "H4",
+            "idea_text_1": "the copy will carry this", "file_idea-1": shot["file"],
+            "dup": ["prop-100k", "broker"], "dup_risk_prop-100k": "0.5"})
+        self.assertIn("a%20copy%20on%20prop-100k", where)
+        fresh = [t for t in store.all_trades(self.root) if t.id not in before]
+        self.assertEqual([t.account for t in fresh], ["prop-100k"])
+        twin = fresh[0]
+        self.assertEqual((twin.pair, twin.risk, twin.opened),
+                         ("AUDUSD", 0.5, datetime(2026, 8, 30, 12, 0)))
+        self.assertEqual(twin.idea[0].text, "the copy will carry this")
+        self.assertEqual(twin.idea[0].images, ["shots/idea-01-01.png"])
+        self.assertTrue(os.path.exists(os.path.join(
+            store.shots_dir(self.root, twin.id), "idea-01-01.png")))
+        # the account that holds it now is named, not offered
+        _, form = self.get(f"/edit/{q}")
+        self.assertIn("already holds this position", form)
+        self.assertNotIn('name="dup" value="prop-100k"', form)
+        self.assertIn('name="dup" value="prop-50k"', form)
+        # ticking it again writes nothing
+        before = len(store.all_trades(self.root))
+        self.post(f"/edit/{q}", {
+            "token": self.form_token(form), "blocks": "1", "account": "broker",
+            "pair": "AUDUSD", "direction": "long", "style": "swing",
+            "entry_tf": "H4", "risk": "1", "entry": "2026-08-30T12:00",
+            "idea_tf_1": "H4", "idea_text_1": "the copy will carry this",
+            "have_idea-1": "shots/idea-01-01.png", "dup": "prop-100k"})
+        self.assertEqual(len(store.all_trades(self.root)), before)
+        # a closed trade offers no copy and writes none when asked
+        _, form = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(form), "result": "Win",
+                                  "pnl": "40", "exit": "2026-08-31T10:00",
+                                  "conclusions": ""})
+        _, form = self.get(f"/edit/{q}")
+        self.assertNotIn("Duplicate on other accounts", form)
+        self.post(f"/edit/{q}", {
+            "token": self.form_token(form), "blocks": "1", "account": "broker",
+            "pair": "AUDUSD", "direction": "long", "style": "swing",
+            "entry_tf": "H4", "risk": "1", "entry": "2026-08-30T12:00",
+            "idea_tf_1": "H4", "idea_text_1": "the copy will carry this",
+            "have_idea-1": "shots/idea-01-01.png", "closed": "1",
+            "result": "Win", "pnl": "40", "exit": "2026-08-31T10:00",
+            "conclusions": "", "dup": "prop-50k"})
+        self.assertEqual(len(store.all_trades(self.root)), before)
+
     def test_36b_the_front_page_says_which_version_this_is(self):
         from plainbook import __version__
         _, html = self.get("/")

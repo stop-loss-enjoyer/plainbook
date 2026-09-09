@@ -6,6 +6,7 @@ The local journal server. 127.0.0.1 only, port 8778 (PLAINBOOK_PORT changes it).
 Run:   python3 -m plainbook.server
 Open:  http://127.0.0.1:8778
 """
+import copy
 import csv
 import http.server
 import io
@@ -2051,8 +2052,11 @@ function follow_account(selectName, inputName){
   });
 }
 follow_account('account', 'risk');
-// the account of the trade itself is not offered a copy: its row goes away
-// when it is picked above and comes back when another is
+"""
+
+# the account of the trade itself is not offered a copy: its row goes away
+# when it is picked above and comes back when another is
+DUP_SCRIPT = """
 function hide_own_row(){
   const own = document.querySelector('[name=account]').value;
   document.querySelectorAll('.dup-row').forEach(row => {
@@ -2064,28 +2068,48 @@ hide_own_row();
 """
 
 
-def duplicate_block(accounts, risks, names):
+def twin_accounts(j, t):
+    """The accounts that already hold this position: the same pair, side and
+    entry on another account. A duplicate written there would be a third
+    copy of a trade that has two."""
+    return {x.account for x in j.trades
+            if x.id != t.id and x.pair == t.pair and x.direction == t.direction
+            and x.opened == t.opened}
+
+
+def duplicate_block(accounts, risks, names, taken=(), editing=False):
     """The same position taken on several accounts is entered once. Every
     live account gets a row: tick it and the journal writes a copy there, with
     the idea and the screenshots of the trade and a risk of its own, which is
     the only thing that differs in real life too. The row of the account the
-    trade itself is on is hidden by the script and ignored by the server."""
-    rows = "".join(
-        f'<tr class="dup-row" data-account="{esc(a)}"><td>'
-        f'<label style="display:flex;align-items:center;gap:8px;margin:0;'
-        f'text-transform:none;letter-spacing:0;font-size:13px;color:inherit">'
-        f'<input type="checkbox" name="dup" value="{esc(a)}"> '
-        f'{esc(names.get(a) or a)}</label></td>'
-        f'<td class="num"><input type="number" name="dup_risk_{esc(a)}" step="any" '
-        f'min="0.01" style="width:90px" value="{risks.get(a, 1.0):g}"></td></tr>'
-        for a in accounts)
+    trade itself is on is hidden by the script and ignored by the server.
+
+    On the form of an open trade the block stands as well, for the copy
+    forgotten at the entry: `taken` names the accounts that hold the
+    position already, and their rows say so instead of offering a box."""
+    rows = ""
+    for a in accounts:
+        if a in taken:
+            rows += (f'<tr class="dup-row" data-account="{esc(a)}">'
+                     f'<td>{esc(names.get(a) or a)}</td>'
+                     f'<td class="muted">already holds this position</td></tr>')
+            continue
+        rows += (
+            f'<tr class="dup-row" data-account="{esc(a)}"><td>'
+            f'<label style="display:flex;align-items:center;gap:8px;margin:0;'
+            f'text-transform:none;letter-spacing:0;font-size:13px;color:inherit">'
+            f'<input type="checkbox" name="dup" value="{esc(a)}"> '
+            f'{esc(names.get(a) or a)}</label></td>'
+            f'<td class="num"><input type="number" name="dup_risk_{esc(a)}" step="any" '
+            f'min="0.01" style="width:90px" value="{risks.get(a, 1.0):g}"></td></tr>')
+    verb = "Save writes" if editing else "the journal writes"
     return f"""
 <details class="fold" style="margin-top:14px">
 <summary>Duplicate on other accounts
 <span class="caption">same idea and screenshots, a risk of its own on each</span></summary>
 <table style="width:auto"><thead><tr><th>account</th><th class="num">risk, %</th></tr></thead>
 <tbody>{rows}</tbody></table>
-<p class="caption" style="margin:8px 0 0">Tick an account and the journal writes
+<p class="caption" style="margin:8px 0 0">Tick an account and {verb}
 a copy of this trade there, with the risk set on its row. The risk starts at
 that of your last trade on the account.</p>
 </details>"""
@@ -2318,8 +2342,14 @@ def trade_form(t=None, token="", keep=""):
     # The same position taken on two accounts is entered once. The copy repeats
     # the idea and the screenshots and differs only in the account and the risk,
     # which is the only thing that differs in real life too.
-    duplicate = "" if editing else duplicate_block(
-        accounts, risks, {a: j.accounts[a].name for a in accounts})
+    # An open trade can still be copied from its form, for the account
+    # forgotten at the entry; a closed one cannot, its result and PnL are
+    # its own and a copy would have neither.
+    duplicate = ""
+    if not editing or t.is_open:
+        duplicate = duplicate_block(
+            accounts, risks, {a: j.accounts[a].name for a in accounts},
+            taken=twin_accounts(j, t) if editing else (), editing=editing)
     # For a closed trade the exit and the conclusions are edited here too,
     # or editing the idea would wipe their screenshots: the shots folder is
     # rewritten from whatever the form sent.
@@ -2387,7 +2417,7 @@ def trade_form(t=None, token="", keep=""):
 </form>
 <script>{FORM_SCRIPT}</script>
 <script>document.body.dataset.token = {json.dumps(token)};
-init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}
+init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}{f"<script>{DUP_SCRIPT}</script>" if duplicate else ""}
 <script>{CHECKLIST_SCRIPT}</script><script>{EXIT_SCRIPT}</script>"""
 
 
@@ -2803,26 +2833,67 @@ def create_trade(data):
     the screenshots that were pasted into the form. A tick on the account of
     the trade itself is ignored: that trade is already being written."""
     token = one(data, "token")
-    j = journal()
-    twins = []
-    for a in data.get("dup", []):
-        if a == one(data, "account") or a in twins:
-            continue
-        if a not in j.accounts:
-            raise RecordError(f"no account {a} to duplicate on")
-        twins.append(a)
+    twins = ticked_accounts(data, one(data, "account"))
     t = build_trade(data, token)
     for a in twins:
-        risk = one(data, f"dup_risk_{a}")
-        build_trade(data, token, account=a,
-                    risk=float(risk.replace(",", ".")) if risk else t.risk)
+        build_trade(data, token, account=a, risk=dup_risk(data, a, t.risk))
     drop_draft(token)
     drop_cache()
     return t
 
 
+def ticked_accounts(data, own, taken=()):
+    """The accounts ticked for a copy, each once, the trade's own and the
+    ones that hold the position already left out."""
+    j = journal()
+    twins = []
+    for a in data.get("dup", []):
+        if a == own or a in twins or a in taken:
+            continue
+        if a not in j.accounts:
+            raise RecordError(f"no account {a} to duplicate on")
+        twins.append(a)
+    return twins
+
+
+def dup_risk(data, account, fallback):
+    risk = one(data, f"dup_risk_{account}")
+    return float(risk.replace(",", ".")) if risk else fallback
+
+
+def copy_trade(t, account, risk):
+    """A copy of an open trade on another account, the way a duplicate is
+    written from the new trade form: the same everything, an account and a
+    risk of its own, and its own copy of every screenshot, so that the two
+    folders never share a file."""
+    twin = copy.deepcopy(t)
+    twin.id = store.new_id(ROOT, t.opened, t.pair)
+    twin.account, twin.risk, twin.notion_id = account, risk, ""
+    twin.check()
+    own = os.path.join(store.trade_dir(ROOT, t.id), "{}")
+    zones = {f"idea-{i}": [own.format(s) for s in b.images]
+             for i, b in enumerate(t.idea, 1)}
+    zones["exit"] = [own.format(s) for s in t.exit_images]
+    zones["concl"] = [own.format(s) for s in conclusion_images(t.conclusions)]
+    names = apply_shots(store.trade_dir(ROOT, twin.id), zones)
+    for i, block in enumerate(twin.idea, 1):
+        block.images = names.get(f"idea-{i}", [])
+    twin.exit_images = names.get("exit", [])
+    twin.conclusions = rewrite_conclusions(twin.conclusions, names.get("concl", []))
+    store.save_trade(ROOT, twin)
+    return twin
+
+
 def edit_trade(t, data):
+    """The trade as the form sent it. Returns the copies written on the
+    accounts ticked in the duplicate block, for the word the page says."""
     token = one(data, "token")
+    # read before the fields change: the twins are told by the position as
+    # it was, and the copy is refused for a trade that is closed, whose
+    # form never showed the block
+    twins = (ticked_accounts(data, one(data, "account"),
+                             twin_accounts(journal(), t))
+             if t.is_open else [])
     apply_fields(t, data, editing=True)
     editing_close = one(data, "closed") == "1"
     if editing_close:
@@ -2867,9 +2938,11 @@ def edit_trade(t, data):
                      if editing_close
                      else rewrite_conclusions(t.conclusions, names.get("concl", [])))
     store.save_trade(ROOT, t)
+    copies = [copy_trade(t, a, dup_risk(data, a, t.risk))
+              for a in twins if t.is_open]
     drop_draft(token)
     drop_cache()
-    return t
+    return copies
 
 
 _IMAGE_IN_TEXT = re.compile(r"!\[\]\(([^)]+)\)")
@@ -6477,8 +6550,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:
                     return self._send("no such trade", 404)
-                edit_trade(t, data)
-                return self._go(f"/trade/{U(t.id)}{keep}", "Trade saved")
+                copies = edit_trade(t, data)
+                said = ("Trade saved" if not copies else
+                        f"Trade saved, a copy on {copies[0].account}" if len(copies) == 1
+                        else f"Trade saved, copies on {len(copies)} accounts")
+                return self._go(f"/trade/{U(t.id)}{keep}", said)
             if path == "/note/new":
                 n = create_note(data)
                 return self._go(f"/note/{U(n.id)}", "Note written")

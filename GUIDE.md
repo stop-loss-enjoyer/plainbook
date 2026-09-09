@@ -351,6 +351,13 @@ There is nothing to recompute by hand.
   without touching the file. The folder of the trade is named after its day and
   its pair, so changing either moves the folder under a new name; a link to
   the old one stops working, the record itself is untouched.
+- **A copy forgotten at the entry** is written from the same form: while the
+  trade is open, the **Duplicate on other accounts** block stands in its
+  form as it does in the new trade form. Tick the account, set the risk,
+  and **Save** writes the copy there with the idea and the screenshots as
+  they are now. An account that already holds the position (the same pair,
+  side and entry) says so instead of offering a box. A closed trade has no
+  block: its result and PnL are its own.
 - **Delete** sends the trade to `.trash` next to the `journal` folder. It is not
   shredded: the **Trash** card on the Accounts tab lists everything deleted,
   and **Restore** puts it back, screenshots and all. A record written again
