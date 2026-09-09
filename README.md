@@ -5,7 +5,7 @@ fast, and built to be kept by an agent. Your trades are markdown files and
 screenshots in a folder you own: no account, no cloud, no network calls.
 
 [![tests](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](#what-it-is-not)
 
@@ -390,4 +390,11 @@ trading history is on the other end of this code.
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+PolyForm Noncommercial 1.0.0, from version 1.5.1 on. See [LICENSE](LICENSE).
+
+You can run the journal, change it for yourself and pass it on, for any
+purpose that is not commercial. Selling it, selling it under another name, or
+building it into a product that is sold is not allowed. Every version up to
+1.5.0 was released under MIT, and that is not withdrawn from them.
+
+Required Notice: Copyright 2026 stop-loss-enjoyer

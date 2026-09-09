@@ -2,6 +2,19 @@
 
 What changed and why. Newest first.
 
+## v1.5.1, 09.09.2026
+
+The licence changes. Nothing else does.
+
+### Changed
+
+- **The licence is PolyForm Noncommercial 1.0.0 from this version on.** The
+  journal stays open and readable: you can run it, change it for yourself and
+  pass it on, for any purpose that is not commercial. What you cannot do is
+  sell it, sell it under another name, or build it into a product that is
+  sold. Every version up to 1.5.0 was released under MIT, and MIT is not
+  withdrawn from them.
+
 ## v1.5.0, 05.09.2026
 
 Playbooks: the rules of a way of trading as a record, a checklist before
