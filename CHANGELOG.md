@@ -2,10 +2,20 @@
 
 What changed and why. Newest first.
 
-## v1.5.1, 05.09.2026
+## v1.6.0, 09.09.2026
+
+Market notes with the trades that show them, a stop moved to breakeven that
+frees its risk, the Statistics tab and the reports read at a glance, a trade
+or a report as one file to show another trader, and a front page filter that
+survives a trade being opened.
 
 ### Added
 
+- **A copy forgotten at the entry.** The **Duplicate on other accounts**
+  block of the new trade form now stands in the form of an open trade too:
+  tick the account, set the risk, and **Save** writes the copy there with the
+  idea and the screenshots as they are now. An account that already holds
+  the position says so in place of the box. A closed trade is not copied.
 - **Market notes.** A **Notes** tab, for what is about the market rather than
   about one trade: a level a pair keeps respecting, a pattern that comes back,
   a lesson wider than a day. A note is a title, a date and blocks, each a

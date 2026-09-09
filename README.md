@@ -48,6 +48,11 @@ gets written down before the market says who was right. The same position taken
 on two accounts is filled in once: a duplicate goes to the second account with a
 risk of its own.
 
+**A stop moved to breakeven frees its risk.** One button on an open
+position says the stop is at the entry: the trade can no longer lose what it
+was sized for, so the daily loss limit stops counting it, and the statistics
+later say what moving the stop was worth.
+
 **The words in the form are yours.** The trading styles, the entry timeframes
 and the execution formats are lists you edit on the Accounts tab. A word taken
 out of a list only stops being offered; the trades that carry it keep it.
@@ -175,7 +180,7 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in about a second.** 189 of them, no fixtures, no network.
+- **The tests finish in a few seconds.** 273 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
@@ -184,7 +189,7 @@ first place: plain files, no dependencies, a small surface.
 - **A guard stands between an agent and your records.** `tools/check_public.py`
   refuses a push that would carry trade records, private paths or anything
   else it recognises as yours; it runs as a pre-push hook and in CI.
-- **The whole program is ~8 600 lines** of straightforward Python, and the
+- **The whole program is ~12 600 lines** of straightforward Python, and the
   routing table fits on one screen. It fits in a context window, so an agent
   reasons about the real thing rather than about a summary of it.
 - **One language throughout:** code, comments, documents and commit messages.
@@ -360,7 +365,7 @@ Measured on a journal of 159 trades with 363 screenshots:
 | a trade page | **2 ms**, 14 KB |
 | statistics with charts | **7 ms**, 37 KB |
 | server memory | **25 MB** |
-| the whole program | **~8 600 lines of Python** |
+| the whole program | **~12 600 lines of Python** |
 
 Pages are plain HTML rendered by one Python process: no framework, no bundler,
 no build step. The charts are SVG generated on the server. There is nothing to
