@@ -52,6 +52,11 @@ risk of its own.
 and the execution formats are lists you edit on the Accounts tab. A word taken
 out of a list only stops being offered; the trades that carry it keep it.
 
+**Notes about the market.** A note is for what is not one trade: a level a
+pair keeps respecting, a pattern that comes back, a lesson wider than a day.
+Text, screenshots, and the trades of the journal tied to it as examples, so
+the note is read with the trades that show it a click away.
+
 **A plan before the trade.** A trading plan is a record of its own: the analysis
 by timeframe with its screenshots, what you will do and what you will not, the
 updates added while it runs and the review after. A trade points at the plan it

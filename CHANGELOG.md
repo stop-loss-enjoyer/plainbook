@@ -6,6 +6,36 @@ What changed and why. Newest first.
 
 ### Added
 
+- **Market notes.** A **Notes** tab, for what is about the market rather than
+  about one trade: a level a pair keeps respecting, a pattern that comes back,
+  a lesson wider than a day. A note is a title, a date and blocks, each a
+  heading of its own, text and screenshots pasted the way they are
+  everywhere else; **+ block** adds another. The form ends with its
+  **examples**: trades of the journal picked from a list of every trade, and
+  the note page ties one more without opening the form. A row of the note
+  opens the trade as it was written, and the trade page offers the way back
+  to the note and says which notes it is an example in. Notes live in `journal/notes/`, a folder
+  each with its shots, they go to the trash like a plan, and Search looks
+  through them.
+- **A trade moved to breakeven frees its risk.** A position whose stop stands
+  at the entry cannot lose what it was sized for, but the journal kept
+  counting it: three trades moved to breakeven and two fresh ones read as 5%
+  at risk against the daily loss limit, when 2% was the truth. The open
+  positions block on the front page now has a **Breakeven** button on every
+  row, and the trade page has it beside Close trade. Pressed, the row shows
+  a green BE chip instead of its money at risk, the title of the block counts
+  the trades held that way, the tile of the account says how many, and the
+  daily loss limit counts only the trades that can still lose. The trade
+  says since when; **Risk back** on its page undoes a press by mistake. R is
+  still measured against the risk the trade was opened with, and the CSV
+  carries the moment in a column of its own.
+- **What moving the stop is worth.** The Statistics tab grew a card, **Stop
+  at breakeven**: the moved trades against the ones whose stop stayed, with
+  the four figures every table shares, then how the moved ones ended, won,
+  stopped at the entry or lost after the move, and how soon after the entry
+  the stop went in the middle case. The report of a month says the same in
+  one sentence under Process, in the file as on the page. The card and the
+  sentence stand only when a moved trade is in the cut.
 - **A trade, a selection or a report leaves the journal as one file you can
   show another trader.** Share, on a trade beside Edit, over the list beside
   CSV, and on a report, builds a document of it: one HTML file with the
@@ -105,6 +135,21 @@ What changed and why. Newest first.
   trade at all.
 
 ### Changed
+
+- **The Playbooks list says how its trades went, by colour.** Beside the count
+  of trades a playbook has taken stand the same four figures the front page
+  and the reports shelf show: won in green, lost in red, break-even in amber
+  and the positions still open in blue. A count of eleven said nothing about
+  whether the system was working; now the row does.
+
+- **The process figure counts the days you traded, not the days something
+  closed.** A card is written on the evening you took the trades, so `cards /
+  days` on the reports shelf, in the process tile and on the process card of a
+  report now counts a day by its entries. A swing that ran for a week and
+  closed by itself while you were away used to bring a day of its own into the
+  count, and a quiet day with one take profit filled looked like a day whose
+  card you had skipped. The money of a period is still measured by the exit,
+  as it was.
 
 - **The sign of the journal is three lines of text and one candle.** The
   sheet with the folded corner read as a document icon from any office suite,
@@ -217,6 +262,13 @@ What changed and why. Newest first.
 
 ### Fixed
 
+- **The filter of the front page was lost the moment a trade was opened.**
+  A list filtered to one account, a trade opened from it, and the Journal tab
+  brought back the whole journal. The selection now travels with the trade:
+  the row carries it, the trade page has a **← Journal** button that names the
+  filter, the Journal tab and the sign lead to the same list, and Edit,
+  Close, Breakeven and Delete land back on it. A trade opened from an
+  unfiltered list, from a plan or from a report carries nothing.
 - **Reset on the Statistics tab threw you onto the Journal.** The form of the
   filters was written for the front page and carried its address wherever it
   was drawn, so Reset changed the tab as well as the filter. It now belongs to

@@ -23,7 +23,7 @@ from . import reports, share, stats, store
 from .balances import Journal
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
                     Playbook, Setup, Rule, PLAYBOOK_STATUSES, LIMITS,
-                    Plan, RecordError, DIRECTIONS, RESULTS, NARRATIVES,
+                    Plan, Note, RecordError, DIRECTIONS, RESULTS, NARRATIVES,
                     CARD_SECTIONS, WEEK_SECTIONS, ASSESSMENT_ROWS, TRADE_KEYS,
                     PAIR_NOT_SET)
 
@@ -93,7 +93,7 @@ def said_box():
             f'{json.dumps(getattr(SAID, "url", "/"))})</script>')
 
 
-def page(title, body, tab="journal", header_right="", problems=()):
+def page(title, body, tab="journal", header_right="", problems=(), home="/"):
     """A page with the journal's warnings on top of it.
 
     A record that failed to load is named on every page rather than in a log:
@@ -110,7 +110,7 @@ def page(title, body, tab="journal", header_right="", problems=()):
                   f'<span class="caption">python3 tools/check_journal.py checks '
                   f'the whole journal the same way.</span><ul>{rows}</ul></div>')
     return H.page(title, body, tab, header_right, notice, said_box(),
-                  attention=tabs_asking())
+                  attention=tabs_asking(), home=home)
 
 
 def tabs_asking():
@@ -152,6 +152,49 @@ def apply_filters(j, q):
     if until:
         trades = [t for t in trades if f"{t.opened:%Y-%m}" <= until]
     return trades
+
+
+# what the front page is drawn by: the filters, the months and the grouping
+SELECTION_FIELDS = [name for name, _, _ in FILTER_FIELDS] + ["from", "to", "group"]
+
+
+def selection(q):
+    """The selection of the front page as a query, `?via=journal&account=..`,
+    or nothing when the list stands as it opens.
+
+    A trade opened from a filtered list carries the selection along, so that
+    the trade page can offer the way back to it and its forms can land on it
+    again. `via` says where the fields came from: the Statistics tab filters
+    by the same names, and a cut of the statistics is another page."""
+    params = {k: v[:] for k, v in q.items()
+              if k in SELECTION_FIELDS and v and v[0]}
+    if not params:
+        return ""
+    return "?" + urllib.parse.urlencode(dict(via="journal", **params), doseq=True)
+
+
+def via_journal(q):
+    return (q.get("via") or [""])[0] == "journal" and bool(selection(q))
+
+
+def home_href(q):
+    """Where the Journal tab and the sign lead from a page reached with a
+    selection: the same list, drawn the same way."""
+    if not via_journal(q):
+        return "/"
+    return "/" + selection(q).replace("?via=journal&", "?")
+
+
+def back_to_journal(q):
+    """The button back to the list a trade was opened from, named by what
+    the list was filtered by."""
+    if not via_journal(q):
+        return ""
+    words = [(q.get(name) or [""])[0] for name, _, _ in FILTER_FIELDS]
+    words += [(q.get(name) or [""])[0] for name in ("from", "to")]
+    words = [w for w in words if w]
+    word = f": {esc(', '.join(words))}" if words else ""
+    return f'<a class="btn" href="{home_href(q)}">← Journal{word}</a>'
 
 
 def filter_form(j, q, where="/"):
@@ -314,8 +357,9 @@ def trades_head(j, dates=("date",)):
             '<th class="num">R</th></tr></thead>')
 
 
-def trade_row(j, t):
-    href = f"/trade/{U(t.id)}"
+def trade_row(j, t, keep=""):
+    """`keep` is the selection the row is opened with, see `selection`."""
+    href = f"/trade/{U(t.id)}{keep}"
     cells = [(f"{t.opened:%d.%m.%Y}", "")] + trade_cells(j, t)
     return ("<tr>" + "".join(link_cell(href, inner, cls) for inner, cls in cells)
             + "</tr>")
@@ -332,7 +376,7 @@ def sum_word(x):
     return "Win" if x > 0 else "Lose" if x < 0 else "BE"
 
 
-def trades_table(j, trades, group="week"):
+def trades_table(j, trades, group="week", keep=""):
     if not trades:
         return '<p class="muted">Nothing matches the filter.</p>'
     rows = [f'<table>{trades_head(j)}<tbody>']
@@ -354,7 +398,7 @@ def trades_table(j, trades, group="week"):
             f'<td class="num {sum_class(s.sum_pnl)}">'
             f'{H.money(s.sum_pnl, signed=True)}</td>'
             f'<td class="num {sum_class(s.sum_r)}">{s.sum_r:+.2f}</td></tr>')
-        rows += [trade_row(j, t) for t in batch]
+        rows += [trade_row(j, t, keep) for t in batch]
     return "".join(rows) + "</tbody></table>"
 
 
@@ -436,6 +480,9 @@ def daily_limit_state(j, account, now=None):
     words = f"today {amount(j, closed, account.id, signed=True)}"
     if at_risk:
         words += f", {amount(j, at_risk, account.id)} at risk in open trades"
+    secured = len(j.at_breakeven(account.id))
+    if secured:
+        words += f", {secured} at breakeven"
     words += f" · limit {amount(j, limit, account.id)}"
     cls = " over" if used >= limit else " warn" if used >= 0.8 * limit else ""
     if cls == " over":
@@ -443,21 +490,54 @@ def daily_limit_state(j, account, now=None):
     return cls, f'<div class="sub">{esc(words)}</div>'
 
 
+def breakeven_form(t, back="", keep=""):
+    """The button that moves the stop of an open trade to the entry, or puts
+    the risk back when it was pressed by mistake. `back` names the page the
+    answer lands on; empty lands on the trade, with the selection `keep`."""
+    undo = t.breakeven is not None
+    return (f'<form method="post" action="/trade/{U(t.id)}/breakeven{keep}" '
+            f'style="display:inline">'
+            + (f'<input type="hidden" name="back" value="{esc(back)}">' if back else "")
+            + ('<input type="hidden" name="undo" value="1">' if undo else "")
+            + '<button class="btn" title="'
+            + ("the stop is back where it was: the risk counts again"
+               if undo else
+               "the stop is at the entry: the risk of this trade is freed, "
+               "the limits stop counting it")
+            + f'">{"Risk back" if undo else "Breakeven"}</button></form>')
+
+
+def breakeven_chip(t):
+    return (f'<span class="chip breakeven" title="stop at breakeven since '
+            f'{t.breakeven:%d.%m.%Y %H:%M}">BE</span>')
+
+
 def open_positions(j):
+    """What is in the market now. A trade whose stop went to the entry
+    carries a chip instead of its money at risk, since it can no longer
+    lose it, and the count in the title says how many are held that way."""
     open_trades = j.open_trades()
     if not open_trades:
         return ""
-    rows = "".join(
-        "<tr>" + "".join(
-            link_cell(f"/trade/{U(t.id)}", inner, cls) for inner, cls in
-            [(f"{t.opened:%d.%m.%Y %H:%M}" if t.opened_time
-              else f"{t.opened:%d.%m.%Y}", ""), (esc(t.account), ""),
-             (H.pair(t.pair), ""), (esc(t.direction), ""), (esc(t.style), ""),
-             (f"{t.risk:g}%", "num"),
-             (amount(j, j.computed[t.id].risk_money, t.account), "num")])
-        + f'<td><a class="btn" href="/close/{U(t.id)}">Close</a></td></tr>'
-        for t in open_trades)
-    return (f'<div class="card is-open"><h2>Open positions: {len(open_trades)}</h2>'
+    rows = ""
+    for t in open_trades:
+        secured = t.breakeven is not None
+        cells = [(f"{t.opened:%d.%m.%Y %H:%M}" if t.opened_time
+                  else f"{t.opened:%d.%m.%Y}", ""), (esc(t.account), ""),
+                 (H.pair(t.pair), ""), (esc(t.direction), ""), (esc(t.style), ""),
+                 (f"{t.risk:g}%", "num"),
+                 (breakeven_chip(t) if secured
+                  else amount(j, j.computed[t.id].risk_money, t.account), "num")]
+        rows += ("<tr>" + "".join(link_cell(f"/trade/{U(t.id)}", inner, cls)
+                                  for inner, cls in cells)
+                 + f'<td style="white-space:nowrap">'
+                 f'{"" if secured else breakeven_form(t, "/") + " "}'
+                 f'<a class="btn" href="/close/{U(t.id)}">Close</a></td></tr>')
+    secured = len(j.at_breakeven())
+    title = f"Open positions: {len(open_trades)}"
+    if secured:
+        title += f", {secured} at breakeven"
+    return (f'<div class="card is-open"><h2>{title}</h2>'
             f'<table><thead><tr><th>entry</th><th>account</th><th>pair</th>'
             f'<th>direction</th><th>style</th><th class="num">risk</th>'
             f'<th class="num">in money</th><th></th></tr></thead>'
@@ -515,6 +595,7 @@ def export_csv(j, trades):
                     store._date_to_text(t.opened, t.opened_time),
                     t.result or "", "" if t.pnl is None else f"{t.pnl:g}",
                     store._date_to_text(t.closed, t.closed_time),
+                    store._date_to_text(t.breakeven, True),
                     t.note, t.plan,
                     t.playbook, t.playbook_version, t.setup,
                     "" if t.deviations is None else " ".join(map(str, t.deviations)),
@@ -574,7 +655,7 @@ def home_page(q):
             f'Share</a></span></div>')
     body = (account_tiles(j) + open_positions(j) + tiles +
             '<div class="card">' + head +
-            trades_table(j, trades, group) + "</div>")
+            trades_table(j, trades, group, selection(q)) + "</div>")
     return page("Journal", body, "journal", right)
 
 
@@ -654,6 +735,17 @@ def way_back(report):
             f'← {esc(reports.parse_period(report)[2])}</a>')
 
 
+def back_to_note(note_id):
+    """The button back to the note a trade is an example in."""
+    if not note_id or not store.safe_dir_name(note_id):
+        return ""
+    try:
+        n = store.load_note(ROOT, note_id)
+    except (OSError, RecordError):
+        return ""
+    return f'<a class="btn" href="/note/{U(n.id)}">← {esc(n.title)}</a>'
+
+
 def back_to_stats(q):
     """The button back to the cut a trade was opened from on the Statistics
     tab.
@@ -697,6 +789,11 @@ def trade_page(trade_id, q):
               ("result", t.result or "position open"),
               ("PnL", amount(j, t.pnl, t.account, signed=True)),
               ("R", f"{r:+.2f}" if r is not None else "-")]
+    if t.breakeven is not None:
+        # the risk is freed while it is open; closed, the line stays as the
+        # history of the stop
+        fields.insert(7, ("stop", f"at breakeven since {t.breakeven:%d.%m.%Y %H:%M}"
+                          + (", the risk is freed" if t.is_open else "")))
     table = "".join(f'<tr><td class="muted">{esc(k)}</td><td>{esc(v)}</td></tr>'
                     for k, v in fields)
     if t.plan:
@@ -717,6 +814,12 @@ def trade_page(trade_id, q):
                   f'{deviated}</td></tr>')
     if t.note:
         table += f'<tr><td class="muted">note</td><td>{esc(t.note)}</td></tr>'
+    shown_in = [n for n in store.all_notes(ROOT, []) if t.id in n.trades]
+    if shown_in:
+        links = ", ".join(f'<a href="/note/{U(n.id)}">{esc(n.title)}</a>'
+                          for n in shown_in)
+        table += (f'<tr><td class="muted">an example in</td>'
+                  f'<td>{links}</td></tr>')
     checklist = ""
     if t.playbook:
         p = playbook_of_trade(t)
@@ -739,19 +842,24 @@ def trade_page(trade_id, q):
                                    f'{U(os.path.basename(m.group(1)))}" alt="screenshot">',
                          esc(t.conclusions)).replace("\n", "<br>")
 
+    # the selection of the front page rides on every button, so that a form
+    # answered from here lands back on the list the trade was opened from
+    keep = selection(q) if via_journal(q) else ""
     buttons = (f'<a class="btn" href="/share/trade/{U(t.id)}" '
                f'title="the trade as one file, to show another trader">Share</a>'
-               f'<a class="btn" href="/edit/{U(t.id)}">Edit</a>'
-               f'<form method="post" action="/trade/{U(t.id)}/delete" '
+               f'<a class="btn" href="/edit/{U(t.id)}{keep}">Edit</a>'
+               f'<form method="post" action="/trade/{U(t.id)}/delete{keep}" '
                f'style="display:inline" onsubmit="return confirm('
                f'\'Delete trade {esc(t.id)}? The folder moves to .trash.\')">'
                f'<button class="btn danger">Delete</button></form>')
     if t.is_open:
-        buttons = (f'<a class="btn primary" href="/close/{U(t.id)}">Close trade</a>'
-                   + buttons)
-    # a report names itself, a cut has no name of its own, so the report is
-    # asked first: a trade is never opened from both at once
-    buttons = (way_back((q.get("report") or [""])[0]) or back_to_stats(q)) + buttons
+        buttons = (f'<a class="btn primary" href="/close/{U(t.id)}{keep}">Close trade</a>'
+                   + breakeven_form(t, keep=keep) + buttons)
+    # a report names itself, a note names itself, a cut has no name of its
+    # own, so those are asked first: a trade is never opened from two at once
+    buttons = (way_back((q.get("report") or [""])[0])
+               or back_to_note((q.get("note") or [""])[0])
+               or back_to_journal(q) or back_to_stats(q)) + buttons
     body = (f'<div class="card{" is-open" if t.is_open else ""}">'
             f'<h2>{esc(t.id)}</h2>{outcome_warning(t)}'
             f'<table class="props">{table}</table></div>'
@@ -762,7 +870,7 @@ def trade_page(trade_id, q):
             + (f'<div class="card"><h2>Conclusions</h2>'
                f'<div class="shots">{conclusions}</div>'
                f'</div>' if t.conclusions.strip() else ""))
-    return page(t.id, body, "journal", buttons)
+    return page(t.id, body, "journal", buttons, home=home_href(q))
 
 
 # --- statistics ------------------------------------------------------------
@@ -1405,6 +1513,32 @@ def past_stop_card(j, q, trades):
             f'<p class="caption">{cut}{PAST_STOP_WHY}</p></div>')
 
 
+def breakeven_card(j, q, trades):
+    """The stops moved to the entry against the ones that stayed: the same
+    four figures as every table, how the moved ones ended, and how soon the
+    stop was moved."""
+    b = stats.breakeven_split(j, trades)
+    if not b.moved.trades:
+        return ""
+    m = b.moved
+    table = slice_table(j, "", [("stop moved to breakeven", m),
+                                ("stop stayed", b.stayed)], None)
+    ends = (f'<span class="win">{m.wins} won</span>, '
+            f'<span class="be">{m.be} stopped at the entry</span>'
+            + (f', <span class="lose">{m.losses} lost after it</span>' if m.losses else ""))
+    body = f'<p class="pb-meta">After the move: {ends}.'
+    if b.median_hours is not None:
+        body += (f' Moved after <b>{esc(reports._hours(b.median_hours))}</b> in the '
+                 f'middle case')
+        if b.median_share is not None:
+            body += f', at <b>{b.median_share * 100:.0f}%</b> of the hold'
+        body += "."
+    body += "</p>"
+    return (f'<div class="card"><div class="card-head"><h2>Stop at breakeven</h2>'
+            f'<span class="right caption">moved on {m.trades} of '
+            f'{m.trades + b.stayed.trades}</span></div>{table}{body}</div>')
+
+
 def stats_rules_card(j, d):
     """Which rules gave way and what it cost, over the ticked trades of the
     selection, the report's table. A rule is numbered inside its playbook,
@@ -1588,6 +1722,7 @@ def stats_page(q):
     # the playbooks beside the rules, as on the report; everything after them
     # is dealt into the two columns by height
     cards = [books, rules, past_stop_card(j, q, trades),
+             breakeven_card(j, q, trades),
              periods_table(j, q, trades, grain),
              stats_slice(j, "By pair", slices["By pair"], link),
              stats_slice(j, "By style", slices["By style"], link),
@@ -1683,11 +1818,11 @@ def search_page(q):
     form = (f'<form method="get" action="/search" class="filters">'
             f'<div style="flex:1"><label>a word or a phrase</label>'
             f'<input type="text" name="q" value="{esc(needle)}" style="width:100%" '
-            f'autofocus placeholder="from an idea, a conclusion, a plan, a playbook or a card">'
+            f'autofocus placeholder="from an idea, a conclusion, a plan, a note, a playbook or a card">'
             f'</div><div><button class="btn primary">Find</button></div></form>')
     if not needle:
         body = (f'<div class="card"><h2>Search</h2>{form}<p class="caption">'
-                f'Looks through the text of every trade, plan, playbook and card: '
+                f'Looks through the text of every trade, plan, note, playbook and card: '
                 f'the ideas, the conclusions, the notes, the analysis, the rules, '
                 f'the reviews. '
                 f'Case does not matter.</p></div>')
@@ -1712,6 +1847,11 @@ def search_page(q):
         if hit(texts):
             found.append(("plan", f"/plan/{U(k.id)}", k.label,
                           _snippet(texts[3:] + texts[1:2], needle)))
+    for n in store.all_notes(ROOT, []):
+        texts = [n.id, n.title] + [b.tf + " " + b.text for b in n.blocks]
+        if hit(texts):
+            found.append(("note", f"/note/{U(n.id)}",
+                          f"{n.day:%d.%m.%Y} · {n.title}", _snippet(texts[1:], needle)))
     for b in store.all_playbooks(ROOT, []):
         texts = [b.id, b.name, b.intro, b.review] \
             + [r.text + " " + r.detail for r in b.rules] \
@@ -1864,6 +2004,10 @@ def plan_shots_base(plan_id):
 
 def playbook_shots_base(playbook_id):
     return f"/playbook-shot/{U(playbook_id)}"
+
+
+def note_shots_base(note_id):
+    return f"/note-shot/{U(note_id)}"
 
 
 def dropzone(name, hint, shots=()):
@@ -2110,8 +2254,9 @@ def block_notice(p, count):
             f'they change.</p>')
 
 
-def trade_form(t=None, token=""):
-    """One form for opening and for editing: the fields are the same."""
+def trade_form(t=None, token="", keep=""):
+    """One form for opening and for editing: the fields are the same. `keep`
+    is the selection of the front page the trade was opened from."""
     j = journal()
     editing = t is not None
     accounts = [a for a in sorted(j.accounts) if not j.accounts[a].archived or
@@ -2168,7 +2313,7 @@ def trade_form(t=None, token=""):
         blocks = idea_form_block(1)
         count = 1
 
-    action = f"/edit/{U(t.id)}" if editing else "/new"
+    action = f"/edit/{U(t.id)}{keep}" if editing else "/new"
     title = "Edit trade" if editing else "New trade"
     # The same position taken on two accounts is entered once. The copy repeats
     # the idea and the screenshots and differs only in the account and the risk,
@@ -2238,7 +2383,7 @@ def trade_form(t=None, token=""):
 <p><button type="button" class="btn" onclick="add_block()">+ idea block</button></p>
 {closing}
 <div class="actions"><button class="btn primary">{"Save" if editing else "Open trade"}</button>
-<a class="btn" href="{f"/trade/{U(t.id)}" if editing else "/"}">Cancel</a></div>
+<a class="btn" href="{f"/trade/{U(t.id)}{keep}" if editing else "/"}">Cancel</a></div>
 </form>
 <script>{FORM_SCRIPT}</script>
 <script>document.body.dataset.token = {json.dumps(token)};
@@ -2331,12 +2476,12 @@ def outcome_fields(t):
 </div>"""
 
 
-def close_form(t, token):
+def close_form(t, token, keep=""):
     exit_shots = [shot_in_zone(shots_base(t.id), s, "have_exit")
                   for s in t.exit_images]
     concl_shots = [shot_in_zone(shots_base(t.id), s, "have_concl")
                    for s in conclusion_images(t.conclusions)]
-    return f"""<form method="post" action="/close/{U(t.id)}">
+    return f"""<form method="post" action="/close/{U(t.id)}{keep}">
 <input type="hidden" name="token" value="{esc(token)}">
 <div class="card"><h2>Close trade {esc(t.id)}</h2>
 {outcome_fields(t)}
@@ -2349,7 +2494,7 @@ R is calculated automatically.</p></div>
 <textarea name="conclusions">{esc(conclusions_text(t.conclusions))}</textarea>
 {dropzone("concl", "screenshots for conclusions, Ctrl+V here", concl_shots)}</div>
 <div class="actions"><button class="btn primary">Close trade</button>
-<a class="btn" href="/trade/{U(t.id)}">Cancel</a></div>
+<a class="btn" href="/trade/{U(t.id)}{keep}">Cancel</a></div>
 </form>
 <script>{FORM_SCRIPT}</script>
 <script>document.body.dataset.token = {json.dumps(token)};init_zones();</script>
@@ -2408,7 +2553,7 @@ def zone_sources(data, zone, folder, token):
 
 # what a zone of a form is called on the disk
 ZONE_PREFIX = {"exit": "exit", "concl": "conclusions", "review": "review",
-               "plan": "plan", "update": "update"}
+               "plan": "plan", "update": "update", "note": "note"}
 
 
 def apply_shots(record, zones):
@@ -2764,6 +2909,22 @@ def apply_outcome(t, data):
         raise RecordError("the exit date is missing")
     t.closed = closed
     t.closed_time = bool(closed.hour or closed.minute)
+    return t
+
+
+def move_stop(t, undo=False, now=None):
+    """The stop of an open trade goes to the entry, or comes back from it.
+
+    The moment is written into the trade, so the page can say since when
+    the risk has been free; the balances stop counting the trade's risk
+    against the daily limit from the moment the file says so. Undo takes
+    the line out whole: a stop moved by mistake was never at the entry."""
+    if not t.is_open:
+        raise RecordError(f"{t.id}: the trade is closed, its risk is settled")
+    t.breakeven = None if undo else (now or datetime.now()).replace(second=0,
+                                                                     microsecond=0)
+    store.save_trade(ROOT, t)
+    drop_cache()
     return t
 
 
@@ -3160,6 +3321,298 @@ def add_update(k, data):
     return k
 
 
+# --- market notes ----------------------------------------------------------
+# A page about the market rather than about one trade: what a pair does at a
+# level, a pattern that keeps coming back, a lesson wider than a day. It holds
+# text and screenshots, and the trades that show it are tied to it from its
+# own page, so that a note is read with its examples a click away.
+
+def note_title(note_id):
+    """The title of a note for a link. A note deleted later leaves its id."""
+    try:
+        return store.load_note(ROOT, note_id).title
+    except (OSError, ValueError):
+        return note_id
+
+
+def example_label(t):
+    """A trade as the list of a note offers it: the day, the pair, the side,
+    the style and how it ended."""
+    return (f"{t.opened:%d.%m.%Y} · {t.pair} {t.direction} · {t.style}"
+            + (f" · {t.result}" if t.result else " · open"))
+
+
+def note_examples(j, n):
+    """The example trades of a note, in the order they were tied, the ids of
+    trades gone since left out."""
+    by_id = {t.id: t for t in j.trades}
+    return [by_id[tid] for tid in n.trades if tid in by_id]
+
+
+def example_picker(j, n):
+    """The form that ties one more trade to the note: a list of every trade
+    the note does not show yet, newest first."""
+    taken = set(n.trades)
+    offered_trades = [t for t in reversed(j.trades) if t.id not in taken]
+    if not offered_trades:
+        return '<p class="caption">Every trade of the journal is here already.</p>'
+    options = "".join(f'<option value="{esc(t.id)}">{esc(example_label(t))}</option>'
+                      for t in offered_trades)
+    return (f'<form method="post" action="/note/{U(n.id)}/attach" class="filters" '
+            f'style="margin-top:12px">'
+            f'<div style="flex:1"><label>add an example</label>'
+            f'<select name="trade" required style="width:100%;max-width:420px">'
+            f'<option value="">a trade of the journal</option>{options}</select></div>'
+            f'<div><button class="btn">Add</button></div></form>')
+
+
+def notes_page():
+    j = journal()
+    problems = []
+    notes = store.all_notes(ROOT, problems)
+    right = '<a class="btn primary" href="/note/new">+ Note</a>'
+    if not notes:
+        body = ('<div class="card"><h2>Market notes</h2>'
+                '<p class="muted">No notes yet. The button above writes the '
+                'first one: what you noticed about the market, with screenshots, '
+                'and the trades that show it.</p></div>')
+        return page("Notes", body, "notes", right, problems)
+    rows = ""
+    for n in notes:
+        examples = note_examples(j, n)
+        href = f"/note/{U(n.id)}"
+        opening = n.blocks[0].text if n.blocks else ""
+        cells = [(f"{n.day:%d.%m.%Y}", ""), (esc(n.title), ""),
+                 (esc(first_line(opening)), "caption"),
+                 (str(len(examples)) if examples else "-", "num")]
+        rows += ("<tr>" + "".join(link_cell(href, inner, cls)
+                                  for inner, cls in cells) + "</tr>")
+    body = (f'<div class="card"><h2>Market notes</h2>'
+            f'<table><thead><tr><th>date</th><th>title</th><th></th>'
+            f'<th class="num">examples</th></tr></thead><tbody>{rows}</tbody></table>'
+            f'<p class="caption">A note is about the market, not about one trade: '
+            f'a level a pair keeps respecting, a pattern that came back, a lesson '
+            f'wider than a day. Examples are the trades tied to it on its page.'
+            f'</p></div>')
+    return page("Notes", body, "notes", right, problems)
+
+
+def note_page(note_id):
+    if not store.safe_dir_name(note_id):
+        return None
+    try:
+        n = store.load_note(ROOT, note_id)
+    except (OSError, RecordError):
+        return None
+    j = journal()
+    base = note_shots_base(n.id)
+    examples = note_examples(j, n)
+    # a trade opened from here says which note it is an example in, and
+    # offers the way back to it
+    keep = "?" + urllib.parse.urlencode({"note": n.id})
+    rows = ""
+    for t in examples:
+        cells = [(f"{t.opened:%d.%m.%Y}", "")] + trade_cells(j, t)
+        rows += ("<tr>" + "".join(link_cell(f"/trade/{U(t.id)}{keep}", inner, cls)
+                                  for inner, cls in cells)
+                 + f'<td><form method="post" action="/note/{U(n.id)}/detach" '
+                 f'style="display:inline">'
+                 f'<input type="hidden" name="trade" value="{esc(t.id)}">'
+                 f'<button class="btn" title="the trade stays in the journal, '
+                 f'it only leaves this note">Remove</button></form></td></tr>')
+    table = (f'<table>{trades_head(j).replace("</tr></thead>", "<th></th></tr></thead>")}'
+             f'<tbody>{rows}</tbody></table>' if examples else
+             '<p class="muted">No trade shows this yet. Pick one below: the row '
+             'opens the trade, and the trade page leads back here.</p>')
+    text = ""
+    for block in n.blocks:
+        images = "".join(f'<img src="{base}/{U(os.path.basename(src))}" '
+                         f'alt="screenshot">' for src in block.images)
+        text += (f'<div class="idea-block">'
+                 f'{f"<h3>{esc(block.tf)}</h3>" if block.tf else ""}'
+                 f'<div>{inline(block.text)}</div>'
+                 f'<div class="shots">{images}</div></div>')
+    text = text or '<p class="muted">Nothing written yet.</p>'
+    buttons = (f'<a class="btn" href="/note/{U(n.id)}/edit">Edit</a>'
+               f'<form method="post" action="/note/{U(n.id)}/delete" '
+               f'style="display:inline" onsubmit="return confirm('
+               f'\'Delete note {esc(n.id)}? The folder moves to .trash.\')">'
+               f'<button class="btn danger">Delete</button></form>')
+    body = (f'<div class="card"><h2>{esc(n.title)}</h2>'
+            f'<p class="caption">{n.day:%d.%m.%Y}</p>{text}</div>'
+            f'<div class="card"><h2>Examples</h2>{table}{example_picker(j, n)}</div>')
+    return page(n.title, body, "notes", buttons)
+
+
+def note_block_inside(n, heading="", text="", existing=(), base=None):
+    """A block of the note form: the same fields as an analysis block of a
+    plan, under the names the plan's reader knows, with a heading of the
+    owner's own in place of the timeframe."""
+    old = [shot_in_zone(base, s, f"have_idea-{n}") for s in existing]
+    return f"""<div class="fields"><div class="field"><label>heading</label>
+<input type="text" name="idea_tf_{n}" value="{esc(heading)}" placeholder="optional" style="width:300px"></div></div>
+<label style="margin-top:8px">text</label>
+<textarea name="idea_text_{n}" style="min-height:120px">{esc(text)}</textarea>
+{dropzone(f"idea-{n}", "click here and press Ctrl+V to paste a screenshot", old)}"""
+
+
+# The examples of the form: a list of every trade, and the ones picked stand
+# as rows above it, each with a hidden field that is what the server reads.
+# Picking hides the option, Remove shows it again, so a trade is offered once.
+EXAMPLES_SCRIPT = """
+function add_example(id, label){
+  const rows = document.getElementById('examples');
+  if ([...rows.querySelectorAll('input')].some(i => i.value === id)) return;
+  const sel = document.getElementById('example-pick');
+  const opt = [...sel.options].find(o => o.value === id);
+  // hidden alone is not enough: some browsers still list a hidden option
+  if (opt) { opt.hidden = true; opt.disabled = true; }
+  const row = document.createElement('div');
+  row.className = 'example';
+  row.innerHTML = '<input type="hidden" name="trade"><span></span>' +
+    '<button type="button" class="btn" title="the trade stays in the journal, ' +
+    'it only leaves this note">Remove</button>';
+  row.querySelector('input').value = id;
+  row.querySelector('span').textContent = label;
+  row.querySelector('button').addEventListener('click', () => {
+    if (opt) { opt.hidden = false; opt.disabled = false; }
+    row.remove();
+  });
+  rows.appendChild(row);
+}
+function pick_example(sel){
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return;
+  add_example(opt.value, opt.textContent);
+  sel.value = '';
+}
+"""
+
+
+def examples_block(j, n=None):
+    """The examples card of the note form."""
+    options = "".join(f'<option value="{esc(t.id)}">{esc(example_label(t))}</option>'
+                      for t in reversed(j.trades))
+    picked = "".join(f"add_example({json.dumps(t.id)}, {json.dumps(example_label(t))});"
+                     for t in (note_examples(j, n) if n is not None else []))
+    return (f'<div class="card"><h2>Examples</h2>'
+            f'<div id="examples"></div>'
+            f'<select id="example-pick" onchange="pick_example(this)" '
+            f'style="width:100%;max-width:420px;margin-top:8px">'
+            f'<option value="">add a trade of the journal</option>{options}</select>'
+            f'<p class="caption">The trades that show what the note says. A row '
+            f'of the note page opens the trade, and the trade leads back here.</p>'
+            f'</div><script>{EXAMPLES_SCRIPT}{picked}</script>')
+
+
+def note_form(n=None, token=""):
+    """One form for writing a note and for editing it: the blocks, and the
+    trades that show them."""
+    editing = n is not None
+    today = datetime.now().strftime("%Y-%m-%d")
+    base = note_shots_base(n.id) if editing else None
+    action = f"/note/{U(n.id)}/edit" if editing else "/note/new"
+    if editing and n.blocks:
+        blocks = "".join('<div class="form-block card">'
+                         + note_block_inside(i, b.tf, b.text, b.images, base)
+                         + "</div>" for i, b in enumerate(n.blocks, 1))
+        count = len(n.blocks)
+    else:
+        blocks = '<div class="form-block card">' + note_block_inside(1) + "</div>"
+        count = 1
+    return f"""<form method="post" action="{action}">
+<input type="hidden" name="token" value="{esc(token)}">
+<input type="hidden" name="blocks" value="{count}">
+<div class="card"><h2>{"Edit note" if editing else "New note"}</h2>
+<div class="fields">
+<div class="field"><label>title</label>
+<input type="text" name="title" value="{esc(n.title) if editing else ""}"
+ placeholder="what the note is about" style="width:360px" required></div>
+<div class="field"><label>date</label>
+<input type="date" name="date" required
+ value="{f"{n.day:%Y-%m-%d}" if editing else today}"
+ onclick="this.showPicker && this.showPicker()"></div>
+</div>
+</div>
+<div id="blocks">{blocks}</div>
+<template id="block-template">{note_block_inside("__N__")}</template>
+<p><button type="button" class="btn" onclick="add_block()">+ block</button>
+<span class="caption" style="margin-left:8px">another heading, text and screenshots</span></p>
+{examples_block(journal(), n)}
+<div class="actions"><button class="btn primary">{"Save" if editing else "Write the note"}</button>
+<a class="btn" href="{f"/note/{U(n.id)}" if editing else "/notes"}">Cancel</a></div>
+</form>
+<script>{FORM_SCRIPT}</script>
+<script>document.body.dataset.token = {json.dumps(token)};
+init_zones();</script>"""
+
+
+def examples_from_form(data):
+    """The trades the form picked, in its order, each once, only the ones the
+    journal has."""
+    known = {t.id for t in journal().trades}
+    picked = []
+    for tid in data.get("trade", []):
+        tid = tid.strip()
+        if tid in known and tid not in picked:
+            picked.append(tid)
+    return picked
+
+
+def note_fields(n, data):
+    n.title = one(data, "title")
+    n.day = datetime.strptime(one(data, "date"), "%Y-%m-%d")
+    n.trades = examples_from_form(data)
+    return n
+
+
+def write_note(n, data, editing):
+    """The blocks of the form, their pictures and the examples, written into
+    the note. The form shows every zone the note has, so the shots folder is
+    rewritten whole from it, as a plan's is."""
+    token = one(data, "token")
+    note_fields(n, data)
+    n.check()
+    folder = store.note_dir(ROOT, n.id)
+    zones, n.blocks = plan_blocks(data, folder, token, n if editing else None)
+    names = apply_shots(folder, zones)
+    for i, block in enumerate(n.blocks, 1):
+        block.images = names.get(f"idea-{i}", [])
+    store.save_note(ROOT, n)
+    drop_draft(token)
+    return n
+
+
+def create_note(data):
+    day = datetime.strptime(one(data, "date"), "%Y-%m-%d")
+    n = Note(id=store.new_note_id(ROOT, day, one(data, "title")))
+    return write_note(n, data, editing=False)
+
+
+def edit_note(n, data):
+    return write_note(n, data, editing=True)
+
+
+def attach_example(n, data):
+    trade_id = one(data, "trade")
+    if not any(t.id == trade_id for t in journal().trades):
+        raise RecordError("no such trade")
+    if trade_id in n.trades:
+        return "That trade is here already"
+    n.trades.append(trade_id)
+    store.save_note(ROOT, n)
+    return "Example added"
+
+
+def detach_example(n, data):
+    trade_id = one(data, "trade")
+    if trade_id not in n.trades:
+        raise RecordError("that trade is not an example of this note")
+    n.trades.remove(trade_id)
+    store.save_note(ROOT, n)
+    return "Example removed"
+
+
 # --- playbooks -------------------------------------------------------------
 # The standing rules of a way of trading, as a record. Written once, revised
 # by version, and picked in the form of a trade later on.
@@ -3273,11 +3726,14 @@ def playbooks_page():
         href = f"/playbook/{U(p.id)}"
         trades = playbook_trades(j, p.id)
         s = stats.summary(j, trades)
+        running = [t for t in trades if t.is_open]
+        closed = [t for t in trades if not t.is_open]
         cells = [(esc(playbook_label(p)), ""), (status_chip(p), ""),
                  (esc(p.version) or "-", "num"),
                  (esc(", ".join(p.styles)) or "-", ""),
                  (str(len(p.rules)), "num"),
                  (str(len(trades)), "num"),
+                 (trades_breakdown(j, closed, running), ""),
                  ((f"{len(trades)} / {p.block}"
                    + (' <span class="over">review due</span>'
                       if stats.review_due(p, len(trades)) else ""))
@@ -3292,14 +3748,15 @@ def playbooks_page():
     body = (f'<div class="card"><h2>Playbooks</h2>'
             f'<table><thead><tr><th>name</th><th>status</th>'
             f'<th class="num">version</th><th>styles</th><th class="num">rules</th>'
-            f'<th class="num">trades</th><th class="num">block</th>'
+            f'<th class="num">trades</th><th></th><th class="num">block</th>'
             f'<th class="num">Σ R</th><th class="num">EV</th><th class="num">clean</th>'
             f'<th>counts from</th></tr></thead>'
             f'<tbody>{rows}</tbody></table>'
             f'<p class="caption">A playbook is picked in the form of a trade, '
             f'and its rules are ticked there. A rule left unticked stays with '
-            f'the trade, so that the statistics can say what the rule is worth.'
-            f'</p></div>')
+            f'the trade, so that the statistics can say what the rule is worth. '
+            f'The coloured figures beside a count are won, lost, break-even and '
+            f'the positions still open, in blue.</p></div>')
     return page("Playbooks", body, "playbooks", right, problems)
 
 
@@ -4580,14 +5037,16 @@ def mistakes_tile(d, s):
 
 
 def process_tile(r):
-    """Cards written against days traded, and the grades they carry."""
+    """Cards written against the days an entry was taken, and the grades
+    they carry. A day is counted by its entries: a position that closed on
+    its own is not a day worked, and does not ask for a card."""
     if not r.cards and not r.days_traded:
-        return tile("process", "-", "no days traded, no cards", "muted")
+        return tile("process", "-", "no entries, no cards", "muted")
     value = f"{len(r.cards)} / {r.days_traded}"
     if not r.cards:
-        return tile("process", value, "no cards written on the days traded", "muted")
+        return tile("process", value, "no cards written on the days with entries", "muted")
     grades = " · ".join(f"{esc(g)} {n}" for g, n in r.grades)
-    return tile("process", value, f"cards on days traded · {grades}")
+    return tile("process", value, f"cards on days with entries · {grades}")
 
 
 def extremes_tile(j, best, worst, count, way):
@@ -4803,14 +5262,19 @@ def rules_card(j, r):
 
 def process_card(r):
     """The cards of the period: how many days were reviewed, what grades they
-    got, and the errors written on them in the owner's own words."""
+    got, and the errors written on them in the owner's own words. The days are
+    the ones an entry was taken on."""
+    # the stops moved to the entry are part of how the period was worked,
+    # so they stand here and not among the figures
+    moved = (f'<p class="pb-meta">{esc(reports.breakeven_words(r.breakeven))}</p>'
+             if r.breakeven and r.breakeven.moved.trades else "")
     if not r.cards and not r.weeks:
         body = (f'<p class="muted">No cards written for this period, and '
-                f'{r.days_traded} day{"" if r.days_traded == 1 else "s"} had trades.</p>')
-        return f'<div class="card"><h2>Process</h2>{body}</div>'
+                f'{r.days_traded} day{"" if r.days_traded == 1 else "s"} had entries.</p>')
+        return f'<div class="card"><h2>Process</h2>{body}{moved}</div>'
     body = (f'<p class="pb-meta"><b>{len(r.cards)}</b> daily card'
             f'{"" if len(r.cards) == 1 else "s"} on <b>{r.days_traded}</b> day'
-            f'{"" if r.days_traded == 1 else "s"} traded'
+            f'{"" if r.days_traded == 1 else "s"} with entries'
             + (f', <b>{len(r.weeks)}</b> weekly' if r.weeks else "") + "</p>")
     if r.grades:
         body += ('<p class="grades">' + "".join(
@@ -4828,7 +5292,7 @@ def process_card(r):
             f'<li><a href="{href}">{esc(label)}</a>{inline(text.strip())}</li>'
             for href, label, text in errors)
         body += f'<h3>Errors written on the cards</h3><ul class="errors">{items}</ul>'
-    return f'<div class="card"><h2>Process</h2>{body}</div>'
+    return f'<div class="card"><h2>Process</h2>{body}{moved}</div>'
 
 
 def accounts_card(j, r, link):
@@ -5061,7 +5525,7 @@ def reports_page():
             f'built or not. A period counts the trades that closed inside it; the '
             f'coloured figures beside a count are won, lost, break-even and, on the '
             f'running period, the positions open now in blue; cards are the daily cards '
-            f'written against the days traded. Building a report writes the figures '
+            f'written against the days an entry was taken on. Building a report writes the figures '
             f'into a file under <code>journal/reports</code> with a place for your '
             f'conclusions, marked with a dot here once written; rebuilding never '
             f'touches them.</p></div>')
@@ -5930,6 +6394,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if len(parts) == 2 and parts[0] == "trade":
             shown = trade_page(parts[1], q)
             return self._send(shown or "no such trade", 200 if shown else 404)
+        if path == "/notes":
+            return self._send(notes_page())
+        if path == "/note/new":
+            return self._send(page("New note", note_form(None, new_token()),
+                                   "notes"))
+        if len(parts) == 2 and parts[0] == "note":
+            shown = note_page(parts[1])
+            return self._send(shown or "no such note", 200 if shown else 404)
+        if len(parts) == 3 and parts[0] == "note" and parts[2] == "edit":
+            if not store.safe_dir_name(parts[1]):
+                return self._send("bad note id", 400)
+            try:
+                n = store.load_note(ROOT, parts[1])
+            except OSError:
+                return self._send("no such note", 404)
+            return self._send(page(n.title, note_form(n, new_token()), "notes"))
+        if len(parts) == 3 and parts[0] == "note-shot":
+            if not store.safe_dir_name(parts[1]):
+                return self._send("bad note id", 400, "text/plain; charset=utf-8")
+            return self._file(os.path.join(store.note_dir(ROOT, parts[1]),
+                                           store.SHOTS, os.path.basename(parts[2])))
         if len(parts) == 2 and parts[0] == "report":
             shown = report_page(parts[1])
             return self._send(shown or "no such report", 200 if shown else 404)
@@ -5941,9 +6426,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if t is None:
                 return self._send("no such trade", 404)
             token = new_token()
-            body = (trade_form(t, token) if parts[0] == "edit"
-                    else close_form(t, token))
-            return self._send(page(t.id, body, "journal"))
+            keep = selection(q) if via_journal(q) else ""
+            body = (trade_form(t, token, keep) if parts[0] == "edit"
+                    else close_form(t, token, keep))
+            return self._send(page(t.id, body, "journal", home=home_href(q)))
         if len(parts) == 3 and parts[0] == "shot":
             if not store.safe_dir_name(parts[1]):
                 return self._send("bad trade id", 400, "text/plain; charset=utf-8")
@@ -5980,6 +6466,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 200, "application/json")
 
         data = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+        # a form reached from a filtered front page lands back with the
+        # selection, see `selection`
+        keep = selection(q) if via_journal(q) else ""
         try:
             if path == "/new":
                 t = create_trade(data)
@@ -5989,7 +6478,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if t is None:
                     return self._send("no such trade", 404)
                 edit_trade(t, data)
-                return self._go(f"/trade/{U(t.id)}", "Trade saved")
+                return self._go(f"/trade/{U(t.id)}{keep}", "Trade saved")
+            if path == "/note/new":
+                n = create_note(data)
+                return self._go(f"/note/{U(n.id)}", "Note written")
+            if len(parts) == 3 and parts[0] == "note":
+                if not store.safe_dir_name(parts[1]):
+                    return self._send("bad note id", 400)
+                if parts[2] == "delete":
+                    if store.delete_note(ROOT, parts[1]) is None:
+                        return self._send("no such note", 404)
+                    return self._go("/notes", "Note moved to the trash")
+                try:
+                    n = store.load_note(ROOT, parts[1])
+                except OSError:
+                    return self._send("no such note", 404)
+                if parts[2] == "edit":
+                    edit_note(n, data)
+                    said = "Note saved"
+                elif parts[2] == "attach":
+                    said = attach_example(n, data)
+                elif parts[2] == "detach":
+                    said = detach_example(n, data)
+                else:
+                    return self._send("no such page", 404)
+                return self._go(f"/note/{U(n.id)}", said)
             if path == "/playbook/new":
                 p = create_playbook(data)
                 return self._go(f"/playbook/{U(p.id)}", "Playbook written")
@@ -6063,13 +6576,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._send("no such trade", 404)
                 store.delete_trade(ROOT, parts[1])
                 drop_cache()
-                return self._go("/", "Trade moved to the trash")
+                return self._go(home_href(q), "Trade moved to the trash")
+            if len(parts) == 3 and parts[0] == "trade" and parts[2] == "breakeven":
+                t = next((x for x in journal(True).trades if x.id == parts[1]), None)
+                if t is None:
+                    return self._send("no such trade", 404)
+                undo = one(data, "undo") == "1"
+                move_stop(t, undo)
+                # the button on the front page lands back on the front page,
+                # the one on the trade stays on the trade
+                back = "/" if one(data, "back") == "/" else f"/trade/{U(t.id)}{keep}"
+                return self._go(back, "Risk counts again" if undo
+                                else f"Stop at breakeven, {t.risk:g}% freed")
             if len(parts) == 2 and parts[0] == "close":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:
                     return self._send("no such trade", 404)
                 close_trade(t, data)
-                return self._go(f"/trade/{U(t.id)}", "Trade closed")
+                return self._go(f"/trade/{U(t.id)}{keep}", "Trade closed")
             for route, action in (("/account/new", create_account),
                                   ("/account/archive", toggle_archive),
                                   ("/account/delete", delete_account),

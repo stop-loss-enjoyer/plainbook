@@ -302,6 +302,7 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
  margin:8px 0;display:block}}
 .idea-block{{border-left:2px solid {AXIS};padding-left:12px;margin-bottom:16px}}
 .idea-block:last-child{{margin-bottom:0}}
+.example{{display:flex;align-items:center;gap:10px;margin:4px 0}}
 .is-open{{border-left:2px solid {WARN}}}
 .props{{max-width:660px}}
 
@@ -313,6 +314,7 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .chip.experiment{{color:{WARN};border-color:rgba(217,164,65,.45)}}
 .chip.active{{color:{GOOD};border-color:rgba(72,172,122,.45)}}
 .chip.retired{{color:{DIM}}}
+.chip.breakeven{{color:{GOOD};border-color:rgba(72,172,122,.45)}}
 .pb-meta{{color:{DIM};font-size:12px;margin:6px 0 0}}
 .pb-meta b{{color:{INK2};font-weight:500}}
 .pb-intro{{max-width:760px;color:{INK2};font-size:13px;line-height:1.55;margin:12px 0 0}}
@@ -583,10 +585,12 @@ def money(x, signed=False):
 
 
 def page(title, body, tab="journal", header_right="", notice="", said="",
-         attention=()):
-    """`attention` names the tabs that ask for the owner, see the CSS."""
-    links = [("journal", "/", "Journal"), ("playbooks", "/playbooks", "Playbooks"),
-             ("plans", "/plans", "Plans"),
+         attention=(), home="/"):
+    """`attention` names the tabs that ask for the owner, see the CSS. `home`
+    is where the Journal tab leads: a trade opened from a filtered list sends
+    the reader back to the same list."""
+    links = [("journal", home, "Journal"), ("playbooks", "/playbooks", "Playbooks"),
+             ("plans", "/plans", "Plans"), ("notes", "/notes", "Notes"),
              ("cards", "/cards", "Cards"), ("stats", "/stats", "Statistics"),
              ("reports", "/reports", "Reports"), ("accounts", "/accounts", "Accounts"),
              ("search", "/search", "Search")]
@@ -600,7 +604,7 @@ def page(title, body, tab="journal", header_right="", notice="", said="",
 <script>{HOVER}{PAGE_SCRIPT}</script></head><body>
 {flags.SPRITE}{said}
 <div class="wrap">
-<header><a href="/" class="logo" title="the journal">{mark(26)}plainbook<span class="ver">{__version__}</span></a><nav>{nav}</nav>
+<header><a href="{home}" class="logo" title="the journal">{mark(26)}plainbook<span class="ver">{__version__}</span></a><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
 {notice}{body}
 </div>

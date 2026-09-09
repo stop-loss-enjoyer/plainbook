@@ -6,7 +6,8 @@ Summary figures: WR, R and PnL across slices; the equity curve; R distribution.
 Only closed trades count: an open one has neither a result nor an R.
 """
 import re
-from dataclasses import dataclass
+import statistics
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 
@@ -314,6 +315,50 @@ def past_stop_over(journal, trade):
 def past_stop_cost(journal, past):
     """What a list of losses past the stop cost beyond the stop itself."""
     return sum(past_stop_over(journal, t) for t in past)
+
+
+@dataclass
+class Breakeven:
+    """The closed trades whose stop was moved to the entry, against the ones
+    whose stop stayed where it was written.
+
+    What the journal can say: how the moved ones ended and what they brought
+    against the rest, and how soon after the entry the stop was moved. What
+    it cannot say is whether a trade stopped at the entry would have reached
+    its target; that is read off the chart."""
+    moved: Summary = field(default_factory=Summary)
+    stayed: Summary = field(default_factory=Summary)
+    hours: list = field(default_factory=list)     # entry to move, per moved trade
+                                                  # whose entry carries an hour
+    shares: list = field(default_factory=list)    # the move as a share of the hold,
+                                                  # 0..1, where both ends carry an hour
+
+    @property
+    def median_hours(self):
+        return statistics.median(self.hours) if self.hours else None
+
+    @property
+    def median_share(self):
+        return statistics.median(self.shares) if self.shares else None
+
+
+def breakeven_split(journal, trades):
+    """The moved trades against the rest, closed trades only."""
+    b = Breakeven()
+    moved = [t for t in trades if not t.is_open and t.breakeven is not None]
+    stayed = [t for t in trades if not t.is_open and t.breakeven is None]
+    b.moved, b.stayed = summary(journal, moved), summary(journal, stayed)
+    for t in moved:
+        # an entry without an hour is midnight, and a move at noon would
+        # read as twelve hours of holding that never were
+        if not t.opened_time:
+            continue
+        held = (t.breakeven - t.opened).total_seconds() / 3600
+        b.hours.append(max(0.0, held))
+        if t.closed_time and t.closed > t.opened:
+            whole = (t.closed - t.opened).total_seconds() / 3600
+            b.shares.append(min(1.0, max(0.0, held / whole)))
+    return b
 
 
 def _figure(limits, key):

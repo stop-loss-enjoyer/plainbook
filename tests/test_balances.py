@@ -248,6 +248,23 @@ class StreaksAndPeriods(unittest.TestCase):
         accounts["a"].currency = "EUR"
         self.assertEqual(Journal(accounts, [], []).currency(), "EUR")
 
+    def test_a_stop_at_breakeven_frees_the_open_risk(self):
+        """Three trades moved to the entry and two fresh ones put 2% at
+        risk, not 5%: the limit counting the open risk sees only the two.
+        The risk a trade was sized with still stands for its R."""
+        old = [trade(f"o{i}", (2026, 9, 7, 10, i)) for i in range(3)]
+        for t in old:
+            t.breakeven = datetime(2026, 9, 8, 9, 0)
+        fresh = [trade(f"f{i}", (2026, 9, 9, 10, i)) for i in range(2)]
+        j = Journal(self.accounts, old + fresh, [])
+        self.assertAlmostEqual(j.open_risk("broker"), 200.0)
+        self.assertEqual([t.id for t in j.at_breakeven("broker")],
+                         ["o0", "o1", "o2"])
+        self.assertAlmostEqual(j.computed["o0"].risk_money, 100.0)
+        old[0].breakeven = None
+        j = Journal(self.accounts, old + fresh, [])
+        self.assertAlmostEqual(j.open_risk("broker"), 300.0)
+
     def test_the_exit_is_not_before_the_entry(self):
         from plainbook.model import RecordError
         with self.assertRaises(RecordError):

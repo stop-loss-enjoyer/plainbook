@@ -169,7 +169,7 @@ class Report:
     worst: object = None
     cards: list = field(default_factory=list)      # the daily cards of the period
     weeks: list = field(default_factory=list)      # the weekly cards that began in it
-    days_traded: int = 0
+    days_traded: int = 0            # days an entry was taken, by the entry
     grades: list = field(default_factory=list)     # [(grade, days)]
     ticked: int = 0                 # trades that went through a checklist
     kept: stats.Summary = None      # the ticked ones that met every rule
@@ -177,6 +177,7 @@ class Report:
     rules: list = field(default_factory=list)      # [(playbook label, Rule, trades, Summary)]
     past_stop: list = field(default_factory=list)  # losses of -1.2 R and worse
     past_stop_cost: float = 0.0     # what those losses cost beyond the stop itself
+    breakeven: stats.Breakeven = None  # the stops moved to the entry, against the rest
     entry_broken: int = 0           # ticked trades that broke a rule at the entry
     close_broken: int = 0           # closed trades that broke a management rule
     unticked: int = 0               # tied to a playbook, never ticked
@@ -210,11 +211,20 @@ def compose(root, journal, period):
     r.cards = [k for k in store.all_cards(root) if k.day and start <= k.day < end]
     r.weeks = [k for k in store.all_weeks(root)
                if k.week and start <= k.monday < end]
-    r.days_traded = len({t.closed.date() for t in trades if t.closed})
+    # A day counted here is a day worked, and work is an entry: the morning
+    # the owner sat down, took the trades and wrote the card for. A position
+    # that closed on its own a week later did not make that day a working
+    # one, and counting it that way asked for a card on days nothing was
+    # traded. Read off the whole journal rather than off `trades`, which
+    # holds the exits of the period: a trade entered inside it and closed
+    # after it is not in that list at all.
+    r.days_traded = len({t.opened.date() for t in journal.trades
+                         if t.opened and start <= t.opened < end})
     grades = {}
     for k in r.cards:
         grades[k.grade or "not graded"] = grades.get(k.grade or "not graded", 0) + 1
     r.grades = sorted(grades.items())
+    r.breakeven = stats.breakeven_split(journal, trades)
     d = discipline(root, journal, trades)
     for f in fields(Discipline):
         setattr(r, f.name, getattr(d, f.name))
@@ -414,17 +424,47 @@ def to_markdown(r, journal, conclusions):
     lines += ["### Process", ""]
     if not r.cards:
         lines += [f"No cards written for this period, and {r.days_traded} "
-                  f"{_days(r.days_traded)} had trades.", ""]
+                  f"{_days(r.days_traded)} had entries.", ""]
     else:
         lines += [f"{len(r.cards)} {_cards(len(r.cards))} written, {r.days_traded} "
-                  f"{_days(r.days_traded)} had trades.", "",
+                  f"{_days(r.days_traded)} had entries.", "",
                   "| process grade | days |", "|---|---|"]
         lines += [f"| {grade} | {n} |" for grade, n in r.grades]
         lines.append("")
+    if r.breakeven and r.breakeven.moved.trades:
+        lines += [breakeven_words(r.breakeven), ""]
     # An empty section stays empty: whatever stands here is loaded into the
     # form as the owner's own text, so a hint would have to be deleted first.
     lines += ["", "## Conclusions", "", conclusions]
     return "\n".join(lines)
+
+
+def breakeven_words(b):
+    """The stops moved to the entry in one sentence, for the process part of
+    a report, in plain words the page and the file both use."""
+    m = b.moved
+    ends = [f"{m.wins} won", f"{m.be} stopped at the entry"]
+    if m.losses:
+        ends.append(f"{m.losses} lost after it")
+    words = (f"Stop moved to breakeven on {m.trades} of {m.trades + b.stayed.trades} "
+             f"{_trades(m.trades + b.stayed.trades)}: {', '.join(ends)}, "
+             f"{m.sum_r:+.2f} R, EV {m.average_r:+.2f}")
+    if b.stayed.trades:
+        words += f"; the stop stayed on {b.stayed.trades}, EV {b.stayed.average_r:+.2f}"
+    if b.median_hours is not None:
+        words += f". Moved after {_hours(b.median_hours)} in the middle case"
+        if b.median_share is not None:
+            words += f", at {b.median_share * 100:.0f}% of the hold"
+    return words + "."
+
+
+def _hours(h):
+    """A span in the unit a trader would say it in."""
+    if h < 1:
+        return f"{h * 60:.0f} min"
+    if h < 48:
+        return f"{h:.0f} h"
+    return f"{h / 24:.1f} days"
 
 
 def _clean(c):

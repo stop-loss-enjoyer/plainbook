@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plainbook import stats, store
 from plainbook.model import (Account, Adjustment, Card, Graded, IdeaBlock,
                              Playbook, Setup, Rule,
-                             Plan, Trade, Week)
+                             Plan, Note, Trade, Week)
 
 ACCOUNTS = [Account(id="broker", name="broker", start_balance=10000),
             Account(id="prop-100k", name="prop 100k", start_balance=100000)]
@@ -216,6 +216,22 @@ def build(root, days=40):
         assessment=[Graded("EURUSD long, Monday", "B", "Win +1.53 R"),
                     Graded("GBPUSD long, Tuesday", "A", "Win +2.09 R"),
                     Graded("XAU short, Thursday", "C", "Lose -0.98 R")]))
+
+    # a market note, with two of the trades above as its examples, so that
+    # the Notes tab, the note page and the way back from a trade can be seen
+    examples = [t.id for t in store.all_trades(root)
+                if t.pair == "GBPUSD" and not t.is_open][:2]
+    store.save_note(root, Note(
+        id=store.new_note_id(root, today - timedelta(days=3), "Sweep before the London open"),
+        title="Sweep before the London open",
+        day=today - timedelta(days=3),
+        blocks=[IdeaBlock(text="GBPUSD takes the Asian high or low in the hour "
+                          "before London opens, then turns. The turn is the "
+                          "trade; the sweep itself is not."),
+                IdeaBlock(tf="What to wait for",
+                          text="The M15 close back inside the range. An entry "
+                               "on the wick alone was stopped twice in August.")],
+        trades=examples))
 
 
 if __name__ == "__main__":

@@ -141,9 +141,20 @@ class Journal:
                    and t.closed.date() == day.date())
 
     def open_risk(self, account_id):
-        """The money at stake in the open trades of an account."""
+        """The money at stake in the open trades of an account.
+
+        A trade whose stop stands at the entry can no longer lose what it
+        was sized for, so it is not in the sum: the risk it was opened with
+        is freed for the next trade, and a limit counting the open risk
+        does not see it. Its R is still measured against that risk."""
         return sum(self.computed[t.id].risk_money for t in self.trades
-                   if t.account == account_id and t.is_open)
+                   if t.account == account_id and t.is_open
+                   and t.breakeven is None)
+
+    def at_breakeven(self, account_id=None):
+        """The open trades whose stop stands at the entry."""
+        return [t for t in self.trades if t.is_open and t.breakeven is not None
+                and (account_id is None or t.account == account_id)]
 
     def risk_in_money(self, account_id, risk_percent):
         """A hint for the form: how many dollars that is right now."""

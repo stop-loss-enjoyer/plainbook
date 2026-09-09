@@ -282,6 +282,48 @@ many of its trades went with the narrative (a long under a bullish plan) and
 how many against it, with the R of each pile. A plan that said "no trade"
 counts every trade taken under it as against it.
 
+## Market notes
+
+The **Notes** tab. A note is about the market rather than about one trade: a
+level a pair keeps respecting, a pattern that keeps coming back, a lesson
+wider than a day. It is the page you write when you notice something for the
+third time.
+
+- **title** and **date**: the name of the note and the day it was written.
+  The date is yours to set, a note about last month can carry last month.
+- **blocks**: a note is written in blocks, each a heading of its own, a text
+  and a drop zone: click, Ctrl+V, and the screenshot sits under that text.
+  The heading is optional, a note of one block needs none. **+ block** adds
+  another, and a block left empty is dropped when the note is saved. A
+  screenshot is taken out of the note with its cross in the form.
+- **examples**: the trades that show what the note says. The card at the
+  bottom of the form lists every trade of the journal, newest first, spelled
+  as date, pair, side, style and result; pick one and it stands above the
+  list with a **Remove** button, pick another and it stands under it.
+
+On the note page the examples are rows with the figures of the trade: a row
+opens the trade as it was written, and the trade page has a button back to
+the note. Under the rows the same list ties one more trade without opening
+the form, and **Remove** on a row takes the trade off the note and touches
+nothing else: the trade stays in the journal. A trade page also says which
+notes it is an example in, under the line of its playbook.
+
+The list on the Notes tab shows every note with its date, the first line of
+its text and how many examples it has. Notes are found by Search along with
+everything else, and a deleted note goes to the trash on the Accounts tab
+like a plan does.
+
+## The stop at breakeven
+
+The **Breakeven** button, on the trade beside Close trade and on its row of
+the open positions block. It says that the stop now stands at the entry, and
+the journal frees the risk of that trade: the daily loss limit of the account
+counts only the trades that can still lose. The page of the trade says since
+when, and the line stays on a closed trade as the history of its stop.
+**Risk back** puts the risk where it was, for a stop moved by mistake. The
+playbook limits are not touched: a trade at breakeven is still a position
+open at once, and the loss of the week is counted from closed trades only.
+
 ## Closing a trade
 
 The **Close trade** button. You fill in the result (Win / Lose / BE), the PnL in
@@ -412,8 +454,16 @@ held those trades has nothing to count, and shows the number written on it.
   limit; the tile turns amber at four fifths of it and red when it is reached.
   **The name of an account is a link**: it opens Statistics with that account
   chosen, its own equity curve and its own figures.
-- **Open positions**: what is in the market right now, with the risk in money
-  and a Close button.
+- **Open positions**: what is in the market right now, with the risk in money,
+  a **Breakeven** button and a Close button. Press Breakeven when you have
+  moved the stop of that trade to the entry: the trade can no longer lose what
+  it was sized for, so its risk is freed. The money column shows a green
+  **BE** chip in place of the sum, the title of the block counts the trades
+  held that way, and the daily loss limit of the account stops counting
+  them, so three trades at breakeven and two fresh ones read as 2% at risk
+  and not 5%. Pressed by mistake, **Risk back** on the page of the trade
+  undoes it. The R of the trade is still measured against the risk it was
+  opened with, whatever happened to the stop later.
 - **Summary tiles**: the current period, the size of the selection, the
   winrates with the **EV** to the right of each, and the total R.
 - **The current period** counts the trades that closed in it, the way a broker
@@ -430,7 +480,10 @@ held those trades has nothing to count, and shows the number written on it.
   style, direction, result, a range of months. They apply both to the list and
   to the summary tiles. While a filter is on, the funnel is lit and shows how
   many fields are set; **Reset** clears them. To close the form: click away or
-  press Escape.
+  press Escape. **A filter survives a trade being opened**: a trade opened
+  from a filtered list carries the selection, its page has a **← Journal**
+  button that names the filter, the Journal tab leads to the same list, and
+  editing, closing or deleting the trade lands back on it.
 - **CSV** next to the switch writes the list as it is filtered into a file for
   a spreadsheet: every stored field and the computed ones, R, the balance at
   entry, the risk in money, one trade per line.
@@ -651,6 +704,18 @@ commission and swap carry it to -1.2R, which the trade was still sized for.
 What lies past that edge is the only part discipline was there to keep, so a
 loss back at -1.35R overran the risk by 0.15R and not by the whole of it.
 
+**Stop at breakeven.** The trades whose stop you moved to the entry (the
+Breakeven button, see The stop at breakeven) against the ones whose stop
+stayed: the same four figures for each, so the two rows answer whether
+moving the stop pays. Under them, how the moved trades ended, won, stopped at
+the entry or lost after the move, and how soon after the entry the stop was
+moved in the middle case, with the share of the hold that had passed. The
+journal cannot tell whether a trade stopped at the entry would have gone on
+to its target: that is read off the chart. A loss after the move means the
+stop came back or the price gapped through it. The card stands only when the
+cut holds a moved trade, and only trades moved since the button appeared
+carry the mark.
+
 **The tables.** By period, pair, style, account, direction, entry timeframe,
 execution and time in the market, in two columns. A row of the period, pair,
 style, account or direction table narrows the page to that value, and the
@@ -759,7 +824,7 @@ The **Reports** tab is a shelf: every quarter and month since your first closed
 trade, newest first, each with the figures the journal holds for it now, whether
 a report was built for it or not. Trades, then won / lost / break-even and, on
 the running period, the positions open now in blue, WR, Σ R, EV, money, and
-the daily cards written against the days traded. A period with trades and no
+the daily cards written against the days you took a trade on. A period with trades and no
 report has a **Build** button in its row, blue on the one that is due, the
 newest finished period with trades and no report. A period with a report is a
 link to it, with the day its file was built and a blue dot once conclusions
@@ -780,8 +845,10 @@ colour, the positions open now in blue while the period runs; the **deepest
 fall from a high**, how far
 the period went below its own best point, in R, because a month can end in
 plus and still have been survived rather than traded; the **mistakes**; the
-**process**, the daily cards written against the days traded and their
-grades; and the best and the worst trade by R, each a link to the trade.
+**process**, the daily cards written against the days you took a trade on
+and their grades; and the best and the worst trade by R, each a link to the trade.
+A day counts here by its entries: a position that closed by itself while you
+were away does not turn that day into one owing a card.
 
 **Mistakes** are what the journal itself recorded as one: a rule ticked as not
 met at the entry or at the close, or a loss of -1.2 R and worse, which is past
@@ -798,6 +865,12 @@ under it as **Past the stop**, each a link to the trade and each with what it
 cost past -1.2R beside its R, the total said under the table. The card stands
 whenever a trade of the period names a playbook or a loss went past the stop.
 
+**Process** counts the cards against the days traded and quotes the errors
+written on them; when a stop was moved to breakeven in the period it adds one
+sentence: on how many trades, how they ended, what they brought against the
+trades whose stop stayed, and how soon the stop was moved. The sentence goes
+into the saved file too.
+
 **Trade by trade** is every closed trade of the period as one bar, in the
 order of the exits: a win stands up in green, a loss hangs down in red, a
 break-even is an amber tick on the zero line, and a thin line marks where a new
@@ -808,7 +881,7 @@ Hover a bar for the trade, click it to open it. Beside it stand **the rings**,
 the R distribution of the period, the same as on the Statistics tab.
 
 Then **By playbook** with its setups beneath, when any trade names one;
-**Process**, with the daily cards against the days traded, the weekly cards
+**Process**, with the daily cards against the days you took a trade on, the weekly cards
 of the period, the grades, the D and F days and the errors you wrote on the
 cards, each a link to its card; and your **Conclusions**: an open field until they are
 written, then your text with an **Edit** fold under it. Saving writes the
@@ -898,8 +971,8 @@ sent will not know about it; make it again and send the new one.
 
 The **Search** tab. A word or a phrase is looked for in everything you have
 written: the ideas and conclusions of trades, their notes, the analysis, plan,
-updates and review of every plan, and every field of every card, daily and
-weekly alike. Case does not
+updates and review of every plan, the text of every market note, and every
+field of every card, daily and weekly alike. Case does not
 matter. Every hit is a link to the record, with the matching words shown in
 the text around them. It is the way to find the trade where you wrote "moved
 the stop too early" three months ago.
@@ -914,6 +987,8 @@ Everything is in the `journal/` folder: ordinary text files and pictures.
     journal/cards/2026-W36.md
     journal/plans/2026-08-31-eurusd/plan.md
     journal/plans/2026-08-31-eurusd/shots/*.png
+    journal/notes/2026-09-06-sweep-before-the-london-open/note.md
+    journal/notes/2026-09-06-sweep-before-the-london-open/shots/*.png
     journal/playbooks/pullback/playbook.md
     journal/playbooks/pullback/versions/1.0.md
     journal/playbooks/pullback/shots/*.png

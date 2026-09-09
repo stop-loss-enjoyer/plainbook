@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import mdfile, store
 from plainbook.model import (Trade, Account, Adjustment, IdeaBlock, Card, Week,
-                      Graded, Plan, Playbook, Setup, Rule, RecordError,
+                      Graded, Plan, Note, Playbook, Setup, Rule, RecordError,
                       PAIR_NOT_SET)
 
 
@@ -97,6 +97,21 @@ class TradeRoundTrip(unittest.TestCase):
         self.assertIsNone(again.pnl)
         self.assertIsNone(again.closed)
 
+    def test_the_stop_at_breakeven_keeps_its_moment(self):
+        """The moment the stop went to the entry survives the file; a trade
+        that never had one reads back without it."""
+        t = sample_trade(result=None, pnl=None, closed=None,
+                         exit_images=[], conclusions="",
+                         breakeven=datetime(2025, 6, 26, 9, 15))
+        again = self.round_trip(t)
+        self.assertEqual(again.breakeven, datetime(2025, 6, 26, 9, 15))
+        self.assertIn("stop at breakeven: 2025-06-26 09:15", store.trade_to_text(t))
+        plain = self.round_trip(sample_trade())
+        self.assertIsNone(plain.breakeven)
+        self.assertNotIn("breakeven", store.trade_to_text(sample_trade()))
+        with self.assertRaises(RecordError):
+            sample_trade(breakeven=datetime(2025, 6, 24, 9, 0)).check()
+
     def test_date_without_time(self):
         t = sample_trade(opened=datetime(2025, 6, 25), opened_time=False)
         again = self.round_trip(t)
@@ -134,6 +149,54 @@ class TradeRoundTrip(unittest.TestCase):
         with self.assertRaises(RecordError):
             sample_trade(result=None).check()       # open with PnL
         sample_trade().check()
+
+
+class NoteRoundTrip(unittest.TestCase):
+    def note(self, **kw):
+        fields = dict(id="2026-09-09-london-sweep", title="London sweep",
+                      day=datetime(2026, 9, 9),
+                      blocks=[IdeaBlock(text="The Asian high goes first.",
+                                        images=["shots/idea-01-01.png"]),
+                              IdeaBlock(tf="What to do", text="Wait for the close.")],
+                      trades=["2026-08-29-01-eurusd", "2026-09-01-01-gbpusd"])
+        fields.update(kw)
+        return Note(**fields)
+
+    def test_a_note_survives_the_round_trip(self):
+        n = self.note()
+        again = store.text_to_note(store.note_to_text(n))
+        self.assertEqual((again.id, again.title, again.day), (n.id, n.title, n.day))
+        self.assertEqual([(b.tf, b.text, b.images) for b in again.blocks],
+                         [(b.tf, b.text, b.images) for b in n.blocks])
+        self.assertEqual(again.trades, n.trades)
+        # a first block with no heading is plain text in the file
+        self.assertIn("\n\nThe Asian high goes first.\n", store.note_to_text(n))
+
+    def test_a_note_without_examples_writes_no_empty_key(self):
+        text = store.note_to_text(self.note(trades=[]))
+        self.assertNotIn("trades:", text)                 # an empty key is a list
+        self.assertEqual(store.text_to_note(text).trades, [])
+
+    def test_a_note_needs_a_title_and_a_day(self):
+        with self.assertRaises(RecordError):
+            self.note(title="  ").check()
+        with self.assertRaises(RecordError):
+            self.note(day=None).check()
+
+    def test_a_note_id_keeps_the_letters_of_its_title(self):
+        with tempfile.TemporaryDirectory() as root:
+            day = datetime(2026, 9, 9)
+            self.assertEqual(store.new_note_id(root, day, "London sweep, again"),
+                             "2026-09-09-london-sweep-again")
+            self.assertEqual(store.new_note_id(root, day, "Été à Paris"),
+                             "2026-09-09-été-à-paris")
+            self.assertEqual(store.new_note_id(root, day, "???"), "2026-09-09-note")
+            store.save_note(root, self.note(id="2026-09-09-london-sweep",
+                                            title="London sweep"))
+            self.assertEqual(store.new_note_id(root, day, "London sweep"),
+                             "2026-09-09-london-sweep-02")
+            self.assertEqual([n.id for n in store.all_notes(root)],
+                             ["2026-09-09-london-sweep"])
 
 
 class PlanRoundTrip(unittest.TestCase):

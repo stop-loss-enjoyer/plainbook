@@ -2036,7 +2036,9 @@ class ServerCase(unittest.TestCase):
         try:
             code, html = self.get("/reports")
             self.assertEqual(code, 200)
-            self.assertNotIn("notes", html)
+            # the Notes tab carries the word on every page, so the stray file
+            # is looked for as the report it would have been read as
+            self.assertNotIn('href="/report/notes"', html)
             self.assertNotIn("2026-13", html)
             self.assertIn('href="/report/2026-06"', html)
             code, html = self.get("/report/2026-06")
@@ -2533,6 +2535,237 @@ class ServerCase(unittest.TestCase):
         self.assertIn(f'href="/share/trade/{trade}"', html)
         _, html = self.get("/")
         self.assertIn('href="/share/journal"', html)
+
+    def test_95_breakeven_frees_the_risk_of_an_open_trade(self):
+        """Two trades of 1% against a limit of 150 $: over. The first moved
+        to breakeven: 100 $ at risk, the tile calms down, the trade says
+        since when. Risk back puts it where it was."""
+        now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+        first = self.open_trade(entry=now, risk="1", pair="EURUSD")
+        second = self.open_trade(entry=now, risk="1", pair="USDJPY")
+        q = urllib.parse.quote(first)
+        # the tests share one journal, so the limit is cut just under what
+        # is at stake now: the risk of the first trade, ~100 $, freed takes
+        # the account back under it
+        j = self.S.journal(True)
+        used = max(0.0, -j.closed_on("broker", datetime.now())) + j.open_risk("broker")
+        self.post("/account/limit", {"id": "broker", "limit": f"{used - 50:.2f}"})
+        _, html = self.get("/")
+        self.assertIn("daily loss limit reached", html)
+        self.assertIn(f'action="/trade/{q}/breakeven"', html)
+        self.assertNotIn('class="chip breakeven"', html)
+
+        _, where = self.post(f"/trade/{q}/breakeven", {"back": "/"})
+        self.assertEqual(urllib.parse.urlparse(where).path, "/")
+        self.assertIsNotNone(store.load_trade(self.root, first).breakeven)
+        _, html = self.get("/")
+        self.assertNotIn("daily loss limit reached", html)
+        self.assertIn("1 at breakeven", html)
+        # other tests leave positions of their own open, so only the tail
+        self.assertRegex(html, r"Open positions: \d+, 1 at breakeven")
+        self.assertIn('class="chip breakeven"', html)
+        _, html = self.get(f"/trade/{q}")
+        self.assertIn("at breakeven since", html)
+        self.assertIn('name="undo" value="1"', html)
+
+        # an edit of another field keeps the stop where it is
+        _, form = self.get(f"/edit/{q}")
+        fields = {"token": self.form_token(form), "blocks": "1", "account": "broker",
+                  "pair": "EURUSD", "direction": "long", "style": "swing",
+                  "entry_tf": "H4", "risk": "1", "entry": now,
+                  "idea_tf_1": "H4", "idea_text_1": "edited"}
+        self.post(f"/edit/{q}", fields)
+        self.assertIsNotNone(store.load_trade(self.root, first).breakeven)
+
+        _, where = self.post(f"/trade/{q}/breakeven", {"undo": "1"})
+        self.assertEqual(self.landed(where), first)
+        self.assertIsNone(store.load_trade(self.root, first).breakeven)
+        self.assertIn("daily loss limit reached", self.get("/")[1])
+
+        # a closed trade has nothing to free
+        _, form = self.get(f"/close/{urllib.parse.quote(second)}")
+        self.post(f"/close/{urllib.parse.quote(second)}",
+                  {"token": self.form_token(form), "result": "Win", "pnl": "50",
+                   "exit": now, "conclusions": ""})
+        self.refused(f"/trade/{urllib.parse.quote(second)}/breakeven", {})
+        self.post("/account/limit", {"id": "broker", "limit": ""})
+        self.post(f"/trade/{q}/delete", {})
+        self.post(f"/trade/{urllib.parse.quote(second)}/delete", {})
+
+    def test_96_the_moved_stops_have_a_card_and_a_line_in_the_report(self):
+        """A trade moved to breakeven and stopped at the entry: the
+        Statistics tab gets the card, the report of its month gets the
+        sentence in Process."""
+        _, html = self.get("/stats?pair=CADJPY")
+        self.assertNotIn("<h2>Stop at breakeven</h2>", html)
+        tid = self.open_trade(entry="2026-07-06T10:00", pair="CADJPY")
+        q = urllib.parse.quote(tid)
+        self.post(f"/trade/{q}/breakeven", {})
+        _, form = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(form), "result": "BE",
+                                  "pnl": "-3", "exit": "2026-07-08T15:00",
+                                  "conclusions": ""})
+        _, html = self.get("/stats?pair=CADJPY")
+        self.assertIn("<h2>Stop at breakeven</h2>", html)
+        self.assertIn("moved on 1 of 1", html)
+        self.assertIn("1 stopped at the entry", html)
+        self.assertNotIn("After the move, not a win", html)
+        self.post("/report/build", {"what": "month", "period_month": "2026-07"})
+        _, html = self.get("/report/2026-07")
+        self.assertIn("Stop moved to breakeven on 1 of", html)
+        self.post(f"/trade/{q}/delete", {})
+
+
+    def test_97_a_note_is_written_with_a_shot_and_a_trade_is_tied_to_it(self):
+        _, html = self.get("/notes")
+        self.assertIn("No notes yet", html)
+        earlier = self.open_trade(entry="2026-09-02T09:00", pair="GBPUSD")
+        _, form = self.get("/note/new")
+        token = self.form_token(form)
+        shot = self.paste_shot(token, "idea-1")
+        # two blocks, the second with a heading, and a trade picked in the form
+        self.assertIn(f'<option value="{earlier}">', form)
+        code, where = self.post("/note/new", {
+            "token": token, "title": "London sweep", "date": "2026-09-09",
+            "blocks": "2",
+            "idea_text_1": "The Asian high goes first.", "file_idea-1": shot["file"],
+            "idea_tf_2": "What to wait for", "idea_text_2": "The M15 close.",
+            "trade": [earlier, earlier, "no-such-trade"]})
+        self.assertEqual(code, 200)
+        note_id = self.landed(where)
+        self.assertEqual(note_id, "2026-09-09-london-sweep")
+        n = store.load_note(self.root, note_id)
+        self.assertEqual([(b.tf, b.text, b.images) for b in n.blocks],
+                         [("", "The Asian high goes first.", ["shots/idea-01-01.png"]),
+                          ("What to wait for", "The M15 close.", [])])
+        self.assertEqual(n.trades, [earlier])        # once, and only a known one
+        self.assertEqual(
+            self.get(f"/note-shot/{note_id}/idea-01-01.png", as_text=False)[0], 200)
+        _, page = self.get(f"/note/{note_id}")
+        self.assertIn("<h3>What to wait for</h3>", page)
+        self.assertIn(f'href="/trade/{earlier}?note={note_id}"', page)
+        # the edit form lists the picked trade and offers the rest
+        _, form = self.get(f"/note/{note_id}/edit")
+        self.assertIn(f'add_example({json.dumps(earlier)}', form)
+        self.assertIn('name="idea_tf_2" value="What to wait for"', form)
+        # a second example is tied from the note page itself
+        tid = self.open_trade(entry="2026-09-09T09:00", pair="GBPUSD")
+        _, page = self.get(f"/note/{note_id}")
+        self.assertIn(f'<option value="{tid}">', page)
+        _, where = self.post(f"/note/{note_id}/attach", {"trade": tid})
+        self.assertIn("Example%20added", where)
+        self.assertEqual(store.load_note(self.root, note_id).trades, [earlier, tid])
+        _, page = self.get(f"/note/{note_id}")
+        self.assertIn(f'href="/trade/{tid}?note={note_id}"', page)
+        self.assertNotIn(f'<option value="{tid}">', page)
+        _, trade = self.get(f"/trade/{tid}?note={note_id}")
+        self.assertIn(f'href="/note/{note_id}">← London sweep</a>', trade)
+        self.assertIn("an example in", trade)
+        # a second press of the same trade changes nothing
+        _, where = self.post(f"/note/{note_id}/attach", {"trade": tid})
+        self.assertIn("already", where)
+        self.assertEqual(store.load_note(self.root, note_id).trades, [earlier, tid])
+        self.refused(f"/note/{note_id}/attach", {"trade": "no-such-trade"})
+        # the list names the note and counts its examples; search finds it
+        _, html = self.get("/notes")
+        self.assertIn("London sweep", html)
+        self.assertIn('<td class="cell num"><a href="/note/' + note_id + '">2</a>', html)
+        _, html = self.get("/search?q=asian+high")
+        self.assertIn(f'href="/note/{note_id}"', html)
+        ServerCase.note_id, ServerCase.note_trade = note_id, tid
+
+    def test_98_a_note_is_edited_untied_and_deleted_into_the_trash(self):
+        note_id, tid = ServerCase.note_id, ServerCase.note_trade
+        _, form = self.get(f"/note/{note_id}/edit")
+        self.assertIn("The Asian high goes first.", form)
+        self.assertIn('name="have_idea-1" value="shots/idea-01-01.png"', form)
+        token = self.form_token(form)
+        # the form sends back both trades; the first block is edited, the
+        # second is dropped by sending it empty
+        self.post(f"/note/{note_id}/edit", {
+            "token": token, "title": "London sweep", "date": "2026-09-08",
+            "blocks": "2",
+            "idea_text_1": "The Asian high goes first, then the low.",
+            "have_idea-1": "shots/idea-01-01.png",
+            "idea_tf_2": "", "idea_text_2": "",
+            "trade": store.load_note(self.root, note_id).trades})
+        n = store.load_note(self.root, note_id)
+        self.assertEqual(n.day, datetime(2026, 9, 8))
+        self.assertEqual(len(n.blocks), 1)
+        self.assertIn("then the low", n.blocks[0].text)
+        # editing the text keeps the screenshot and the examples
+        self.assertEqual(n.blocks[0].images, ["shots/idea-01-01.png"])
+        self.assertTrue(os.path.exists(os.path.join(
+            store.note_dir(self.root, note_id), "shots", "idea-01-01.png")))
+        self.assertEqual(len(n.trades), 2)
+        # a screenshot and a trade taken out of the form leave the note
+        self.post(f"/note/{note_id}/edit", {
+            "token": self.form_token(self.get(f"/note/{note_id}/edit")[1]),
+            "title": "London sweep", "date": "2026-09-08", "blocks": "1",
+            "idea_text_1": "The Asian high goes first, then the low.",
+            "trade": tid})
+        self.assertFalse(os.path.exists(os.path.join(
+            store.note_dir(self.root, note_id), "shots", "idea-01-01.png")))
+        self.assertEqual(store.load_note(self.root, note_id).trades, [tid])
+        _, where = self.post(f"/note/{note_id}/detach", {"trade": tid})
+        self.assertIn("Example%20removed", where)
+        self.assertEqual(store.load_note(self.root, note_id).trades, [])
+        self.refused(f"/note/{note_id}/detach", {"trade": tid})
+        # into the trash and back
+        self.post(f"/note/{note_id}/delete", {})
+        self.assertFalse(os.path.exists(store.note_dir(self.root, note_id)))
+        name = next(x[0] for x in store.trash_list(self.root)
+                    if x[1] == "note" and x[2] == note_id)
+        self.post("/trash/restore", {"name": name})
+        self.assertTrue(os.path.exists(store.note_dir(self.root, note_id)))
+        self.assertEqual(self.get(f"/note/{note_id}")[0], 200)
+
+    def test_99_a_trade_opened_from_a_filtered_list_keeps_the_selection(self):
+        """The filter of the front page used to be lost the moment a trade
+        was opened: the row carries it, the trade page offers the way back,
+        the Journal tab leads to the same list, and the forms land on it."""
+        tid = self.open_trade(entry="2026-09-03T09:00", pair="NZDUSD")
+        q = urllib.parse.quote(tid)
+        _, html = self.get("/?account=broker&pair=NZDUSD&group=month")
+        keep = "?via=journal&account=broker&pair=NZDUSD&group=month"
+        self.assertIn(f'href="/trade/{tid}{keep}"', html)
+        _, html = self.get("/")                            # an unfiltered list
+        self.assertIn(f'href="/trade/{tid}"', html)
+        self.assertNotIn("via=journal", html)
+        _, trade = self.get(f"/trade/{q}{keep}")
+        back = "/?account=broker&pair=NZDUSD&group=month"
+        self.assertIn(f'href="{back}">← Journal: broker, NZDUSD</a>', trade)
+        self.assertNotIn("← Statistics", trade)           # the same names, another page
+        header = re.findall(r'<header.*?</header>', trade, re.S)[0]
+        self.assertIn(f'<a href="{back}" class="current">Journal</a>', header)
+        self.assertIn(f'href="/edit/{tid}{keep}"', trade)
+        self.assertIn(f'href="/close/{tid}{keep}"', trade)
+        self.assertIn(f'action="/trade/{tid}/breakeven{keep}"', trade)
+        # the forms carry it in their action and land back with it
+        _, form = self.get(f"/edit/{q}{keep}")
+        self.assertIn(f'action="/edit/{tid}{keep}"', form)
+        self.assertIn(f'href="/trade/{tid}{keep}">Cancel</a>', form)
+        _, where = self.post(f"/edit/{q}{keep}", {
+            "token": self.form_token(form), "blocks": "1", "account": "broker",
+            "pair": "NZDUSD", "direction": "long", "style": "swing",
+            "entry_tf": "H4", "risk": "1", "entry": "2026-09-03T09:00",
+            "idea_tf_1": "H4", "idea_text_1": "a plain idea"})
+        self.assertIn(f"/trade/{tid}{keep}&said=", where)
+        _, where = self.post(f"/trade/{q}/breakeven{keep}", {})
+        self.assertIn(f"/trade/{tid}{keep}&said=", where)
+        _, form = self.get(f"/close/{q}{keep}")
+        self.assertIn(f'action="/close/{tid}{keep}"', form)
+        _, where = self.post(f"/close/{q}{keep}", {
+            "token": self.form_token(form), "result": "Win", "pnl": "50",
+            "exit": "2026-09-04T15:00", "conclusions": ""})
+        self.assertIn(f"/trade/{tid}{keep}&said=", where)
+        _, where = self.post(f"/trade/{q}/delete{keep}", {})
+        self.assertIn(f"{back}&said=", where)
+        # the cut of the Statistics tab still offers its own way back
+        tid = self.open_trade(entry="2026-09-03T09:00", pair="NZDUSD")
+        _, trade = self.get(f"/trade/{urllib.parse.quote(tid)}?account=broker")
+        self.assertIn("← Statistics", trade)
+        self.assertNotIn("← Journal", trade)
 
 
 if __name__ == "__main__":

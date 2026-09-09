@@ -267,6 +267,49 @@ class ReportCase(unittest.TestCase):
                      result="Win" if pnl > 0 else "Lose" if pnl < 0 else "BE",
                      pnl=pnl, **kw)
 
+    def test_the_stops_moved_to_the_entry_stand_against_the_rest(self):
+        """Four trades moved, two not. The moved ones are summed on their
+        own, and the move is timed only where the entry carries an hour."""
+        import tempfile
+        from plainbook import reports
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
+        at = lambda i, h: datetime(2026, 8, i, h)
+        timed = dict(opened_time=True, closed_time=True)
+        trades = [self.trade(1, 200, breakeven=at(1, 11), **timed),  # won, moved at half the hold
+                  self.trade(2, 0, breakeven=at(2, 11), **timed),
+                  self.trade(3, 0, breakeven=at(3, 11), **timed),    # stopped at the entry
+                  self.trade(4, -120, breakeven=at(4, 11), **timed), # lost after the move
+                  self.trade(5, 150, **timed),                       # the stop stayed
+                  self.trade(6, -100, **timed)]
+        trades[1].pnl = -5                                     # a BE a few dollars under
+        b = stats.breakeven_split(Journal(accounts, trades, []), trades)
+        self.assertEqual((b.moved.trades, b.moved.wins, b.moved.be, b.moved.losses),
+                         (4, 1, 2, 1))
+        self.assertEqual(b.stayed.trades, 2)
+        self.assertEqual(b.median_hours, 1.0)
+        self.assertAlmostEqual(b.median_share, 0.5)
+        # an entry without an hour is not timed, and an open trade is not counted
+        trades[0].opened_time = False
+        live = Trade(id="o", account="broker", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=datetime(2026, 8, 7, 9),
+                     breakeven=datetime(2026, 8, 7, 12))
+        b = stats.breakeven_split(Journal(accounts, trades + [live], []), trades + [live])
+        self.assertEqual(len(b.hours), 3)
+        self.assertEqual(b.moved.trades, 4)
+        # the report carries the split, and its file says it in one sentence
+        with tempfile.TemporaryDirectory() as root:
+            r = reports.compose(root, Journal(accounts, trades, []), "2026-08")
+            text = reports.to_markdown(r, Journal(accounts, trades, []), "")
+        self.assertEqual(r.breakeven.moved.trades, 4)
+        self.assertIn("Stop moved to breakeven on 4 of 6 trades: 1 won, "
+                      "2 stopped at the entry, 1 lost after it", text)
+        self.assertIn("the stop stayed on 2", text)
+        # a period with no moved trade says nothing about them
+        with tempfile.TemporaryDirectory() as root:
+            r = reports.compose(root, Journal(accounts, trades[4:], []), "2026-08")
+            text = reports.to_markdown(r, Journal(accounts, trades[4:], []), "")
+        self.assertNotIn("breakeven", text)
+
     def test_a_mistake_is_a_rule_not_met_or_a_loss_past_the_stop(self):
         import tempfile
         from plainbook import reports
@@ -290,6 +333,33 @@ class ReportCase(unittest.TestCase):
         self.assertEqual([t.id for t in r.order], ["t1", "t2", "t3", "t4", "t5"])
         self.assertEqual(r.days_traded, 5)
         self.assertEqual(r.earlier_name, "July 2026")
+
+    def test_a_day_is_counted_by_the_entry_not_by_what_closed_on_it(self):
+        """The card is written on the day the trades were taken. A position
+        that closed by itself the next morning does not make that morning a
+        day worked, and one entered on the last day of a month stays in that
+        month even though it paid in the next."""
+        import tempfile
+        from plainbook import reports
+
+        def trade(i, opened, closed):
+            return Trade(id=i, account="broker", pair="EURUSD", direction="long",
+                         style="swing", risk=1.0, opened=opened, closed=closed,
+                         result=None if closed is None else "Win",
+                         pnl=None if closed is None else 100)
+
+        accounts = {"broker": Account(id="broker", start_balance=10000)}
+        j = Journal(accounts, [trade("a", datetime(2026, 8, 3, 10), datetime(2026, 8, 4, 9)),
+                               trade("b", datetime(2026, 8, 3, 15), datetime(2026, 9, 1, 9)),
+                               trade("c", datetime(2026, 8, 31, 11), datetime(2026, 9, 2, 9)),
+                               trade("d", datetime(2026, 8, 5, 12), None)], [])
+        with tempfile.TemporaryDirectory() as root:
+            august = reports.compose(root, j, "2026-08")
+            september = reports.compose(root, j, "2026-09")
+        # entries on the 3rd, twice, the 5th and the 31st: three days worked
+        self.assertEqual(august.days_traded, 3)
+        # September closed two of them and was never traded in
+        self.assertEqual(september.days_traded, 0)
 
     def test_a_rule_not_held_at_the_close_counts_without_an_entry_checklist(self):
         """A trade tied to its playbook later, ticked at the close only, with a
@@ -320,7 +390,7 @@ class ReportCase(unittest.TestCase):
             r = reports.compose(root, j, "2026-08")
             md = reports.to_markdown(r, j, "")
         self.assertIn("| winrate (BE not counted) | - |", md)
-        self.assertIn("1 day had trades", md)
+        self.assertIn("1 day had entries", md)
 
     def test_the_shelf_runs_from_the_first_closed_trade_to_now(self):
         from plainbook import reports

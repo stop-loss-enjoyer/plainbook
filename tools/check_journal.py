@@ -7,7 +7,7 @@ whenever the interface says a file could not be read:
     python3 tools/check_journal.py            # the journal in ./journal
     python3 tools/check_journal.py ~/plainbook-data
 
-Every trade, plan, playbook, card, week, account and adjustment is loaded the
+Every trade, plan, playbook, note, card, week, account and adjustment is loaded the
 way the server loads it, and each one that fails is named with the reason. Nothing is
 written and nothing from the records is printed but the path of the file and
 the error.
@@ -25,7 +25,7 @@ def check(root):
     problems = []
     counts = {}
     for name, reader in (("trades", store.all_trades), ("plans", store.all_plans),
-                         ("playbooks", store.all_playbooks),
+                         ("playbooks", store.all_playbooks), ("notes", store.all_notes),
                          ("cards", store.all_cards), ("weeks", store.all_weeks),
                          ("accounts", store.all_accounts),
                          ("adjustments", store.all_adjustments)):

@@ -24,8 +24,8 @@ from datetime import datetime, timedelta
 from . import mdfile
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
                     Playbook, Setup, Rule, PLAYBOOK_KEYS,
-                    Plan, TRADE_KEYS, ACCOUNT_KEYS, ADJUSTMENT_KEYS, CARD_KEYS,
-                    WEEK_KEYS, PLAN_KEYS, CARD_SECTIONS, WEEK_SECTIONS,
+                    Plan, Note, TRADE_KEYS, ACCOUNT_KEYS, ADJUSTMENT_KEYS, CARD_KEYS,
+                    WEEK_KEYS, PLAN_KEYS, NOTE_KEYS, CARD_SECTIONS, WEEK_SECTIONS,
                     PAIR_NOT_SET, STYLES, TIMEFRAMES, EXECUTION)
 
 JOURNAL = "journal"
@@ -34,9 +34,11 @@ TRADES, ACCOUNTS, ADJUSTMENTS, REPORTS = "trades", "accounts", "adjustments", "r
 CARDS = "cards"             # the reviews: a file per day, a file per week
 PLANS = "plans"             # trading plans, a folder each, like a trade
 PLAYBOOKS = "playbooks"     # the standing rules, a folder each
+NOTES = "notes"             # market notes, a folder each, with their shots
 TRADE_FILE = "trade.md"
 PLAN_FILE = "plan.md"
 PLAYBOOK_FILE = "playbook.md"
+NOTE_FILE = "note.md"
 SHOTS = "shots"
 
 _IMAGE = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)\s*$")
@@ -123,6 +125,8 @@ def trade_to_text(t):
         head["result"] = t.result
         head["pnl $"] = _number_to_text(t.pnl)
         head["exit"] = _date_to_text(t.closed, t.closed_time)
+    if t.breakeven is not None:
+        head["stop at breakeven"] = _date_to_text(t.breakeven, True)
     if t.note:
         head["note"] = t.note
     if t.plan:
@@ -182,6 +186,7 @@ def text_to_trade(text):
         pnl=_number(head.get("pnl $")),
         closed=closed,
         closed_time=closed_with_time,
+        breakeven=_date(head.get("stop at breakeven"))[0],
         note=_text(head.get("note")),
         plan=_text(head.get("plan")),
         playbook=_text(head.get("playbook")),
@@ -350,6 +355,44 @@ def text_to_plan(text):
     k.updates = sections.get("Updates", "").strip()
     k.review = sections.get("Review", "").strip()
     return k
+
+
+# --- market note: object <-> text ------------------------------------------
+# The file is the note itself: a header with the title, the day and the ids
+# of the example trades, then the blocks, a `###` heading each, the way the
+# analysis of a plan is written. A first block with no heading is written
+# without the `###` line, so a note of one block reads as plain text.
+
+def note_to_text(n):
+    head = {"id": n.id, "title": n.title, "date": _date_to_text(n.day)}
+    if n.trades:
+        head["trades"] = list(n.trades)
+    head.update(n.extra)
+    parts = []
+    for i, block in enumerate(n.blocks):
+        if block.tf or i:
+            parts.append(f"### {block.tf}" if block.tf else "###")
+        if block.text.strip():
+            parts.append(block.text.strip())
+        parts.extend(f"![]({src})" for src in block.images)
+    return mdfile.dump(head, "\n\n".join(parts))
+
+
+def text_to_note(text):
+    head, body = mdfile.parse(text)
+    known = {key for _, key in NOTE_KEYS}
+    day, _ = _date(head.get("date"))
+    trades = head.get("trades") or []
+    if isinstance(trades, str):
+        trades = [trades]
+    return Note(
+        id=_text(head.get("id")),
+        title=_text(head.get("title")),
+        day=day,
+        blocks=_parse_idea(body),
+        trades=[t for t in trades if t],
+        extra={k: v for k, v in head.items() if k not in known},
+    )
 
 
 # --- playbook: object <-> text ---------------------------------------------
@@ -665,7 +708,8 @@ def _load(problems, path, convert, root=None):
         return None
 
 
-JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, PLANS, PLAYBOOKS, REPORTS]
+JOURNAL_DIRS = [TRADES, ACCOUNTS, ADJUSTMENTS, CARDS, PLANS, PLAYBOOKS, NOTES,
+                REPORTS]
 
 
 def make_layout(root):
@@ -883,6 +927,62 @@ def delete_playbook(root, playbook_id):
     if not os.path.isdir(path):
         return None
     target = _trash_target(root, f"playbook-{playbook_id}")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.move(path, target)
+    return target
+
+
+def note_dir(root, note_id):
+    return os.path.join(root, JOURNAL, NOTES, note_id)
+
+
+def save_note(root, n):
+    n.check()
+    _write(os.path.join(note_dir(root, n.id), NOTE_FILE), note_to_text(n))
+    return n
+
+
+def load_note(root, note_id):
+    return text_to_note(_read(os.path.join(note_dir(root, note_id), NOTE_FILE)))
+
+
+def all_notes(root, problems=None):
+    """Every note, newest first."""
+    base = os.path.join(root, JOURNAL, NOTES)
+    notes = []
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        path = os.path.join(base, name, NOTE_FILE)
+        if os.path.isfile(path):
+            n = _load(problems, path, text_to_note, root)
+            if n is not None:
+                notes.append(n)
+    notes.sort(key=lambda n: (n.day or datetime.min, n.id), reverse=True)
+    return notes
+
+
+def new_note_id(root, day, title):
+    """A note id: YYYY-MM-DD-the-title, with a counter when the day already
+    has one. The letters of the title are kept whatever alphabet they are in,
+    so that the folder can be found by its name; a title with no letter at all
+    is called a note."""
+    slug = re.sub(r"[^\w]+", "-", (title or "").lower()).strip("-")[:40].strip("-")
+    base = os.path.join(root, JOURNAL, NOTES)
+    taken = set(os.listdir(base) if os.path.isdir(base) else [])
+    stem = f"{day:%Y-%m-%d}-{slug or 'note'}"
+    if stem not in taken:
+        return stem
+    n = 2
+    while f"{stem}-{n:02d}" in taken:
+        n += 1
+    return f"{stem}-{n:02d}"
+
+
+def delete_note(root, note_id):
+    """To the trash with its screenshots, like a plan."""
+    path = note_dir(root, note_id)
+    if not os.path.isdir(path):
+        return None
+    target = _trash_target(root, f"note-{note_id}")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(path, target)
     return target
@@ -1168,7 +1268,7 @@ def delete_account(root, account_id):
 # id, the others carry their kind in front. The stamp at the end is what lets
 # the same record be deleted twice.
 
-_TRASHED = re.compile(r"^(?:(plan|playbook|card|week|adjustment|account)-)?(.+)-"
+_TRASHED = re.compile(r"^(?:(plan|playbook|note|card|week|adjustment|account)-)?(.+)-"
                       r"(\d{8}-\d{6})(\.md)?$")
 
 
@@ -1195,7 +1295,7 @@ def trash_list(root):
         if not m:
             continue
         kind = m.group(1) or "trade"
-        if (kind in ("trade", "plan", "playbook")) == bool(m.group(4)):
+        if (kind in ("trade", "plan", "playbook", "note")) == bool(m.group(4)):
             continue                     # a folder record with .md, or the reverse
         when = datetime.strptime(m.group(3), "%Y%m%d-%H%M%S")
         items.append((name, kind, m.group(2), when))
@@ -1214,6 +1314,8 @@ def _trash_home(root, kind, record_id):
         return plan_dir(root, record_id)
     if kind == "playbook":
         return playbook_dir(root, record_id)
+    if kind == "note":
+        return note_dir(root, record_id)
     folder = {"card": CARDS, "week": CARDS,
               "adjustment": ADJUSTMENTS, "account": ACCOUNTS}[kind]
     return os.path.join(root, JOURNAL, folder, record_id + ".md")

@@ -55,6 +55,7 @@ TRADE_KEYS = [
     ("result", "result"),
     ("pnl", "pnl $"),
     ("closed", "exit"),
+    ("breakeven", "stop at breakeven"),
     ("note", "note"),
     ("plan", "plan"),
     ("playbook", "playbook"),
@@ -83,6 +84,8 @@ class Trade:
     pnl: float = None
     closed: date = None
     closed_time: bool = False                       # is the exit time known
+    breakeven: datetime = None                      # when the stop went to the
+                                                    # entry: the risk is freed
     note: str = ""
     plan: str = ""                                  # id of the plan it follows
     playbook: str = ""                              # id of the playbook, if any
@@ -131,6 +134,9 @@ class Trade:
                      else _day(self.closed) < _day(self.opened))
             if early:
                 raise RecordError(f"{self.id}: the exit is before the entry")
+        if self.breakeven is not None and self.opened is not None:
+            if _day(self.breakeven) < _day(self.opened):
+                raise RecordError(f"{self.id}: the stop went to breakeven before the entry")
         return self
 
 
@@ -535,4 +541,38 @@ class Adjustment:
             raise RecordError(f"{self.id}: bad kind {self.kind!r}")
         if self.day is None:
             raise RecordError(f"{self.id}: date is missing")
+        return self
+
+
+# --- market note -----------------------------------------------------------
+# A page about the market rather than about one trade: a pattern seen, a
+# behaviour of a pair, a lesson that does not belong to a single day. It is
+# written in blocks, each a heading of its own, text and screenshots, and it
+# names the trades that show it, so that a note can be read with its examples
+# open beside it.
+
+NOTE_KEYS = [
+    ("id", "id"),
+    ("title", "title"),
+    ("day", "date"),
+    ("trades", "trades"),
+]
+
+
+@dataclass
+class Note:
+    id: str
+    title: str = ""
+    day: date = None                                # the day it was written
+    blocks: list = field(default_factory=list)      # IdeaBlock: heading, text, shots
+    trades: list = field(default_factory=list)      # ids of the example trades
+    extra: dict = field(default_factory=dict)
+
+    def check(self):
+        if not self.id:
+            raise RecordError("note has no id")
+        if not self.title.strip():
+            raise RecordError(f"{self.id}: the note has no title")
+        if self.day is None:
+            raise RecordError(f"{self.id}: the note has no date")
         return self

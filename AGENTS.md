@@ -59,7 +59,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 
 | file | owns |
 |---|---|
-| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`, `Week`, `Plan`, `Playbook`; the vocabularies a journal starts with; the checks |
+| `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`, `Week`, `Plan`, `Playbook`, `Note`; the vocabularies a journal starts with; the checks |
 | `plainbook/mdfile.py` | the markdown header format, and only that |
 | `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash, the owner's lists of pairs and words |
 | `plainbook/balances.py` | balances and R, computed by replaying history |
@@ -140,7 +140,10 @@ data. Each one is followed by what it prevents.
 
 12. **A period is measured by the exit** in a report, in the period tile of
     the front page and in the cards; the list of trades, its filters and the
-    totals of its groups go by the entry. *Prevents:* a report whose result in
+    totals of its groups go by the entry. The one figure of a report that is
+    not money and not measured by the exit is `days_traded`, the days a card
+    is written against: it counts entries, because a card is written on the
+    day the owner traded, and a position closing on its own asks for none. *Prevents:* a report whose result in
     money and balance change disagree by the trades that ran across its edge,
     which is what they did before 1.4.6.
 
