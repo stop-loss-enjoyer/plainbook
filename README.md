@@ -189,7 +189,7 @@ first place: plain files, no dependencies, a small surface.
 - **A guard stands between an agent and your records.** `tools/check_public.py`
   refuses a push that would carry trade records, private paths or anything
   else it recognises as yours; it runs as a pre-push hook and in CI.
-- **The whole program is ~12 600 lines** of straightforward Python, and the
+- **The whole program is ~13 100 lines** of straightforward Python, and the
   routing table fits on one screen. It fits in a context window, so an agent
   reasons about the real thing rather than about a summary of it.
 - **One language throughout:** code, comments, documents and commit messages.
@@ -365,7 +365,7 @@ Measured on a journal of 159 trades with 363 screenshots:
 | a trade page | **2 ms**, 14 KB |
 | statistics with charts | **7 ms**, 37 KB |
 | server memory | **25 MB** |
-| the whole program | **~12 600 lines of Python** |
+| the whole program | **~13 100 lines of Python** |
 
 Pages are plain HTML rendered by one Python process: no framework, no bundler,
 no build step. The charts are SVG generated on the server. There is nothing to

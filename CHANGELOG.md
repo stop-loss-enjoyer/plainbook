@@ -2,7 +2,7 @@
 
 What changed and why. Newest first.
 
-## v1.6.1, unreleased
+## v1.6.1, 11.09.2026
 
 A plan the market went against is voided rather than deleted, the stop edge
 is a slider of your own, the Statistics cut steps back one click at a time
