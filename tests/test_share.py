@@ -63,11 +63,13 @@ class ShareCase(unittest.TestCase):
                   idea=[IdeaBlock(tf="H4", text="Asian high swept.",
                                   images=["shots/idea-01.png"])],
                   exit_images=["shots/exit-01.png"],
+                  updates="**13.08.2026 09:00**: stop moved under the sweep"
+                          "\n![](shots/update-01.png)",
                   conclusions="Target hit.\n\n![](shots/note-01.png)")
         store.save_trade(cls.root, t)
         folder = os.path.join(store.trade_dir(cls.root, t.id), store.SHOTS)
         os.makedirs(folder, exist_ok=True)
-        for name in ("idea-01.png", "exit-01.png", "note-01.png"):
+        for name in ("idea-01.png", "exit-01.png", "note-01.png", "update-01.png"):
             with open(os.path.join(folder, name), "wb") as f:
                 f.write(PNG)
         cls.j = Journal.load(cls.root)
@@ -83,8 +85,11 @@ class ShareCase(unittest.TestCase):
     def test_the_trade_is_in_it(self):
         text = without_pictures(self.document())
         for word in ("EURUSD", "long", "swing", "H4", "0.85%", "Win",
-                     "Asian high swept.", "Target hit."):
+                     "Asian high swept.", "stop moved under the sweep",
+                     "Target hit."):
             self.assertIn(word, text, word)
+        # the picture of the update is carried like the rest
+        self.assertIn("shots/update-01.png", share.shot_names(self.t))
 
     def test_it_names_the_plan_the_trade_followed(self):
         text = without_pictures(self.document())
@@ -117,7 +122,7 @@ class ShareCase(unittest.TestCase):
     def test_a_carried_document_needs_no_journal(self):
         """Nothing in the file points back at this machine."""
         text = self.document()
-        self.assertEqual(text.count("data:image/png;base64,"), 3)
+        self.assertEqual(text.count("data:image/png;base64,"), 4)
         self.assertNotIn('src="/shot/', text)
         self.assertNotIn("127.0.0.1", text)
         self.assertNotIn("localhost", text)
@@ -125,7 +130,7 @@ class ShareCase(unittest.TestCase):
     def test_a_preview_points_at_the_journal_instead(self):
         text = self.document(carry=False)
         self.assertNotIn("data:image/png;base64,", text)
-        self.assertEqual(text.count(f'src="/shot/{self.t.id}/'), 3)
+        self.assertEqual(text.count(f'src="/shot/{self.t.id}/'), 4)
 
     def test_a_missing_picture_does_not_kill_the_document(self):
         os.rename(os.path.join(store.trade_dir(self.root, self.t.id),
@@ -134,7 +139,7 @@ class ShareCase(unittest.TestCase):
         try:
             text = self.document()
             self.assertIn("Asian high swept.", text)
-            self.assertEqual(text.count("data:image/png;base64,"), 2)
+            self.assertEqual(text.count("data:image/png;base64,"), 3)
         finally:
             os.rename(os.path.join(self.root, "gone.png"),
                       os.path.join(store.trade_dir(self.root, self.t.id),

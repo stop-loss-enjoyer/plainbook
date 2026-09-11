@@ -248,6 +248,11 @@ input[type=number],input[type=date],input[type=week],
 input[type=datetime-local]{{font-family:{MONO};font-size:12px}}
 select:hover,input:hover{{border-color:{DIM}}}
 input[type=checkbox]{{accent-color:{ACCENT};vertical-align:-2px}}
+/* the stop edge slider in the head of Past the stop: the figure beside it is
+   the one every number of the card is cut at */
+.edge{{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:{INK2}}}
+.edge input[type=range]{{accent-color:{ACCENT};width:120px;margin:0}}
+.edge output{{font:600 12px/1 {MONO};color:{INK};min-width:44px}}
 select:focus,input:focus,textarea:focus{{outline:none;border-color:{ACCENT};
  box-shadow:0 0 0 2px rgba(111,157,255,.18)}}
 textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
@@ -304,6 +309,17 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .idea-block:last-child{{margin-bottom:0}}
 .example{{display:flex;align-items:center;gap:10px;margin:4px 0}}
 .is-open{{border-left:2px solid {WARN}}}
+.is-void{{border-left:2px solid {BAD}}}
+.is-void > h2{{color:{DIM}}}
+.is-void .badge{{background:{BAD};color:#fff}}
+/* the state of a plan in the list, a pill in the colour of a button: red for
+   a voided one, green for the one running now, blue for one whose days have
+   not come yet; a plan that has run its course wears nothing */
+.state{{display:inline-block;font:600 11px/1 {MONO};border-radius:7px;
+ padding:4px 8px;color:#fff}}
+.state.voided{{background:{BAD}}}
+.state.current{{background:{GOOD}}}
+.state.ahead{{background:{ACCENT};color:#07080c}}
 .props{{max-width:660px}}
 
 /* playbooks: the rules on paper, a line each with its number in the margin */

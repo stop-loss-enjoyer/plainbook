@@ -2,6 +2,47 @@
 
 What changed and why. Newest first.
 
+## v1.6.1, unreleased
+
+A plan the market went against is voided rather than deleted, the stop edge
+is a slider of your own, the Statistics cut steps back one click at a time
+and lists the trades of any cut, an open trade takes dated updates, and the
+risk of a trade can be written as money.
+
+### Added
+
+- A plan can be voided: the **Void** button on the plan page asks for the
+  reason and calls the plan off. It stops being current and is marked
+  **voided** in the list and on its page, and everything else stays: the
+  analysis, the trades tied to it, the reason under Updates with the date,
+  so the mistake can be read back later. **Restore** undoes it.
+- The list of plans marks the state of each one with a coloured pill:
+  green for the current plan, blue for one whose days have not come, red
+  for a voided one.
+- The stop edge is set by a slider in the head of **Past the stop** on the
+  Statistics tab: from 1 to 2 R by tenths, 1.2 until moved. It is how much
+  a stop with the fees on it may cost before the loss is an overrun, and
+  the rings, the Past the stop table and the mistakes of every report are
+  recut by it, the old months included. The card now stands even when no
+  loss went past the edge, so the slider is always there.
+- **← Back** in the head of the Statistics tab takes one step back in the
+  cut: a pair, then a month, then Back leaves the month and keeps the pair.
+  The trades of any cut, not only of a period, are listed at the foot of
+  the page as **Trades of this cut**, and **The trades** jumps down to them.
+- Updates of an open trade: the **Update** button on the trade page leads to
+  a form that writes a dated line under the trade, with a screenshot if one
+  is pasted, and touches nothing else. The updates stay after the close, go
+  into the Share file, are found by the search and are edited from the
+  trade's form.
+
+### Changed
+
+- The risk field of the trade form takes a sum of money as well as a
+  percent: `150$`, `$150` or `150 usd` is turned into the percent of the
+  account's balance, to two decimals, and the line under the field says what the other
+  figure is either way. The rows of a duplicate take money the same way,
+  each against its own account.
+
 ## v1.6.0, 09.09.2026
 
 Market notes with the trades that show them, a stop moved to breakeven that

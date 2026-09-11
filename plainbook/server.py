@@ -8,6 +8,7 @@ Open:  http://127.0.0.1:8778
 """
 import copy
 import csv
+from decimal import Decimal, ROUND_HALF_UP
 import http.server
 import io
 import json
@@ -846,6 +847,7 @@ def trade_page(trade_id, q):
     # the selection of the front page rides on every button, so that a form
     # answered from here lands back on the list the trade was opened from
     keep = selection(q) if via_journal(q) else ""
+    updates, scripts = updates_card(t, keep)
     buttons = (f'<a class="btn" href="/share/trade/{U(t.id)}" '
                f'title="the trade as one file, to show another trader">Share</a>'
                f'<a class="btn" href="/edit/{U(t.id)}{keep}">Edit</a>'
@@ -855,7 +857,9 @@ def trade_page(trade_id, q):
                f'<button class="btn danger">Delete</button></form>')
     if t.is_open:
         buttons = (f'<a class="btn primary" href="/close/{U(t.id)}{keep}">Close trade</a>'
-                   + breakeven_form(t, keep=keep) + buttons)
+                   + breakeven_form(t, keep=keep)
+                   + '<a class="btn" href="#updates" title="a dated line under '
+                     'the trade while it runs">Update</a>' + buttons)
     # a report names itself, a note names itself, a cut has no name of its
     # own, so those are asked first: a trade is never opened from two at once
     buttons = (way_back((q.get("report") or [""])[0])
@@ -866,12 +870,71 @@ def trade_page(trade_id, q):
             f'<table class="props">{table}</table></div>'
             + checklist
             + (f'<div class="card"><h2>Idea</h2>{idea}</div>' if idea else "")
+            + updates
             + (f'<div class="card"><h2>Exit moment</h2>'
                f'<div class="shots">{exit_shots}</div></div>' if exit_shots else "")
             + (f'<div class="card"><h2>Conclusions</h2>'
                f'<div class="shots">{conclusions}</div>'
-               f'</div>' if t.conclusions.strip() else ""))
+               f'</div>' if t.conclusions.strip() else "")
+            + scripts)
     return page(t.id, body, "journal", buttons, home=home_href(q))
+
+
+def updates_card(t, keep=""):
+    """What happened to the trade while it ran, a dated line at a time, and
+    the form that adds one: it stands on the page of an open trade only,
+    since a closed trade has its exit and its conclusions for the rest.
+    Returns the card and the scripts the paste zone needs, and nothing at
+    all for a closed trade without updates."""
+    base = f"/shot/{U(t.id)}"
+    lines = (f'<div class="shots">{with_shots(t.updates, base)}</div>'
+             if t.updates.strip() else "")
+    if not t.is_open:
+        return ((f'<div class="card"><h2>Updates</h2>{lines}</div>' if lines
+                 else ""), "")
+    token = new_token()
+    form = (f'<form method="post" action="/trade/{U(t.id)}/update{keep}" '
+            f'style="margin-top:{12 if lines else 0}px">'
+            f'<input type="hidden" name="token" value="{esc(token)}">'
+            f'<label>add an update</label>'
+            f'<input type="text" name="update" style="width:100%"'
+            f' placeholder="what changed since the entry" required>'
+            f'{dropzone("update", "click here and press Ctrl+V to paste a screenshot")}'
+            f'<div class="actions"><button class="btn">Add</button></div>'
+            f'</form>')
+    card = f'<div class="card" id="updates"><h2>Updates</h2>{lines}{form}</div>'
+    scripts = (f'<script>{FORM_SCRIPT}</script>'
+               f'<script>document.body.dataset.token = {json.dumps(token)};'
+               f'init_zones();</script>')
+    return card, scripts
+
+
+def add_trade_update(t, data):
+    """A dated line at the end of the updates of an open trade: the stop
+    moved, a partial taken, what the market did since the entry.
+
+    The screenshots pasted with it are appended to the shots folder rather
+    than rewritten into it: this form shows one zone, and a rewrite from a
+    form that shows one zone would take every other picture of the trade."""
+    if not t.is_open:
+        raise RecordError(f"{t.id}: the trade is closed, its conclusions "
+                          "are where the rest goes")
+    text = one(data, "update")
+    if not text:
+        raise RecordError("an update without a word in it")
+    token = one(data, "token")
+    folder = store.trade_dir(ROOT, t.id)
+    shots = add_shots(folder, "update",
+                      zone_sources(data, "update", folder, token)) if token else []
+    line = f"**{datetime.now():%d.%m.%Y %H:%M}**: {text}"
+    for name in shots:
+        line += f"\n![]({name})"
+    t.updates = (t.updates + "\n\n" + line) if t.updates.strip() else line
+    store.save_trade(ROOT, t)
+    if token:
+        drop_draft(token)
+    drop_cache()
+    return t
 
 
 # --- statistics ------------------------------------------------------------
@@ -989,6 +1052,43 @@ SLICE_FIELDS = {"By style": "style", "By pair": "pair", "By account": "account",
 CUT_FIELDS = [name for name, _, _ in FILTER_FIELDS] + ["from", "to"]
 
 
+def cut_back(q):
+    """The page one step back in the cut: the same query without the part
+    added last. A row of a table appends its field to the end of the
+    address, so the order of the query is the order the cut was built in,
+    and the last field is the last click. The month window is one part.
+    With nothing left to drop, the whole tab."""
+    steps = [k for k in q if k in CUT_FIELDS or k == "closed"]
+    steps = [k for k in steps if (q.get(k) or [""])[0]]
+    if not steps:
+        return "/stats"
+    last = steps[-1]
+    drop = ("from", "to") if last in ("from", "to") else (last,)
+    return cut_href(q, drop)
+
+
+def cut_words(j, q):
+    """The cut in plain words, for a caption: the parts of the title
+    without their links or flags."""
+    words = []
+    for name in ("pair", "style", "direction", "result", "account"):
+        value = (q.get(name) or [""])[0]
+        if value:
+            account = j.accounts.get(value) if name == "account" else None
+            words.append(account.name or value if account else
+                         "still open" if name == "result" and value == "open"
+                         else value)
+    period = (q.get("closed") or [""])[0]
+    if stats.grain_of(period):
+        words.append(period_name(period, stats.grain_of(period)))
+    since, until = (q.get("from") or [""])[0], (q.get("to") or [""])[0]
+    if since or until:
+        words.append(since if since == until else
+                     f"{since} to {until}" if since and until else
+                     f"from {since}" if since else f"to {until}")
+    return " · ".join(words)
+
+
 def cut_href(q, drop=(), where="/stats"):
     """The same page without those fields of the query."""
     params = {k: v[:] for k, v in q.items() if k not in drop}
@@ -1104,23 +1204,29 @@ def stats_head(j, q, trades, rest):
         bits.append(f'read against <a href="{cut_href(q, CUT_FIELDS + ["closed"])}" '
                     f'title="the whole journal">the other {rest.trades} closed '
                     f'{word}</a>')
-    # with a period cut the trades stand at the foot of this page, counted by
-    # the exit the way the figures above them were; without one the cut is the
-    # same set of trades on either page, so the button hands the reader to the
-    # journal, where the tab bar is the way back
-    if stats.grain_of((q.get("closed") or [""])[0]):
-        listed = '<a class="btn" href="#trades" title="the trades this period ' \
-                 'closed, at the foot of this page">The trades</a>'
+    # under any cut the trades stand at the foot of this page, the very set
+    # the figures were worked out on; with no cut the whole journal is the
+    # list, and that is the Journal tab
+    if active_filters(q):
+        listed = '<a class="btn" href="#trades" title="the trades these ' \
+                 'figures counted, at the foot of this page">The trades</a>'
     else:
         listed = f'<a class="btn" href="{cut_only(q)}" ' \
                  f'title="the same selection as a list">The trades</a>'
     # the way out stands beside the way in. Every part of the cut already
     # drops itself from the title and the form has a Reset of its own, but
     # both are easy to miss: the title reads as a heading and the form is
-    # behind the funnel, so clicking a month was a door that locked
+    # behind the funnel, so clicking a month was a door that locked. Back
+    # takes one step: the cut without the part added last, so a pair and
+    # then a month is left one click at a time, the way it was built. The
+    # journal runs in a window with no browser buttons, which is why the
+    # page carries its own
+    back = (f'<a class="btn" href="{cut_back(q)}" title="one step back: the '
+            f'cut without the part added last">← Back</a>'
+            if active_filters(q) else "")
     reset = ('<a class="btn" href="/stats" title="drop the whole cut and read '
              'every closed trade">Reset</a>' if active_filters(q) else "")
-    right = (filters_box(j, q, "/stats") + reset + listed
+    right = (back + filters_box(j, q, "/stats") + reset + listed
              + f'<a class="btn" href="{cut_only(q, "/export.csv")}" '
              f'title="the selection as CSV">CSV</a>')
     return (f'<div class="page-head"><div><h2>Statistics</h2>'
@@ -1459,8 +1565,15 @@ PERIOD_TRADES_WHY = (
     "where the journal listed over the same months would not have it. A row "
     "opens its trade, which carries the way back.")
 
+# The same card under a cut with no period in it: the trades of a pair, a
+# style or a month window, listed on the page whose figures they made
+CUT_TRADES_WHY = (
+    "The closed trades these figures counted, newest exit first, the entry "
+    "beside it. A row opens its trade, which carries the way back to this cut.")
 
-def period_trades_card(j, trades, name, way):
+
+def period_trades_card(j, trades, name, way, title="Trades of this period",
+                       why=PERIOD_TRADES_WHY):
     """The trades a period closed, newest exit first: the very set the figures
     of that period were worked out on.
 
@@ -1487,31 +1600,64 @@ def period_trades_card(j, trades, name, way):
                   f'{"trade" if len(rest) == 1 else "trades"}</summary>'
                   f'<table>{head}<tbody>{more}</tbody></table></details>')
     return (f'<div class="card" id="trades"><div class="card-head">'
-            f'<h2>Trades of this period</h2>'
+            f'<h2>{esc(title)}</h2>'
             f'<span class="right caption">{len(order)} closed in '
             f'{esc(name)}</span></div>{table}'
-            f'<p class="caption">{PERIOD_TRADES_WHY}</p></div>')
+            f'<p class="caption">{why}</p></div>')
+
+
+def stats_url(q):
+    """This page as it is drawn, filter and axis included: the address a form
+    of the Statistics tab comes back to."""
+    params = {k: v[:] for k, v in q.items()}
+    return "/stats" + ("?" + urllib.parse.urlencode(params, doseq=True)
+                       if params else "")
+
+
+def stop_edge_slider(j, back):
+    """The slider that sets where a stop ends and an overrun begins. It
+    submits on release and comes back to the page it stood on, and the
+    figure beside it follows the thumb while it is dragged."""
+    low, high = store.STOP_EDGE_RANGE
+    return (f'<form method="post" action="/settings/stop-edge" class="edge" '
+            f'title="up to this loss a stop is the stop as designed">'
+            f'<input type="hidden" name="back" value="{esc(back)}">'
+            f'<span>stop up to</span>'
+            f'<input type="range" name="stop_edge" min="{low:g}" max="{high:g}" '
+            f'step="0.1" value="{j.stop_edge:g}" '
+            f'oninput="this.nextElementSibling.value = \'-\' + '
+            f'Number(this.value).toFixed(1) + \' R\'" '
+            f'onchange="this.form.submit()">'
+            f'<output>-{j.stop_edge:.1f} R</output></form>')
 
 
 def past_stop_card(j, q, trades):
     """The losses that went deeper than the risk allowed, worst first, each a
     way to its trade. Ten at most: on a report the list is a month's and
-    every row is worth opening, on the whole history it is an archive."""
+    every row is worth opening, on the whole history it is an archive.
+
+    The card stands even when nothing went past the stop, because the slider
+    that sets the stop edge lives in its head."""
     past = stats.past_stop(j, trades)
+    slider = stop_edge_slider(j, stats_url(q))
     if not past:
-        return ""
+        return (f'<div class="card"><div class="card-head">'
+                f'<h2>Past the stop</h2>{slider}</div>'
+                f'<p class="muted">No loss in this selection went past '
+                f'-{j.stop_edge:g} R.</p>'
+                f'<p class="caption">{past_stop_why(j.stop_edge)}</p></div>')
     shown = past[:10]
     cut = f"The ten deepest of {len(past)}, and the total over them all. " \
         if len(past) > len(shown) else ""
     cost = stats.past_stop_cost(j, past)
     return (f'<div class="card"><div class="card-head">'
-            f'<h2>Past the stop</h2><span class="right caption">'
+            f'<h2>Past the stop</h2>{slider}<span class="right caption">'
             f'{len(past)} over the stop by '
             f'<span class="{sum_class(cost)}">{r_text(cost)}</span></span></div>'
             f'<table>{PAST_STOP_HEAD}'
             f'<tbody>{past_stop_rows(j, shown, stats_way(q))}'
             f'</tbody></table>'
-            f'<p class="caption">{cut}{PAST_STOP_WHY}</p></div>')
+            f'<p class="caption">{cut}{past_stop_why(j.stop_edge)}</p></div>')
 
 
 def breakeven_card(j, q, trades):
@@ -1756,7 +1902,13 @@ def stats_page(q):
             # and guess_height would price thirty rows high enough to throw
             # the two columns above out of step
             + (period_trades_card(j, trades, period_name(period, grain_cut),
-                                   stats_way(q)) if grain_cut else ""))
+                                   stats_way(q)) if grain_cut else
+               # a period cut holds closed trades only; a plain filter
+               # carries the open ones too, and they are not in the figures
+               period_trades_card(j, [t for t in trades if not t.is_open],
+                                  cut_words(j, q), stats_way(q),
+                                  "Trades of this cut", CUT_TRADES_WHY)
+               if active_filters(q) else ""))
     return page("Statistics", body, "stats")
 
 
@@ -1836,7 +1988,7 @@ def search_page(q):
 
     found = []
     for t in j.trades:
-        texts = [t.id, t.pair, t.note, t.conclusions] + [b.text for b in t.idea]
+        texts = [t.id, t.pair, t.note, t.conclusions, t.updates] + [b.text for b in t.idea]
         if hit(texts):
             found.append(("trade", f"/trade/{U(t.id)}",
                           f"{t.opened:%d.%m.%Y} · {t.pair} {t.direction} · {t.style}"
@@ -2030,6 +2182,16 @@ def block_inside(n, tf="", text="", existing=(), base=None):
 {dropzone(f"idea-{n}", "click here and press Ctrl+V to paste a screenshot", old)}"""
 
 
+def risk_bases(j, t=None):
+    """The balance each account measures a risk against, for the hint under
+    the field: the balance now, and for the trade being edited the one it
+    was opened on, the same figure the server converts by."""
+    bases = j.balances()
+    if t is not None and t.id in j.computed:
+        bases[t.account] = j.computed[t.id].balance_at_entry
+    return bases
+
+
 def last_risks(j):
     """The risk of the latest trade of each account, which is what the next
     one most likely carries: a prop account and one's own are run at different
@@ -2092,7 +2254,7 @@ def duplicate_block(accounts, risks, names, taken=(), editing=False):
         if a in taken:
             rows += (f'<tr class="dup-row" data-account="{esc(a)}">'
                      f'<td>{esc(names.get(a) or a)}</td>'
-                     f'<td class="muted">already holds this position</td></tr>')
+                     f'<td class="muted" colspan="2">already holds this position</td></tr>')
             continue
         rows += (
             f'<tr class="dup-row" data-account="{esc(a)}"><td>'
@@ -2100,14 +2262,15 @@ def duplicate_block(accounts, risks, names, taken=(), editing=False):
             f'text-transform:none;letter-spacing:0;font-size:13px;color:inherit">'
             f'<input type="checkbox" name="dup" value="{esc(a)}"> '
             f'{esc(names.get(a) or a)}</label></td>'
-            f'<td class="num"><input type="number" name="dup_risk_{esc(a)}" step="any" '
-            f'min="0.01" style="width:90px" value="{risks.get(a, 1.0):g}"></td></tr>')
+            f'<td class="num"><input type="text" name="dup_risk_{esc(a)}" inputmode="decimal" '
+            f'style="width:110px" value="{risks.get(a, 1.0):g}"></td>'
+            f'<td class="caption risk-hint"></td></tr>')
     verb = "Save writes" if editing else "the journal writes"
     return f"""
 <details class="fold" style="margin-top:14px">
 <summary>Duplicate on other accounts
 <span class="caption">same idea and screenshots, a risk of its own on each</span></summary>
-<table style="width:auto"><thead><tr><th>account</th><th class="num">risk, %</th></tr></thead>
+<table style="width:auto"><thead><tr><th>account</th><th class="num">risk, % or money</th><th></th></tr></thead>
 <tbody>{rows}</tbody></table>
 <p class="caption" style="margin:8px 0 0">Tick an account and {verb}
 a copy of this trade there, with the risk set on its row. The risk starts at
@@ -2367,7 +2530,19 @@ def trade_form(t=None, token="", keep=""):
 {dropzone("concl", "screenshots for conclusions, Ctrl+V here",
           [shot_in_zone(shots_base(t.id), s, "have_concl")
            for s in conclusion_images(t.conclusions)])}</div>"""
-    return f"""<form method="post" action="{action}" data-last-risk="{esc(json.dumps(risks))}">
+    # the updates are edited as they were written, pictures in their places:
+    # the zone sends back what the text still shows (invariant 2). A new
+    # update is added from the trade page, not here.
+    updates = ""
+    if editing and t.updates.strip():
+        updates = f"""<div class="card"><h2>Updates</h2>
+<textarea name="updates">{esc(t.updates)}</textarea>
+{dropzone("update", "the screenshots of the updates",
+          [shot_in_zone(shots_base(t.id), src, "have_update")
+           for src in conclusion_images(t.updates)])}</div>"""
+    return f"""<form method="post" action="{action}" data-last-risk="{esc(json.dumps(risks))}"
+ data-balances="{esc(json.dumps(risk_bases(j, t)))}"
+ data-signs="{esc(json.dumps({a: H.sign(j.currency(a)) for a in accounts}))}">
 <input type="hidden" name="token" value="{esc(token)}">
 <input type="hidden" name="blocks" value="{count}">
 <div class="card"><h2>{title}</h2>
@@ -2387,9 +2562,10 @@ def trade_form(t=None, token="", keep=""):
 <div class="field"><label>entry TF</label>
 {select("entry_tf", offered("timeframes", t.entry_tf if editing else ""),
         t.entry_tf if editing else "", empty="-")}</div>
-<div class="field"><label>risk, %</label>
-<input type="number" name="risk" step="any" min="0.01" style="width:90px"
- value="{risk:g}" required></div>
+<div class="field"><label>risk, % or money</label>
+<input type="text" name="risk" inputmode="decimal" style="width:110px"
+ value="{risk:g}" placeholder="1 or 100$" required>
+<div class="caption risk-hint"></div></div>
 <div class="field"><label>entry</label>
 <input type="datetime-local" name="entry" value="{entry}"
  onclick="this.showPicker && this.showPicker()"></div>
@@ -2411,15 +2587,64 @@ def trade_form(t=None, token="", keep=""):
 <div id="blocks">{blocks}</div>
 <template id="block-template">{block_inside("__N__")}</template>
 <p><button type="button" class="btn" onclick="add_block()">+ idea block</button></p>
-{closing}
+{updates}{closing}
 <div class="actions"><button class="btn primary">{"Save" if editing else "Open trade"}</button>
 <a class="btn" href="{f"/trade/{U(t.id)}{keep}" if editing else "/"}">Cancel</a></div>
 </form>
 <script>{FORM_SCRIPT}</script>
 <script>document.body.dataset.token = {json.dumps(token)};
 init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}{f"<script>{DUP_SCRIPT}</script>" if duplicate else ""}
+<script>{RISK_HINT_SCRIPT}</script>
 <script>{CHECKLIST_SCRIPT}</script><script>{EXIT_SCRIPT}</script>"""
 
+
+# The risk field takes a percent or a sum of money, and the line under it says
+# what the other one is, against the balance the server will convert by. The
+# parsing here mirrors `parse_risk`, and the checklist reads the percent
+# through `risk_percent` so that a cap is compared to the right figure.
+RISK_HINT_SCRIPT = """
+const balances = JSON.parse(document.querySelector('form').dataset.balances || '{}');
+const signs = JSON.parse(document.querySelector('form').dataset.signs || '{}');
+function risk_parts(text){
+  const m = text.trim().replace(',', '.').replace(/\\s+/g, '')
+    .match(/^([^\\d.]*)(\\d+(?:\\.\\d+)?|\\.\\d+)([^\\d.]*)$/);
+  if (!m) return null;
+  const unit = m[1] + m[3];
+  return {number: parseFloat(m[2]), money: unit !== '' && unit !== '%'};
+}
+function risk_percent(input, account){
+  const p = risk_parts(input.value);
+  if (!p) return NaN;
+  if (!p.money) return p.number;
+  return balances[account] > 0 ? round_percent(p.number / balances[account] * 100) : NaN;
+}
+function round_percent(x){ return Math.round((x + Number.EPSILON) * 100) / 100; }
+function money_text(x, account){
+  const digits = String(Math.round(x)).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ');
+  return (digits + ' ' + (signs[account] || '')).trim();
+}
+function percent_text(x){ return round_percent(x) + '%'; }
+function show_risk(input, account){
+  const out = input.closest('.field, tr').querySelector('.risk-hint');
+  const p = risk_parts(input.value), b = balances[account];
+  if (!p) { out.textContent = ''; return; }
+  if (!(b > 0)) { out.textContent = 'the account has no balance to measure against'; return; }
+  out.textContent = p.money
+    ? '= ' + percent_text(risk_percent(input, account)) + ' of ' + money_text(b, account)
+    : '= ' + money_text(b * p.number / 100, account) + ' of ' + money_text(b, account);
+}
+function show_risks(){
+  const account = document.querySelector('[name=account]').value;
+  show_risk(document.querySelector('[name=risk]'), account);
+  document.querySelectorAll('[name^=dup_risk_]').forEach(input =>
+    show_risk(input, input.closest('tr').dataset.account));
+}
+document.querySelector('[name=risk]').addEventListener('input', show_risks);
+document.querySelector('[name=account]').addEventListener('change', show_risks);
+document.querySelectorAll('[name^=dup_risk_]').forEach(input =>
+  input.addEventListener('input', show_risks));
+show_risks();
+"""
 
 # The checklist follows the playbook picked in the form: one block per
 # playbook is on the page, the chosen one is shown, and within it the rules
@@ -2457,14 +2682,16 @@ function show_why(button){
   detail.hidden = !detail.hidden;
 }
 function follow_risk(){
-  const risk = parseFloat(document.querySelector('[name=risk]').value);
+  const risk = risk_percent(document.querySelector('[name=risk]'),
+                            document.querySelector('[name=account]').value);
   document.querySelectorAll('#checklist-card .checklist:not([hidden]) [data-risk]').forEach(cell => {
     const cap = parseFloat(cell.dataset.risk);
-    cell.querySelector('.risk-now').textContent = isNaN(risk) ? '-' : risk + '%';
+    cell.querySelector('.risk-now').textContent = isNaN(risk) ? '-' : percent_text(risk);
     cell.classList.toggle('over', !isNaN(risk) && risk > cap);
   });
 }
 document.querySelector('[name=risk]').addEventListener('input', follow_risk);
+document.querySelector('[name=account]').addEventListener('change', follow_risk);
 document.querySelector('[name=playbook]').addEventListener('change', follow_risk);
 follow_risk();
 document.querySelector('[name=playbook]').addEventListener('change', pick_playbook);
@@ -2768,7 +2995,7 @@ def apply_management(t, data, editing):
 
 def apply_fields(t, data, editing=False):
     entry = datetime.strptime(one(data, "entry"), "%Y-%m-%dT%H:%M")
-    t.account = one(data, "account")
+    was, t.account = t.account, one(data, "account")
     # EURUSD and eurusd are one pair, so the filters and the tables see one
     t.pair = one(data, "pair").upper() or PAIR_NOT_SET
     t.direction = one(data, "direction")
@@ -2782,7 +3009,7 @@ def apply_fields(t, data, editing=False):
     risk = one(data, "risk")
     if not risk:
         raise RecordError("the risk is missing")
-    t.risk = float(risk.replace(",", "."))
+    t.risk = parse_risk(risk, risk_base(journal(True), t, was))
     t.opened = entry
     t.opened_time = bool(entry.hour or entry.minute) or t.opened_time
     return t
@@ -2795,6 +3022,45 @@ def blocks_from_form(data):
         tf = one(data, f"idea_tf_{n}")
         blocks.append((n, IdeaBlock(tf=tf, text=text)))
     return blocks
+
+
+_RISK = re.compile(r"^([^\d.]*)(\d+(?:\.\d+)?|\.\d+)([^\d.]*)$")
+
+
+def parse_risk(text, balance):
+    """The risk typed in the form. A number alone is a percent; a number with
+    a currency sign or a code beside it (150$, $150, 150 usd) is money, and
+    it is turned into the percent of `balance`, since the percent is what
+    a trade records and what R is measured by."""
+    raw = text.strip().replace(",", ".").replace(" ", "")
+    m = _RISK.match(raw)
+    if not m:
+        raise RecordError(f"the risk {text!r} is not a number")
+    number, unit = float(m.group(2)), m.group(1) + m.group(3)
+    if unit in ("", "%"):
+        return number
+    if balance <= 0:
+        raise RecordError("a risk in money needs a balance to be measured "
+                          "against, and the account has none")
+    return money_to_percent(number, balance)
+
+
+def money_to_percent(money, balance):
+    """The percent a sum makes of a balance, to two decimals, the half
+    rounded up: the built-in round goes to the even digit and works on the
+    binary float, so 100.5 of 10 000 would come out as 1.0, not 1.01."""
+    percent = Decimal(str(money)) / Decimal(str(balance)) * 100
+    return float(percent.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def risk_base(j, t, was=""):
+    """The balance a risk typed as money is measured against: for a new
+    trade the balance of the account now, for one being edited the balance
+    it was opened on, unless it is moved to another account."""
+    computed = j.computed.get(t.id)
+    if computed is not None and t.account == was:
+        return computed.balance_at_entry
+    return j.balance(t.account)
 
 
 def build_trade(data, token, account="", risk=None):
@@ -2857,8 +3123,9 @@ def ticked_accounts(data, own, taken=()):
 
 
 def dup_risk(data, account, fallback):
+    """The risk of a copy, measured against the balance of its own account."""
     risk = one(data, f"dup_risk_{account}")
-    return float(risk.replace(",", ".")) if risk else fallback
+    return parse_risk(risk, journal().balance(account)) if risk else fallback
 
 
 def copy_trade(t, account, risk):
@@ -2875,11 +3142,13 @@ def copy_trade(t, account, risk):
              for i, b in enumerate(t.idea, 1)}
     zones["exit"] = [own.format(s) for s in t.exit_images]
     zones["concl"] = [own.format(s) for s in conclusion_images(t.conclusions)]
+    zones["update"] = [own.format(s) for s in conclusion_images(t.updates)]
     names = apply_shots(store.trade_dir(ROOT, twin.id), zones)
     for i, block in enumerate(twin.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     twin.exit_images = names.get("exit", [])
     twin.conclusions = rewrite_conclusions(twin.conclusions, names.get("concl", []))
+    twin.updates = place_shots(twin.updates, names.get("update", []))
     store.save_trade(ROOT, twin)
     return twin
 
@@ -2928,6 +3197,14 @@ def edit_trade(t, data):
         zones["exit"] = [own.format(s) for s in t.exit_images]
         zones["concl"] = [own.format(s)
                           for s in conclusion_images(t.conclusions)]
+    # the updates card stands on the form of a trade that has any; a form
+    # without it sends nothing, and the pictures are kept as they are
+    if "updates" in data:
+        zones["update"] = zone_sources(data, "update", folder, token)
+        t.updates = one(data, "updates")
+    else:
+        zones["update"] = [os.path.join(folder, src)
+                           for src in conclusion_images(t.updates)]
     t.idea = kept
     names = apply_shots(folder, zones)
     for i, block in enumerate(t.idea, 1):
@@ -2937,6 +3214,7 @@ def edit_trade(t, data):
                                        names.get("concl", []))
                      if editing_close
                      else rewrite_conclusions(t.conclusions, names.get("concl", [])))
+    t.updates = place_shots(t.updates, names.get("update", []))
     store.save_trade(ROOT, t)
     copies = [copy_trade(t, a, dup_risk(data, a, t.risk))
               for a in twins if t.is_open]
@@ -3011,12 +3289,15 @@ def close_trade(t, data):
              for i, b in enumerate(t.idea, 1)}
     zones["exit"] = zone_sources(data, "exit", folder, token)
     zones["concl"] = zone_sources(data, "concl", folder, token)
+    zones["update"] = [os.path.join(folder, src)
+                       for src in conclusion_images(t.updates)]
     t.check()
     names = apply_shots(folder, zones)
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     t.exit_images = names.get("exit", [])
     t.conclusions = build_conclusions(conclusions, names.get("concl", []))
+    t.updates = place_shots(t.updates, names.get("update", []))
     store.save_trade(ROOT, t)
     drop_draft(token)
     drop_cache()
@@ -3103,6 +3384,20 @@ def plan_followed(j, k, trades):
     return f"with the narrative: {told(with_it)} · against it: {told(against)}"
 
 
+def plan_state(k, today):
+    """The pill of a plan in the list: voided, current, or ahead when its
+    first day has not come. A plan that has run its course wears nothing."""
+    if k.voided:
+        word = "voided"
+    elif k.covers(today):
+        word = "current"
+    elif k.day.date() > today.date():
+        word = "ahead"
+    else:
+        return ""
+    return f'<span class="state {word}">{word}</span>'
+
+
 def plans_page():
     j = journal()
     problems = []
@@ -3125,7 +3420,7 @@ def plans_page():
         cells = [(esc(span), ""), (H.pair(k.pair), ""),
                  (esc(k.narrative) or "-", ""),
                  (esc(k.title) or "-", ""),
-                 ("current" if k.covers(today) else "", "muted"),
+                 (plan_state(k, today), ""),
                  (str(len(trades)), "num"),
                  ("-" if not s.trades else f"{s.sum_r:+.2f}",
                   f"num {sum_class(s.sum_r)}")]
@@ -3138,7 +3433,9 @@ def plans_page():
             f'<p class="caption">A plan is written before the market opens; a '
             f'trade is tied to it in its own form. Σ R counts the trades tied '
             f'to the plan, which is the only honest answer to whether the plan '
-            f'was any good.</p></div>')
+            f'was any good. A voided plan is one the market went against: it '
+            f'is kept, and read back later for where the analysis went wrong.'
+            f'</p></div>')
     return page("Plans", body, "plans", right, problems)
 
 
@@ -3158,6 +3455,9 @@ def plan_page(plan_id):
               ("pair", H.pair(k.pair)),
               ("narrative", k.narrative or "-"),
               ("trades", plan_result(j, trades))]
+    if k.voided:
+        fields.append(("voided", f"{k.voided:%d.%m.%Y}, the reason is under "
+                       "Updates"))
     followed = plan_followed(j, k, trades)
     if followed:
         fields.append(("plan against fact", followed))
@@ -3198,13 +3498,40 @@ def plan_page(plan_id):
                    '<p class="muted">Nothing has been tied to this plan yet. '
                    'The plan is picked in the form of a trade.</p></div>')
 
+    # a plan the market went against is voided, not deleted: it stays on the
+    # disk and on the list, so the mistake can be read back later. The void
+    # form asks for the reason and writes it as a dated update, and Restore
+    # undoes the whole thing, since the market may turn around again
+    if k.voided:
+        void_card = ""
+        void_button = (f'<form method="post" action="/plan/{U(k.id)}/restore" '
+                       f'style="display:inline">'
+                       f'<button class="btn">Restore</button></form>')
+    else:
+        void_card = (f'<div class="card" id="void"><h2>Void the plan</h2>'
+                     f'<p class="muted">The market went against it, the '
+                     f'direction or the variables were wrong. A voided plan '
+                     f'is not current any more, but it is kept whole, with '
+                     f'its trades, so that the mistake can be found later. '
+                     f'Restore brings it back.</p>'
+                     f'<form method="post" action="/plan/{U(k.id)}/void">'
+                     f'<label>why</label>'
+                     f'<input type="text" name="reason" style="width:100%"'
+                     f' placeholder="what went against the plan">'
+                     f'<div class="actions"><button class="btn danger">'
+                     f'Void</button></div></form></div>')
+        void_button = f'<a class="btn danger" href="#void">Void</a>'
     buttons = (f'<a class="btn" href="/plan/{U(k.id)}/edit">Edit</a>'
+               f'{void_button}'
                f'<form method="post" action="/plan/{U(k.id)}/delete" '
                f'style="display:inline" onsubmit="return confirm('
                f'\'Delete plan {esc(k.id)}? The folder moves to .trash.\')">'
                f'<button class="btn danger">Delete</button></form>')
-    body = (f'<div class="card{" is-open" if k.covers(datetime.now()) else ""}">'
-            f'<h2>{esc(k.title or k.label)}</h2>'
+    top = ("is-void" if k.voided else
+           "is-open" if k.covers(datetime.now()) else "")
+    body = (f'<div class="card{" " + top if top else ""}">'
+            f'<h2>{esc(k.title or k.label)}'
+            f'{" <span class=badge>voided</span>" if k.voided else ""}</h2>'
             f'<table class="props">{table}</table></div>'
             + (f'<div class="card"><h2>Analysis</h2>{analysis}</div>'
                if analysis else "")
@@ -3216,6 +3543,7 @@ def plan_page(plan_id):
                f'<div class="shots">{review}</div></div>'
                if k.review.strip() else "")
             + trades_card
+            + void_card
             + f'<script>{FORM_SCRIPT}</script>'
             + f'<script>document.body.dataset.token = {json.dumps(token)};'
               f'init_zones();</script>')
@@ -3391,6 +3719,34 @@ def add_update(k, data):
     store.save_plan(ROOT, k)
     if token:
         drop_draft(token)
+    return k
+
+
+def note_update(k, text):
+    """A dated line under the updates with no form behind it: what the
+    journal itself says about the plan."""
+    line = f"**{datetime.now():%d.%m.%Y}**: {text}"
+    k.updates = (k.updates + "\n\n" + line) if k.updates.strip() else line
+
+
+def void_plan(k, data):
+    """The plan is called off, not deleted: the day goes into the header, the
+    reason into the updates, and nothing else of it is touched."""
+    if k.voided:
+        raise RecordError("the plan is voided already")
+    k.voided = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    reason = one(data, "reason")
+    note_update(k, "voided: " + reason if reason else "voided")
+    store.save_plan(ROOT, k)
+    return k
+
+
+def restore_plan(k):
+    if not k.voided:
+        raise RecordError("the plan is not voided")
+    k.voided = None
+    note_update(k, "restored")
+    store.save_plan(ROOT, k)
     return k
 
 
@@ -5253,15 +5609,17 @@ def report_pictures(j, r):
     return f'<div class="pictures">{left}{r_rings(j, r.trades)}</div>'
 
 
-# Said on the report and on the Statistics tab, where the same trades are
-# listed, so that the two never drift apart.
-PAST_STOP_WHY = (
-    "1 R is the risk you wrote on the trade; a stop that worked costs -1 R, "
-    "with commission and swap up to -1.2 R. A loss deeper than that lost more "
-    "than the risk allowed: the lot was too large, the stop was moved, or the "
-    "price slipped past it. Open the trade to see which. "
-    "The stop itself is the attempt and not the mistake, so over is what the "
-    "loss cost past -1.2 R, which is the part that was there to be kept.")
+def past_stop_why(edge):
+    """Said on the report and on the Statistics tab, where the same trades
+    are listed, so that the two never drift apart. The edge is the journal's:
+    a stop with the fees on it costs up to this, past it the risk was overrun."""
+    return (
+        "1 R is the risk you wrote on the trade; a stop that worked costs -1 R, "
+        f"with commission and swap up to -{edge:g} R. A loss deeper than that lost more "
+        "than the risk allowed: the lot was too large, the stop was moved, or the "
+        "price slipped past it. Open the trade to see which. "
+        "The stop itself is the attempt and not the mistake, so over is what the "
+        f"loss cost past -{edge:g} R, which is the part that was there to be kept.")
 
 
 def rules_table(j, d):
@@ -5327,7 +5685,7 @@ def rules_card(j, r):
         lines = past_stop_rows(j, r.past_stop, lambda t: trade_way(r, t))
         body += (f'<h3>Past the stop</h3>'
                  f'<table>{PAST_STOP_HEAD}<tbody>{lines}</tbody></table>'
-                 f'<p class="caption">{PAST_STOP_WHY} Together they cost '
+                 f'<p class="caption">{past_stop_why(j.stop_edge)} Together they cost '
                  f'{r_text(r.past_stop_cost)} beyond the stop. Rules ticked as '
                  f'not met stand in the table above.</p>')
     return f'<div class="card"><h2>Rules</h2>{body}</div>'
@@ -6034,6 +6392,15 @@ def _kind(data):
     return kind
 
 
+def set_stop_edge(data):
+    """The stop edge from the slider. Every figure that hangs on it is
+    worked out on the next look, the old months included, since nothing
+    computable is stored."""
+    edge = store.save_stop_edge(ROOT, one(data, "stop_edge"))
+    drop_cache()
+    return f"A stop is the stop up to -{edge:g} R now."
+
+
 def add_word(data):
     kind, word = _kind(data), one(data, "word")
     if not _WORD.match(word):
@@ -6614,6 +6981,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path == "/plan/new":
                 k = create_plan(data)
                 return self._go(f"/plan/{U(k.id)}", "Plan written")
+            if path == "/settings/stop-edge":
+                said = set_stop_edge(data)
+                back = one(data, "back")
+                # the way back is a path of this journal or nothing at all
+                return self._go(back if back.startswith("/") and
+                                not back.startswith("//") else "/stats", said)
             if len(parts) == 3 and parts[0] == "plan":
                 if not store.safe_dir_name(parts[1]):
                     return self._send("bad plan id", 400)
@@ -6631,6 +7004,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif parts[2] == "update":
                     add_update(k, data)
                     said = "Update added"
+                elif parts[2] == "void":
+                    void_plan(k, data)
+                    said = "Plan voided"
+                elif parts[2] == "restore":
+                    restore_plan(k)
+                    said = "Plan restored"
                 else:
                     return self._send("no such page", 404)
                 return self._go(f"/plan/{U(k.id)}", said)
@@ -6653,6 +7032,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 store.delete_trade(ROOT, parts[1])
                 drop_cache()
                 return self._go(home_href(q), "Trade moved to the trash")
+            if len(parts) == 3 and parts[0] == "trade" and parts[2] == "update":
+                t = next((x for x in journal(True).trades if x.id == parts[1]), None)
+                if t is None:
+                    return self._send("no such trade", 404)
+                add_trade_update(t, data)
+                return self._go(f"/trade/{U(t.id)}{keep}", "Update added")
             if len(parts) == 3 and parts[0] == "trade" and parts[2] == "breakeven":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:

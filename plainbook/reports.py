@@ -175,7 +175,7 @@ class Report:
     kept: stats.Summary = None      # the ticked ones that met every rule
     broke: stats.Summary = None     # the ticked ones that broke a rule, at the entry or the close
     rules: list = field(default_factory=list)      # [(playbook label, Rule, trades, Summary)]
-    past_stop: list = field(default_factory=list)  # losses of -1.2 R and worse
+    past_stop: list = field(default_factory=list)  # losses at the stop edge and worse
     past_stop_cost: float = 0.0     # what those losses cost beyond the stop itself
     breakeven: stats.Breakeven = None  # the stops moved to the entry, against the rest
     entry_broken: int = 0           # ticked trades that broke a rule at the entry
@@ -419,7 +419,7 @@ def to_markdown(r, journal, conclusions):
         lines += [f"| {t.id} | {t.pair} | {journal.r(t.id):+.2f} "
                   f"| {stats.past_stop_over(journal, t):+.2f} |"
                   for t in r.past_stop]
-        lines += ["", f"Over the stop as designed, -1.2 R: "
+        lines += ["", f"Over the stop as designed, -{journal.stop_edge:g} R: "
                       f"{r.past_stop_cost:+.2f} R.", ""]
     lines += ["### Process", ""]
     if not r.cards:

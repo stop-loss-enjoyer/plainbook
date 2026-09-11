@@ -152,6 +152,16 @@ async function run(p) {
   await p.evaluate(`var r=document.querySelector('[name=risk]'); r.value='2'; r.dispatchEvent(new Event('input',{bubbles:true}))`);
   check(await p.evaluate(`document.querySelector('.checklist:not([hidden]) [data-risk]').classList.contains('over')`), "risk 2 over the cap of 1 turns red");
   await p.evaluate(`var r=document.querySelector('[name=risk]'); r.value='1'; r.dispatchEvent(new Event('input',{bubbles:true}))`);
+  // the field takes money too: the line under it says the percent, and the
+  // frame compares that percent to the cap
+  const balance = await p.evaluate(`JSON.parse(document.querySelector('form').dataset.balances)[document.querySelector('[name=account]').value]`);
+  check(balance > 0, "the form carries the balance of the account: " + balance);
+  check(await has(`document.querySelector('.field .risk-hint').textContent`, "= "), "a percent is said in money under the field");
+  await p.evaluate(`var r=document.querySelector('[name=risk]'); r.value=${JSON.stringify(balance * 0.02 + "$")}; r.dispatchEvent(new Event('input',{bubbles:true}))`);
+  check(await has(`document.querySelector('.field .risk-hint').textContent`, "= 2% of"), "money is said in percent under the field");
+  check(await has(`document.querySelector('.checklist:not([hidden]) .risk-now').textContent`, "2%"), "the frame reads the percent of the money");
+  check(await p.evaluate(`document.querySelector('.checklist:not([hidden]) [data-risk]').classList.contains('over')`), "money worth 2% over the cap of 1 turns red");
+  await p.evaluate(`var r=document.querySelector('[name=risk]'); r.value='1'; r.dispatchEvent(new Event('input',{bubbles:true}))`);
   await p.evaluate(`document.querySelector('[name=pair]').value='EURUSD'; document.querySelector('[name=idea_text_1]').value='a test idea'`);
   await p.evaluate(`document.querySelector('[name=entry]').value=${JSON.stringify(DAY + "T09:00")}`);
   await p.submit();
@@ -162,8 +172,19 @@ async function run(p) {
   check(page.includes("took 1.6R".toLowerCase()), "trade page shows the why");
   check(page.includes("Ticked when the trade is closed".toLowerCase()), "management listed for the open trade");
 
-  // ---- 3. close it: the management checklist
+  // ---- 2b. an update while it runs: the form on the trade page, its paste
+  // zone made ready by the page script, the line under the trade after
   const tid = tradeUrl.split("/trade/")[1].split("?")[0];
+  check(await p.evaluate(`!!document.querySelector('#updates form [name=update]')`), "open trade offers the update form");
+  check(await p.evaluate(`document.querySelector('#updates .dropzone').dataset.ready === '1'`), "the update zone is ready for a paste");
+  await p.evaluate(`document.querySelector('#updates [name=update]').value='stop moved under the low'`);
+  await p.submit("#updates form");
+  check((await p.url()).startsWith("/trade/" + tid), "the update lands back on the trade");
+  page = (await p.evaluate(`document.body.innerText`)).toLowerCase();
+  check(page.includes("stop moved under the low"), "trade page shows the update");
+  check(await p.evaluate(`document.querySelector('.toast').textContent`) === "Update added", "the page says Update added");
+
+  // ---- 3. close it: the management checklist
   await p.goto(B + "/close/" + tid);
   check(await p.evaluate(`!!document.getElementById('exit-checklist')`), "close form has the management checklist");
   check(await has(`document.querySelector('#exit-checklist .tally').textContent`, "0 of 1"), "exit tally 0 of 1");

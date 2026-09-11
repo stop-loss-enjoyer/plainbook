@@ -287,10 +287,11 @@ def past_stop(journal, trades):
     """The losses that went deeper than the risk allowed, worst first.
 
     The edge is the one the rings cut at, so the two agree by construction
-    and not by agreement: a stop that worked costs -1 R, up to -1.2 R once
-    commission and swap are paid on top of it. Past that, the loss was larger
-    than the trade was sized for."""
-    edge = LOSS_BUCKETS[2][1]
+    and not by agreement: a stop that worked costs -1 R, up to the journal's
+    stop edge (1.2 R unless the owner set it) once commission and swap are
+    paid on top of it. Past that, the loss was larger than the trade was
+    sized for."""
+    edge = journal.stop_edge
     return sorted((t for t in trades if not t.is_open and t.result == "Lose"
                    and abs(journal.r(t.id) or 0.0) >= edge),
                   key=lambda t: journal.r(t.id) or 0.0)
@@ -301,13 +302,13 @@ def past_stop_over(journal, trade):
     zero.
 
     The stop itself is not the mistake: -1 R is the attempt working as it was
-    meant to, and commission and swap carry it to -1.2 R, which the trade was
-    still sized for. Only what lies past that edge was lost to the risk being
-    overrun, and it is the part discipline could have kept. The edge is the
-    one the rings cut at, so a loss counted as past the stop and the price
-    put on it are measured by the same number.
+    meant to, and commission and swap carry it to the stop edge, which the
+    trade was still sized for. Only what lies past that edge was lost to the
+    risk being overrun, and it is the part discipline could have kept. The
+    edge is the one the rings cut at, so a loss counted as past the stop and
+    the price put on it are measured by the same number.
     """
-    edge = LOSS_BUCKETS[2][1]
+    edge = journal.stop_edge
     r = journal.r(trade.id)
     return 0.0 if r is None else min(0.0, r + edge)
 
@@ -475,16 +476,27 @@ def drawdown_r(journal, trades):
 #
 # The losses are cut where a stop actually lands. A trade taken to the stop
 # comes back a little worse than -1R, because commission and swap are paid on
-# top of it, so -1 to -1.2 is one bucket: the stop, as designed. Anything past
-# -1.2 lost more than the risk allowed, and it is kept apart to be seen.
+# top of it, so -1 to the stop edge is one bucket: the stop, as designed.
+# Anything past the edge lost more than the risk allowed, and it is kept apart
+# to be seen. The edge is the owner's (`Journal.stop_edge`, 1.2 unless set),
+# so the buckets are built for a journal rather than kept as a constant.
 # Every bucket holds its lower edge and not its upper one, so exactly -1R is a
 # stop and not a loss that stayed short of it.
 # A label reads from zero outwards, like the wins, and the far edge of a bucket
 # belongs to the next one: exactly -1R is in "-1…-1.2", the stop.
-LOSS_BUCKETS = [("0…-0.5", 0.5), ("-0.5…-1", 1.0), ("-1…-1.2", 1.2),
-                ("-1.2R and worse", None)]
 WIN_BUCKETS = [("0…+0.5", 0.5), ("+0.5…+1", 1.0), ("+1…+2", 2.0),
                ("+2…+3", 3.0), ("+3R and more", None)]
+
+
+def loss_buckets(edge):
+    """The loss buckets for a stop edge. At an edge of exactly 1 the stop
+    bucket would be empty, so there the stop and the overrun share the last
+    bucket and the ring has one slice fewer."""
+    buckets = [("0…-0.5", 0.5), ("-0.5…-1", 1.0)]
+    if edge > 1.0:
+        buckets.append((f"-1…-{edge:g}", edge))
+    buckets.append((f"-{edge:g}R and worse", None))
+    return buckets
 
 
 def _bucket(buckets, size):
@@ -501,7 +513,8 @@ def r_split(journal, trades):
     The pile is chosen by the result, not by the sign of R, so these counts are
     the same wins and losses the winrate is built from. Inside a pile the
     bucket is chosen by the size of R."""
-    piles = {"Lose": [[label, 0, 0.0] for label, _ in LOSS_BUCKETS],
+    loss_buckets_ = loss_buckets(journal.stop_edge)
+    piles = {"Lose": [[label, 0, 0.0] for label, _ in loss_buckets_],
              "Win": [[label, 0, 0.0] for label, _ in WIN_BUCKETS]}
     be = 0
     for t in trades:
@@ -513,7 +526,7 @@ def r_split(journal, trades):
             continue
         if t.result not in piles:
             continue
-        buckets = LOSS_BUCKETS if t.result == "Lose" else WIN_BUCKETS
+        buckets = loss_buckets_ if t.result == "Lose" else WIN_BUCKETS
         i, _ = _bucket(buckets, abs(r))
         piles[t.result][i][1] += 1
         piles[t.result][i][2] += r

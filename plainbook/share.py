@@ -101,6 +101,7 @@ def shot_names(t):
     """Every picture a trade holds, in the order the document draws them."""
     names = [n for block in t.idea for n in block.images]
     names += list(t.exit_images)
+    names += re.findall(r"!\[\]\(([^)]+)\)", t.updates)
     names += re.findall(r"!\[\]\(([^)]+)\)", t.conclusions)
     return names
 
@@ -360,7 +361,7 @@ def ways_strip(near, place):
 def trade_card(root, j, t, book=None, carry=True, heading=None, near=None,
                place=None):
     """One trade whole: the facts, the checklist, the idea with its
-    screenshots, the exit, the conclusions. In a file of many trades it is
+    screenshots, the updates, the exit, the conclusions. In a file of many trades it is
     headed and stands as a page of its own, with the ways out above and
     below it: to the list, and to the trades on either side, `near` being
     the pair of them and `place` this trade's number and the count."""
@@ -385,6 +386,9 @@ def trade_card(root, j, t, book=None, carry=True, heading=None, near=None,
             f'<table class="props">{trade_facts(root, j, t)}</table></div>'
             + checklist_card(t, book)
             + (f'<div class="card"><h2>Idea</h2>{idea}</div>' if idea else "")
+            + (f'<div class="card"><h2>Updates</h2>'
+               f'<div class="text shots">{with_shots(t.updates, shots)}</div>'
+               f'</div>' if t.updates.strip() else "")
             + (f'<div class="card"><h2>Exit moment</h2>'
                f'<div class="shots">{exits}</div></div>' if exits else "")
             + (f'<div class="card"><h2>Conclusions</h2>'

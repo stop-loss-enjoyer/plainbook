@@ -26,7 +26,7 @@ from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
                     Playbook, Setup, Rule, PLAYBOOK_KEYS,
                     Plan, Note, TRADE_KEYS, ACCOUNT_KEYS, ADJUSTMENT_KEYS, CARD_KEYS,
                     WEEK_KEYS, PLAN_KEYS, NOTE_KEYS, CARD_SECTIONS, WEEK_SECTIONS,
-                    PAIR_NOT_SET, STYLES, TIMEFRAMES, EXECUTION)
+                    PAIR_NOT_SET, STYLES, TIMEFRAMES, EXECUTION, RecordError)
 
 JOURNAL = "journal"
 TRASH = ".trash"            # deleted records: outside git, but not gone
@@ -157,6 +157,9 @@ def trade_to_text(t):
             if block.text.strip():
                 parts.append(block.text.strip())
             parts.extend(f"![]({src})" for src in block.images)
+    if t.updates.strip():
+        parts.append("## Updates")
+        parts.append(t.updates.strip())
     if t.exit_images:
         parts.append("## Exit")
         parts.extend(f"![]({src})" for src in t.exit_images)
@@ -205,6 +208,7 @@ def text_to_trade(text):
     t.idea = _parse_idea(sections.get("Idea", ""))
     _, t.exit_images = _text_and_images(sections.get("Exit", ""))
     t.conclusions = sections.get("Conclusions", "").strip()
+    t.updates = sections.get("Updates", "").strip()
     return t
 
 
@@ -318,6 +322,8 @@ def plan_to_text(k):
     head["from"] = _date_to_text(k.day)
     if k.until and k.until != k.day:
         head["until"] = _date_to_text(k.until)
+    if k.voided:
+        head["voided"] = _date_to_text(k.voided)
     head.update(k.extra)
 
     parts = []
@@ -340,6 +346,7 @@ def text_to_plan(text):
     known = {key for _, key in PLAN_KEYS}
     day, _ = _date(head.get("from"))
     until, _ = _date(head.get("until"))
+    voided, _ = _date(head.get("voided"))
     k = Plan(
         id=_text(head.get("id")),
         title=_text(head.get("title")),
@@ -347,6 +354,7 @@ def text_to_plan(text):
         narrative=_text(head.get("narrative")),
         day=day,
         until=until,
+        voided=voided,
         extra={kk: v for kk, v in head.items() if kk not in known},
     )
     sections = _split_sections(body)
@@ -1249,6 +1257,59 @@ def save_words(root, kind, words):
     _write(vocabulary_file(root), mdfile.dump(
         lists, "The lists the trade form offers. Edited in the interface."))
     return clean
+
+
+# --- the owner's settings --------------------------------------------------
+# One file, one key per setting, next to the vocabulary. The stop edge is the
+# loss, in R, up to which a stop is the stop as designed: -1 R plus what
+# commission and swap add on top of it. Everything past it is a risk overrun,
+# and every figure that says so (the rings, Past the stop, the mistakes of a
+# report) is worked out from this number on every look, so a change here
+# rewrites the past as well as the future.
+SETTINGS_FILE = "settings.md"
+STOP_EDGE = 1.2
+STOP_EDGE_RANGE = (1.0, 2.0)
+
+
+def settings_file(root):
+    return os.path.join(root, JOURNAL, SETTINGS_FILE)
+
+
+def _settings(root):
+    path = settings_file(root)
+    if not os.path.isfile(path):
+        return {}
+    head, _ = mdfile.parse(_read(path))
+    return head
+
+
+def clean_stop_edge(value):
+    """A stop edge as the slider offers it: one decimal, inside the range."""
+    try:
+        edge = round(float(str(value).strip().replace(",", ".")), 1)
+    except ValueError:
+        raise RecordError(f"{value} is not a stop edge")
+    low, high = STOP_EDGE_RANGE
+    if not low <= edge <= high:
+        raise RecordError(f"the stop edge is set between {low:g} and {high:g} R")
+    return edge
+
+
+def stop_edge(root):
+    """What the file says, or the journal's own figure."""
+    value = _text(_settings(root).get("stop_edge"))
+    try:
+        return clean_stop_edge(value) if value else STOP_EDGE
+    except RecordError:
+        return STOP_EDGE
+
+
+def save_stop_edge(root, value):
+    head = _settings(root)
+    head["stop_edge"] = f"{clean_stop_edge(value):g}"
+    _write(settings_file(root), mdfile.dump(
+        head, "The owner's settings. Edited in the interface."))
+    return clean_stop_edge(value)
 
 
 def delete_account(root, account_id):

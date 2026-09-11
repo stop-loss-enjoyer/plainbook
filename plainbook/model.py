@@ -100,6 +100,7 @@ class Trade:
     idea: list = field(default_factory=list)        # list of IdeaBlock
     exit_images: list = field(default_factory=list)
     conclusions: str = ""
+    updates: str = ""                               # dated lines added while it runs
     extra: dict = field(default_factory=dict)       # unknown header keys
 
     @property
@@ -161,6 +162,7 @@ PLAN_KEYS = [
     ("narrative", "narrative"),
     ("day", "from"),
     ("until", "until"),
+    ("voided", "voided"),
 ]
 
 
@@ -176,17 +178,19 @@ class Plan:
     plan: str = ""                                  # what will be done, and not
     updates: str = ""                               # notes added while it runs
     review: str = ""                                # how it went, with shots
+    voided: date = None                             # the day it was called off
     extra: dict = field(default_factory=dict)
 
     @property
     def label(self):
         """A plan in one line, for a list, for the menu of the trade form and
-        for the trade that followed it."""
+        for the trade that followed it. A voided plan says so, because the
+        menu of the trade form is where it would be picked by mistake."""
         span = f"{self.day:%d.%m.%Y}"
         if self.until and self.until != self.day:
             span += f" to {self.until:%d.%m.%Y}"
         bits = [span, "" if self.pair == PAIR_NOT_SET else self.pair,
-                self.title, self.narrative]
+                self.title, self.narrative, "voided" if self.voided else ""]
         return " · ".join(b for b in bits if b)
 
     @property
@@ -194,8 +198,10 @@ class Plan:
         return self.until or self.day
 
     def covers(self, moment):
-        """Is that day inside the plan: an open plan is the one to attach to."""
-        if self.day is None or moment is None:
+        """Is that day inside the plan: an open plan is the one to attach to.
+        A voided plan covers nothing: the market went against it and it was
+        called off, so it is not current whatever its dates say."""
+        if self.day is None or moment is None or self.voided:
             return False
         return self.day.date() <= moment.date() <= self.last_day.date()
 

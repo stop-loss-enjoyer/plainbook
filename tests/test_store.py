@@ -97,6 +97,25 @@ class TradeRoundTrip(unittest.TestCase):
         self.assertIsNone(again.pnl)
         self.assertIsNone(again.closed)
 
+    def test_the_updates_of_a_running_trade_survive_the_file(self):
+        """The dated lines added while the trade runs are a section of their
+        own, pictures in their places; a trade without them carries none."""
+        t = sample_trade(result=None, pnl=None, closed=None,
+                         exit_images=[], conclusions="",
+                         updates="**26.06.2025 09:15**: stop moved to 1.0850"
+                                 "\n![](shots/update-01.png)\n\n"
+                                 "**26.06.2025 15:40**: half taken at 1.0900")
+        again = self.round_trip(t)
+        self.assertEqual(again.updates, t.updates)
+        self.assertIn("## Updates", store.trade_to_text(t))
+        self.assertNotIn("## Updates", store.trade_to_text(sample_trade()))
+        # closed later, the updates stand between the idea and the exit
+        closed = sample_trade(updates="**26.06.2025 09:15**: stop moved")
+        text = store.trade_to_text(closed)
+        self.assertLess(text.index("## Idea"), text.index("## Updates"))
+        self.assertLess(text.index("## Updates"), text.index("## Exit"))
+        self.assertEqual(self.round_trip(closed).updates, closed.updates)
+
     def test_the_stop_at_breakeven_keeps_its_moment(self):
         """The moment the stop went to the entry survives the file; a trade
         that never had one reads back without it."""
@@ -222,6 +241,19 @@ class PlanRoundTrip(unittest.TestCase):
         self.assertEqual(again.analysis[0].images, ["shots/idea-01-01.png"])
         self.assertEqual((again.plan, again.updates, again.review),
                          (k.plan, k.updates, k.review))
+
+    def test_a_voided_plan_keeps_the_day_and_covers_nothing(self):
+        k = self.plan(voided=datetime(2026, 9, 3))
+        text = store.plan_to_text(k)
+        self.assertIn("voided: 2026-09-03", text)
+        again = store.text_to_plan(text)
+        self.assertEqual(again.voided, datetime(2026, 9, 3))
+        self.assertFalse(again.covers(datetime(2026, 9, 3, 14, 30)))
+        self.assertTrue(again.label.endswith("voided"))
+        # a plan written before the key existed reads as not voided
+        plain = store.text_to_plan(store.plan_to_text(self.plan()))
+        self.assertIsNone(plain.voided)
+        self.assertNotIn("voided", store.plan_to_text(self.plan()))
 
     def test_a_plan_of_one_day_has_no_until(self):
         k = self.plan(until=None)
@@ -443,6 +475,27 @@ class Weeks(unittest.TestCase):
         self.assertIn("1. EURUSD long, 31.08 | B | Win +1.20 R\n", text)
         self.assertIn("2. XAU short | C\n", text)
         self.assertNotIn("3. GBPUSD |", text)
+
+
+class Settings(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        store.make_layout(self.root)
+
+    def test_the_stop_edge_is_1_2_until_set_and_is_kept_to_a_tenth(self):
+        self.assertEqual(store.stop_edge(self.root), 1.2)
+        self.assertEqual(store.save_stop_edge(self.root, "1.1"), 1.1)
+        self.assertEqual(store.stop_edge(self.root), 1.1)
+        self.assertIn("stop_edge: 1.1", open(store.settings_file(self.root)).read())
+        # a comma and a third decimal are taken in, the range is not
+        self.assertEqual(store.save_stop_edge(self.root, "1,35"), 1.4)
+        for bad in ("0.9", "2.1", "", "deep"):
+            with self.assertRaises(RecordError):
+                store.save_stop_edge(self.root, bad)
+        self.assertEqual(store.stop_edge(self.root), 1.4)
+        # a file with a figure out of range reads as the default, not as an error
+        open(store.settings_file(self.root), "w").write("---\nstop_edge: 7\n---\n")
+        self.assertEqual(store.stop_edge(self.root), 1.2)
 
 
 class Layout(unittest.TestCase):

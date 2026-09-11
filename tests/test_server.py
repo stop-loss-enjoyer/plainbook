@@ -97,10 +97,54 @@ class ServerCase(unittest.TestCase):
             if href.startswith("/") and "new" not in href:
                 self.assertEqual(self.get(href)[0], 200, href)
 
-    def test_01b_form_has_no_risk_hint_but_has_a_calendar(self):
+    def test_01b_form_says_what_the_risk_is_in_money_and_has_a_calendar(self):
         _, html = self.get("/new")
-        self.assertNotIn("Risk in money", html)  # percents are worked out in the head
+        # the balance of every account rides on the form, so the line under
+        # the field can say what a percent is in money and a sum in percent
+        self.assertIn('data-balances="{&quot;broker&quot;: 10000', html)
+        self.assertIn('data-signs="{&quot;broker&quot;: &quot;$&quot;}"', html)
+        self.assertIn('<div class="caption risk-hint"></div>', html)
+        self.assertIn("function risk_percent", html)
         self.assertIn("showPicker", html)        # clicking the date opens the calendar
+
+    def test_01c_a_risk_typed_as_money_is_kept_as_a_percent(self):
+        """150$ on a 10 000 account is 1.5%, and it is the percent the trade
+        records, since that is what R is measured by. Two decimals, the
+        half rounded up."""
+        for text, percent in [("150$", 1.5), ("$150", 1.5), ("150 usd", 1.5),
+                              ("1,5", 1.5), ("1.5%", 1.5), ("0.5", 0.5),
+                              ("133$", 1.33), ("33.333$", 0.33),
+                              ("100.5$", 1.01), ("124.5$", 1.25)]:
+            self.assertEqual(self.S.parse_risk(text, 10000), percent, text)
+        with self.assertRaises(self.S.RecordError):
+            self.S.parse_risk("1.5.5", 10000)
+        with self.assertRaises(self.S.RecordError):
+            self.S.parse_risk("150$", 0)
+        _, html = self.get("/new")
+        code, where = self.post("/new", {
+            "token": self.form_token(html), "blocks": "1", "account": "broker",
+            "pair": "NZDUSD", "direction": "long", "style": "swing",
+            "entry_tf": "H4", "risk": "150$", "entry": "2026-08-14T10:00",
+            "idea_tf_1": "H4", "idea_text_1": "risk typed as money"})
+        self.assertEqual(code, 200)
+        t = store.load_trade(self.root, self.landed(where))
+        self.assertEqual(t.risk, 1.5)
+        _, html = self.get(urllib.parse.urlparse(where).path)
+        self.assertIn("1.5% = 150 $", html)
+        # edited, the money is measured against the balance the trade was
+        # opened on, the figure the form carries for its own account
+        q = urllib.parse.quote(t.id)
+        base = self.S.journal(True).computed[t.id].balance_at_entry
+        _, html = self.get(f"/edit/{q}")
+        self.assertIn(f'&quot;broker&quot;: {base}', html)
+        self.post(f"/edit/{q}", {
+            "token": self.form_token(html), "blocks": "1", "account": "broker",
+            "pair": "NZDUSD", "direction": "long", "style": "swing",
+            "entry_tf": "H4", "risk": "300$", "entry": "2026-08-14T10:00",
+            "idea_tf_1": "H4", "idea_text_1": "risk typed as money"})
+        self.assertEqual(store.load_trade(self.root, t.id).risk,
+                         self.S.money_to_percent(300, base))
+        self.post(f"/trade/{q}/delete", {})
 
     def test_02_archived_account_is_not_offered(self):
         _, html = self.get("/new")
@@ -569,6 +613,38 @@ class ServerCase(unittest.TestCase):
         self.assertIn("-1…-1.2", rings)
         self.assertIn("+3R and more", rings)
 
+    def test_30a_the_stop_edge_slider_recuts_the_statistics(self):
+        """The slider on Past the stop moves the edge for the whole journal:
+        the rings, the list and the caption follow it on the next look, and
+        the form comes back to the page it stood on."""
+        _, html = self.get("/stats?axis=trade")
+        self.assertIn('name="stop_edge"', html)
+        self.assertIn('value="1.2"', html)
+        self.assertIn('value="/stats?axis=trade"', html)
+        _, where = self.post("/settings/stop-edge",
+                             {"stop_edge": "1", "back": "/stats?axis=trade"})
+        self.assertTrue(where.startswith(self.url("/stats?axis=trade")))
+        _, html = self.get("/stats?axis=trade")
+        self.assertIn('value="1"', html)
+        self.assertIn("-1R and worse", html)
+        self.assertNotIn("-1…-1.2", html)
+        self.assertIn("past -1 R", html)
+        # the -1 R loss is now at the edge: listed, and over it by nothing
+        past = re.search(r'<h2>Past the stop</h2>.*?</table>', html, re.S).group(0)
+        self.assertIn("-1.00 R", past)
+        self.assertIn("+0.00 R", past)
+        self.assertEqual(store.stop_edge(self.root), 1.0)
+        # out of range is refused, and the setting stays
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.post("/settings/stop-edge", {"stop_edge": "3", "back": "/stats"})
+        self.assertEqual(e.exception.code, 400)
+        self.assertEqual(store.stop_edge(self.root), 1.0)
+        # a way back that leaves the journal is not taken
+        _, where = self.post("/settings/stop-edge",
+                             {"stop_edge": "1.2", "back": "//evil.example/x"})
+        self.assertTrue(where.startswith(self.url("/stats")))
+        self.assertEqual(store.stop_edge(self.root), 1.2)
+
     def test_31_the_pair_field_offers_pairs_with_their_flags(self):
         """The browser's own list cannot carry the flags, so the form has its
         own. Typing a pair that is not in it still has to work."""
@@ -660,8 +736,8 @@ class ServerCase(unittest.TestCase):
             "idea_text_1": "range high, selling the sweep",
             "file_idea-1": shot["file"],
             "dup": ["prop-100k", "prop-50k"],
-            "dup_risk_prop-100k": "0.5", "dup_risk_prop-50k": "0.25",
-            "dup_risk_broker": "9"})
+            "dup_risk_prop-100k": "500$", "dup_risk_prop-50k": "0.25",
+            "dup_risk_broker": "9"})       # 500$ against the copy's own 100 000
         self.assertEqual(code, 200)
         fresh = [t for t in store.all_trades(self.root) if t.id not in before]
         self.assertEqual(len(fresh), 3)
@@ -931,6 +1007,54 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(k.analysis[0].images, ["shots/idea-01-01.png"])
         self.assertTrue(os.path.exists(os.path.join(
             store.plan_dir(self.root, plan_id), "shots", "idea-01-01.png")))
+
+    def test_43a_a_plan_is_voided_and_restored(self):
+        plan_id = ServerCase.plan_id
+        q = urllib.parse.quote(plan_id)
+        _, html = self.get(f"/plan/{q}")
+        self.assertIn('href="#void"', html)              # the button in the header
+        self.assertIn(f'action="/plan/{plan_id}/void"', html)
+        self.assertNotIn(f'action="/plan/{plan_id}/restore"', html)
+
+        self.post(f"/plan/{q}/void", {"reason": "price broke the range down"})
+        k = store.load_plan(self.root, plan_id)
+        self.assertEqual(k.voided.date(), datetime.now().date())
+        self.assertIn("voided: price broke the range down", k.updates)
+        self.assertIn("gap up on Monday", k.updates)      # the older lines stay
+        self.assertEqual(k.review, "the plan held")       # nothing else touched
+        self.assertFalse(k.covers(k.day))
+        _, html = self.get(f"/plan/{q}")
+        self.assertIn('class="card is-void"', html)
+        self.assertIn(f'action="/plan/{plan_id}/restore"', html)
+        self.assertNotIn(f'action="/plan/{plan_id}/void"', html)
+        self.assertIn("price broke the range down", html)
+        # the trades tied to it are still there, and the list says voided
+        self.assertIn(">1<", re.findall(r'<tr>.*?</tr>', self.get("/plans")[1],
+                                        re.S)[1].replace("</td>", "<"))
+        self.assertIn('class="state voided"', self.get("/plans")[1])
+        # the trade form still offers it, under a label that says so
+        self.assertIn("voided</option>", self.get("/new")[1])
+        # a second void is refused, the plan is voided already
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.post(f"/plan/{q}/void", {"reason": "again"})
+        self.assertEqual(e.exception.code, 400)
+
+        self.post(f"/plan/{q}/restore", {})
+        k = store.load_plan(self.root, plan_id)
+        self.assertIsNone(k.voided)
+        self.assertTrue(k.updates.endswith("restored"))
+        self.assertIn("voided: price broke the range down", k.updates)
+        _, html = self.get(f"/plan/{q}")
+        self.assertNotIn('class="card is-void"', html)
+        self.assertIn(f'action="/plan/{plan_id}/void"', html)
+        self.assertNotIn('class="state voided"', self.get("/plans")[1])
+        # a plan whose first day has not come is marked ahead, a plan that
+        # has run its course wears nothing
+        self.new_plan(title="ahead", **{"from": "2099-01-05", "until": "2099-01-09"})
+        html = self.get("/plans")[1]
+        self.assertIn('class="state ahead"', html)
+        row = [r for r in re.findall(r'<tr>.*?</tr>', html, re.S) if plan_id in r][0]
+        self.assertNotIn('class="state', row)          # 2026-08-31 to 09-06 is past
 
     def test_44_the_header_offers_a_plan_and_not_a_report(self):
         _, html = self.get("/")
@@ -1927,8 +2051,10 @@ class ServerCase(unittest.TestCase):
         tid = t.id
         q = urllib.parse.quote(tid)
         _, html = self.get(f"/edit/{q}")
-        # any risk figure is a risk figure: 0.81% is a trade, not a typo
-        self.assertIn('name="risk" step="any"', html)
+        # any risk figure is a risk figure: 0.81% is a trade, not a typo,
+        # so the field is not stepped
+        self.assertIn('name="risk" inputmode="decimal"', html)
+        self.assertNotIn('name="risk" step=', html)
         fields = {"token": self.form_token(html), "blocks": "1",
                   "account": t.account, "pair": "AUDNZD", "direction": t.direction,
                   "style": t.style, "entry_tf": t.entry_tf, "risk": f"{t.risk:g}",
@@ -1955,7 +2081,7 @@ class ServerCase(unittest.TestCase):
         first = next(a for a in sorted(j.accounts) if not j.accounts[a].archived)
         last = {t.account: t.risk for t in j.trades}
         _, html = self.get("/new")
-        self.assertIn(f'value="{last[first]:g}" required>', html)
+        self.assertIn(f'value="{last[first]:g}" placeholder="1 or 100$" required>', html)
         self.assertIn('data-last-risk="', html)
         self.assertIn("follow_account('account', 'risk')", html)
         # a trade opened and closed now, said to be a Win that lost money
@@ -1973,7 +2099,7 @@ class ServerCase(unittest.TestCase):
                                   "conclusions": "a slip of the hand"})
         # the next new trade on that account starts at the risk this one had
         _, html = self.get("/new")
-        self.assertIn('value="0.7" required>', html)
+        self.assertIn('value="0.7" placeholder="1 or 100$" required>', html)
         # the disagreement is said on the trade page, the record is kept
         _, html = self.get(f"/trade/{q}")
         self.assertIn('<div class="notice"><b>Win with a PnL of', html)
@@ -2284,11 +2410,50 @@ class ServerCase(unittest.TestCase):
         # difference between this list and the journal's
         self.assertIn("<th>closed</th><th>entered</th>", card)
         # no cut, no card, and the button still hands the reader to the journal
-        for where in ("/stats", "/stats?pair=EURUSD", "/stats?closed=2026-13"):
+        for where in ("/stats", "/stats?closed=2026-13"):
             _, html = self.get(where)
             self.assertNotIn('id="trades"', html)
             self.assertNotIn('href="#trades"', html)
             self.assertIn("the same selection as a list", html)
+        # a cut with no period in it lists its trades too, under its own name
+        _, html = self.get("/stats?pair=EURUSD")
+        self.assertIn('<a class="btn" href="#trades"', html)
+        card = html[html.index('<div class="card" id="trades">'):]
+        self.assertIn("<h2>Trades of this cut</h2>", card)
+        want = S.stats.summary(j, [t for t in j.trades if t.pair == "EURUSD"]).trades
+        self.assertEqual(len(re.findall(r'<tr><td class="cell">', card)), want)
+        self.assertIn(f">{want} closed in EURUSD</span>", card)
+        # a pair and then a month: the trades of that pair closed in the month
+        _, html = self.get("/stats?pair=EURUSD&closed=2026-08")
+        card = html[html.index('<div class="card" id="trades">'):]
+        want = S.stats.summary(j, S.stats.closed_in(
+            [t for t in j.trades if t.pair == "EURUSD"], "2026-08")).trades
+        self.assertEqual(len(re.findall(r'<tr><td class="cell">', card)), want)
+        self.assertIn(f">{want} closed in August 2026</span>", card)
+
+    def test_80m_back_takes_one_step_of_the_cut(self):
+        """A pair, then a month, then Back: the month goes and the pair
+        stays, because the query is written in the order the cut was built
+        and Back drops what came last. The last step leads to the whole tab,
+        and with nothing cut there is no button."""
+        S = self.S
+        button = lambda href: f'<a class="btn" href="{href}" title="one step back'
+        _, html = self.get("/stats?pair=EURUSD&closed=2026-08")
+        self.assertIn(button("/stats?pair=EURUSD"), html)
+        _, html = self.get("/stats?closed=2026-08&pair=EURUSD&by=week")
+        self.assertIn(button("/stats?closed=2026-08&by=week"), html)
+        _, html = self.get("/stats?pair=EURUSD")
+        self.assertIn(button("/stats"), html)
+        _, html = self.get("/stats")
+        self.assertNotIn("one step back", html)
+        # the month window is one part, whichever half came last
+        q = urllib.parse.parse_qs("pair=EURUSD&from=2026-07&to=2026-08")
+        self.assertEqual(S.cut_back(q), "/stats?pair=EURUSD")
+        q = urllib.parse.parse_qs("from=2026-07&to=2026-08&style=swing")
+        self.assertEqual(S.cut_back(q), "/stats?from=2026-07&to=2026-08")
+        # an empty field in the address is not a step
+        q = urllib.parse.parse_qs("pair=EURUSD&style=")
+        self.assertEqual(S.cut_back(q), "/stats")
 
     def test_75c_a_report_lists_the_trades_of_its_month(self):
         """A report is a period, so it carries the same card the Statistics
@@ -2550,6 +2715,80 @@ class ServerCase(unittest.TestCase):
             if os.path.isdir(shots) and os.listdir(shots):
                 return trade
         self.fail("no trade with a screenshot in the test journal")
+
+    def test_85_an_update_is_added_to_an_open_trade_and_kept(self):
+        """A dated line under a running trade, from the trade page itself,
+        with a screenshot: it stays through an edit, a copy and the close,
+        and a closed trade takes no more of them."""
+        tid = self.open_trade(pair="USDCAD", entry="2026-08-27T09:00",
+                              idea_text_1="carry the updates")
+        q = urllib.parse.quote(tid)
+        _, html = self.get(f"/trade/{q}")
+        self.assertIn('href="#updates"', html)               # the button
+        self.assertIn(f'action="/trade/{tid}/update"', html)
+        token = self.form_token(html)
+        shot = self.paste_shot(token, "update")
+        _, where = self.post(f"/trade/{q}/update", {
+            "token": token, "update": "stop moved under the low",
+            "file_update": shot["file"]})
+        self.assertIn("said=Update%20added", where)
+        t = store.load_trade(self.root, tid)
+        self.assertIn("stop moved under the low", t.updates)
+        self.assertIn("![](shots/update-01.png)", t.updates)
+        self.assertRegex(t.updates, r"^\*\*\d\d\.\d\d\.\d{4} \d\d:\d\d\*\*: ")
+        _, html = self.get(f"/trade/{q}")
+        self.assertIn(f'<img src="/shot/{tid}/update-01.png"', html)
+        self.refused(f"/trade/{q}/update", {"token": "", "update": ""})
+        # search reads them
+        _, html = self.get("/search?q=under+the+low")
+        self.assertIn(f'href="/trade/{tid}"', html)
+        # the edit form carries them, and an edit that leaves them alone
+        # keeps the picture on the disk (the shots folder is rewritten whole)
+        _, form = self.get(f"/edit/{q}")
+        self.assertIn('name="have_update" value="shots/update-01.png"', form)
+        self.assertIn("stop moved under the low", form)
+        fields = {"token": self.form_token(form), "blocks": "1",
+                  "account": "broker", "pair": "USDCAD", "direction": "long",
+                  "style": "swing", "entry_tf": "H4", "risk": "1",
+                  "entry": "2026-08-27T09:00", "idea_tf_1": "H4",
+                  "idea_text_1": "carry the updates, edited",
+                  "updates": t.updates,
+                  "have_update": ["shots/update-01.png"]}
+        self.post(f"/edit/{q}", fields)
+        t = store.load_trade(self.root, tid)
+        self.assertIn("![](shots/update-01.png)", t.updates)
+        self.assertEqual(self.get(f"/shot/{q}/update-01.png", as_text=False)[0], 200)
+        # a copy on another account takes the updates and their picture
+        self.post("/account/new", {"id": "prop-upd", "name": "prop upd",
+                                   "start": "20000", "currency": "USD"})
+        _, form = self.get(f"/edit/{q}")
+        fields.update(token=self.form_token(form), dup="prop-upd",
+                      **{"dup_risk_prop-upd": "1"})
+        self.post(f"/edit/{q}", fields)
+        twin = next(x for x in store.all_trades(self.root)
+                    if x.account == "prop-upd" and x.pair == "USDCAD")
+        self.assertIn("stop moved under the low", twin.updates)
+        self.assertIn("![](shots/update-01.png)", twin.updates)
+        self.assertEqual(self.get(f"/shot/{urllib.parse.quote(twin.id)}/update-01.png",
+                                  as_text=False)[0], 200)
+        # closed, the updates stay and the form for more is gone
+        _, form = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(form), "result": "Win",
+                                  "pnl": "120", "exit": "2026-08-28T10:00",
+                                  "conclusions": "held"})
+        t = store.load_trade(self.root, tid)
+        self.assertFalse(t.is_open)
+        self.assertIn("![](shots/update-01.png)", t.updates)
+        self.assertEqual(self.get(f"/shot/{q}/update-01.png", as_text=False)[0], 200)
+        _, html = self.get(f"/trade/{q}")
+        self.assertIn("stop moved under the low", html)
+        self.assertNotIn(f'action="/trade/{tid}/update"', html)
+        self.assertNotIn('href="#updates"', html)
+        self.refused(f"/trade/{q}/update", {"token": "", "update": "too late"})
+        _, html = self.get(f"/share/trade/{q}")
+        self.assertIn("stop moved under the low", html)
+        for x in (t, twin):
+            self.post(f"/trade/{urllib.parse.quote(x.id)}/delete", {})
 
     def test_90_a_trade_is_shown_as_one_file(self):
         """The preview, then the file: same document, and the file carries its

@@ -194,6 +194,31 @@ class RSplitCase(unittest.TestCase):
                          [("0…-0.5", 0), ("-0.5…-1", 1), ("-1…-1.2", 2),
                           ("-1.2R and worse", 2)])
 
+    def test_the_stop_edge_moves_the_cut_of_the_losses(self):
+        """The owner sets where a stop ends: the same five losses fall into
+        other buckets at another edge, and at an edge of exactly 1 the stop
+        bucket is gone, since nothing could stand in it."""
+        trades = [
+            self.trade("t1", "Lose", -100),      # -1.00 R
+            self.trade("t2", "Lose", -115),      # -1.15 R
+            self.trade("t3", "Lose", -120),      # -1.20 R
+            self.trade("t4", "Lose", -250),      # -2.50 R
+            self.trade("t5", "Lose", -99),       # -0.99 R
+        ]
+        j = Journal(self.accounts, trades, [], stop_edge=1.1)
+        losses, _, _ = stats.r_split(j, j.trades)
+        self.assertEqual([(label, n) for label, n, _ in losses],
+                         [("0…-0.5", 0), ("-0.5…-1", 1), ("-1…-1.1", 1),
+                          ("-1.1R and worse", 3)])
+        self.assertEqual([t.id for t in stats.past_stop(j, j.trades)], ["t4", "t3", "t2"])
+        self.assertAlmostEqual(stats.past_stop_over(j, trades[1]), -0.05, 4)
+        j = Journal(self.accounts, trades, [], stop_edge=1.0)
+        losses, _, _ = stats.r_split(j, j.trades)
+        self.assertEqual([(label, n) for label, n, _ in losses],
+                         [("0…-0.5", 0), ("-0.5…-1", 1), ("-1R and worse", 4)])
+        self.assertEqual(len(stats.past_stop(j, j.trades)), 4)
+        self.assertAlmostEqual(stats.past_stop_over(j, trades[0]), 0.0, 4)
+
     def test_the_ev_counts_every_closed_trade(self):
         """Σ R over the closed trades, break-evens included: a trade closed at
         zero still paid its commission, and leaving it out would flatter the

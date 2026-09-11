@@ -37,8 +37,10 @@ class Computed:
 class Journal:
     """The whole journal: accounts, trades, adjustments and everything derived."""
 
-    def __init__(self, accounts, trades, adjustments, problems=None):
+    def __init__(self, accounts, trades, adjustments, problems=None,
+                 stop_edge=store.STOP_EDGE):
         self.accounts = accounts                # {id: Account}
+        self.stop_edge = stop_edge              # where a stop ends and an overrun begins, in R
         self.trades = sorted(trades, key=lambda t: (t.opened or datetime.max, t.id))
         self.adjustments = sorted(adjustments,
                                   key=lambda c: (c.day or datetime.max, c.id))
@@ -52,7 +54,8 @@ class Journal:
         problems = []
         return cls(store.all_accounts(root, problems),
                    store.all_trades(root, problems),
-                   store.all_adjustments(root, problems), problems)
+                   store.all_adjustments(root, problems), problems,
+                   store.stop_edge(root))
 
     # --- replay ------------------------------------------------------------
 

@@ -75,6 +75,21 @@ def build(root, days=40):
                         f"imbalance was filled overnight, waiting for the retest.")
     store.save_plan(root, plan)
 
+    # a plan of the week before, called off when the market went the other
+    # way: the Plans tab shows what a voided plan looks like
+    before = monday - timedelta(days=7)
+    gone = Plan(id=store.new_plan_id(root, before, "GBPUSD"), title="weekly",
+                pair="GBPUSD", narrative="bearish", day=before,
+                until=before + timedelta(days=4), voided=before + timedelta(days=2),
+                analysis=[IdeaBlock(tf="D1", text="Lower highs into the monthly "
+                                    "level; a close under it opens the range "
+                                    "below.")],
+                plan="Sell the retest of the level only. No longs this week.",
+                updates=f"**{before + timedelta(days=2):%d.%m.%Y}**: voided: the "
+                        f"level held and the week closed above it, the "
+                        f"direction was wrong")
+    store.save_plan(root, gone)
+
     # a playbook, so that the Playbooks tab and its page have rules to show
     store.save_playbook(root, Playbook(
         id="pullback", name="Pullback", styles=["swing"], status="experiment",
@@ -175,7 +190,9 @@ def build(root, days=40):
         opened=open_day, opened_time=True, plan=plan.id,
         playbook="pullback", playbook_version="1.0",
         setup="A: reaction at a higher level", deviations=[],
-        idea=[IdeaBlock(tf="H4", text=IDEAS[0])]))
+        idea=[IdeaBlock(tf="H4", text=IDEAS[0])],
+        updates=f"**{open_day + timedelta(hours=3):%d.%m.%Y %H:%M}**: first "
+                "push down held under the level, stop left where it was"))
 
     # one deposit half way, so that the equity curve has a hollow dot and a
     # step in its base line to show

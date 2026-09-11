@@ -33,10 +33,16 @@ who was right. In hindsight an idea always looks tidier than it was.
   capitals whatever way it was typed, so `eurusd` and `EURUSD` are one pair.
 - **direction**, **style**, **entry TF**: the styles and the timeframes come
   from your own lists, edited on the Accounts tab.
-- **risk, %**: the risk as a percent of the current computed balance of the
-  account. What that is in money shows on the trade page once it is saved. The field starts at the risk of your last
-  trade on that account and follows the account until you type a figure
-  yourself; a duplicate's risk starts at the last trade of its own account.
+- **risk, % or money**: the risk as a percent of the current computed
+  balance of the account, or as a sum of money with a currency sign or code
+  beside it: `150$`, `$150`, `150 usd`. The line under the field says what
+  the other one is, `= 150 $ of 10 000 $` for a percent and `= 1.5% of
+  10 000 $` for a sum, against the balance of the account picked above. A
+  sum is saved as the percent it makes, to two decimals, since the percent
+  is what R is measured by, and the trade page shows both. The field starts at the risk
+  of your last trade on that account and follows the account until you type
+  a figure yourself; a duplicate's risk starts at the last trade of its own
+  account and takes money the same way, against its own balance.
 - **entry**: date and time of entry; clicking the field opens a calendar.
 - **plan**: the trading plan this trade follows, picked from the plans you have
   written. Left at "-" if the trade belongs to none.
@@ -254,8 +260,11 @@ market opens and holds what a trade cannot: what was supposed to happen.
   expect: bullish, bearish, neutral or no trade. A decision not to trade is a
   plan as well.
 - **from** and **until**: the days the plan covers. Until is left empty for a
-  plan that lives one day; a plan that covers today is marked **current** in the
-  list and its card is outlined on the page.
+  plan that lives one day. The list marks the state of a plan with a pill:
+  green **current** for one that covers today, blue **ahead** for one whose
+  first day has not come, red **voided** for one called off. A plan that has
+  run its course wears nothing. The card of a current plan is outlined on
+  its page.
 - **analysis blocks**: timeframe, text and screenshots, the same blocks as the
   idea of a trade. **+ analysis block** adds another timeframe.
 - **plan**: what you will do, and what you will not. This is the part you read
@@ -271,6 +280,17 @@ week of a plan reads as it happened. Nothing else in the plan is touched when
 an update is added.
 
 **Review** is written later, in the plan form: how it went, with screenshots.
+
+**Void.** A plan the market went against, the direction or the variables
+wrong, is voided rather than deleted: the **Void** button in the header of
+its page leads to a short form at the bottom, one line for what went against
+it, and the plan is called off. It stops being current, the list says
+**voided** next to it, its card is outlined in red, and the reason stands
+under **Updates** with the date. Everything else stays: the analysis, the
+plan, the trades tied to it, so the mistake can be read back later. The
+trade form still offers a voided plan, with the word in its name. **Restore**
+undoes it, with a dated line of its own, when the market turns around after
+all. **Delete** is for a plan written by mistake: that one goes to the trash.
 
 **What came of the plan.** Every trade you tied to it is listed on its page with
 its result, PnL and R, and the line under the table says how many trades, the
@@ -324,6 +344,22 @@ when, and the line stays on a closed trade as the history of its stop.
 playbook limits are not touched: a trade at breakeven is still a position
 open at once, and the loss of the week is counted from closed trades only.
 
+## Updates while a trade runs
+
+The **Update** button on the page of an open trade leads to the **Updates**
+card at the bottom of it: a line about what changed since the entry (the
+stop moved, a partial taken, what the market did at the level) and a
+screenshot zone under it, then **Add**. Every update is written under the
+trade with its date and time, in the order they came, and the pictures
+pasted with it stay under its line. The rest of the trade is not touched:
+the idea and its screenshots stay exactly as they were.
+
+The updates stay on the trade after it is closed and go into the file that
+**Share** makes; the search reads them. A closed trade takes no more of
+them: what is learned at the exit goes into the conclusions. Editing the
+trade shows the updates as they were written, text and pictures, in a card
+of their own, so a slip in one can be put right.
+
 ## Closing a trade
 
 The **Close trade** button. You fill in the result (Win / Lose / BE), the PnL in
@@ -348,7 +384,9 @@ There is nothing to recompute by hand.
 - **Edit** on the trade page changes any field, screenshots included. For a
   closed trade the result, the PnL, the moment of the exit, the exit shots and
   the conclusions are edited there as well, so a result entered wrong is fixed
-  without touching the file. The folder of the trade is named after its day and
+  without touching the file. The updates of a trade that has any are in the
+  form too, as they were written; a new one is added from the trade page,
+  not here. The folder of the trade is named after its day and
   its pair, so changing either moves the folder under a new name; a link to
   the old one stops working, the record itself is untouched.
 - **A copy forgotten at the entry** is written from the same form: while the
@@ -545,14 +583,17 @@ then the playbooks with the rules and the tables.
 
 **The cut is written out at the top.** Under the word Statistics stands the
 selection in words, `XAUUSD · swing · Broker · August 2026`, and every part of it
-is a link that drops that one part. The funnel to the right opens the whole
+is a link that drops that one part. **← Back** to the right of it takes one
+step back: the cut without the part added last, so a pair and then a month
+is left one click at a time, the way it was built, and the last click lands
+on every closed trade. The funnel opens the whole
 form, **Reset** drops the cut whole and puts every closed trade back, **The
 trades** shows the selection as a list, and **CSV** writes the same selection
 into a file for a spreadsheet, a period cut included. Reset stands only while
 there is something to drop, and it stands on a cut that matched nothing too,
-which is where it is wanted most. With a
-period chosen the list stands at the foot of this page and the button jumps
-down to it; without one it is the journal's own list that opens, since there
+which is where it is wanted most. Under any
+cut the list stands at the foot of this page and the button jumps
+down to it; with no cut it is the journal's own list that opens, since there
 the two pages hold the same trades. The line under the title says how many
 trades closed, how many are still open and therefore out of every figure, the
 money the cut made when every trade sits on one account, between which dates
@@ -629,8 +670,11 @@ under one title.
 This is why **The trades** no longer hands you to the journal when a period is
 chosen. The journal picks by the entry, so its August is a different set of
 trades: one entered in July and closed in August is counted here and stands in
-July there. Without a period cut the two pages hold the same trades and the
-button still opens the journal. The CSV button never had the trouble, since
+July there. A cut with no period in it, a pair or a style, lists its trades
+at the foot of the page as well, as **Trades of this cut**: the closed ones,
+newest exit first, so a pair and then a month reads down to the very trades
+of that pair closed in that month. Only with no cut at all does the button
+open the journal. The CSV button never had the trouble, since
 the file is written from the same selection the page counted.
 
 **R distribution.** Two rings beside the tape: the losses on the left, the
@@ -650,7 +694,10 @@ bucket of its own: that loss was more than the risk allowed, and it is the
 one number that says the risk was overrun. The two buckets above them are losses
 that never reached the stop: **0…-0.5** and **-0.5…-1**. A bucket reads from
 zero outwards and its far edge belongs to the next one, so exactly -1R is the
-stop, not the bucket that stops short of it.
+stop, not the bucket that stops short of it. The edge of 1.2 is the journal's
+figure until you set your own: the slider on the **Past the stop** card,
+below, moves it by a tenth between 1 and 2 R, and the rings follow. At an edge
+of exactly 1 the stop bucket is gone, and the last one reads **-1R and worse**.
 
 Read together the two rings answer the question a trader actually asks: are the
 losses one size, and do the wins reach far enough to pay for them. The rings in
@@ -703,13 +750,23 @@ Only trades that went through a checklist stand there, at the entry or at the
 close; one tied to a playbook later and never ticked was never held against
 its rules. When trades of more than one playbook are in the cut, the name of
 the playbook stands before the number of the rule. **Past the stop**, a table
-of its own: the losses that went deeper than -1.2R, worst first, ten at most,
-each a way to its trade. Beside the R of each stands **over**, what that loss
-cost past -1.2R, and the head of the card carries the total of them. The stop
-itself is not the mistake: -1R is the attempt working as it was meant to, and
-commission and swap carry it to -1.2R, which the trade was still sized for.
-What lies past that edge is the only part discipline was there to keep, so a
-loss back at -1.35R overran the risk by 0.15R and not by the whole of it.
+of its own: the losses that went deeper than the stop edge, worst first, ten
+at most, each a way to its trade. Beside the R of each stands **over**, what
+that loss cost past the edge, and the head of the card carries the total of
+them. The stop itself is not the mistake: -1R is the attempt working as it
+was meant to, and commission and swap carry it to the edge, which the trade
+was still sized for. What lies past that edge is the only part discipline was
+there to keep, so with the edge at 1.2 a loss back at -1.35R overran the risk
+by 0.15R and not by the whole of it.
+
+**The stop edge is yours to set.** The slider in the head of the card runs
+from 1 to 2 R by tenths and stands at 1.2 until you move it: how much a stop
+with the fees on it may cost before the loss counts as an overrun. Release it
+and the journal keeps the figure, in `journal/settings.md`, and every number
+that hangs on it is worked out afresh on the next look: the rings, this table
+and its total, the mistakes of every report, the old months as much as the
+new ones, since nothing computed is ever stored. A report built earlier keeps
+the edge it was written with in its text; rebuild it to read it at the new one.
 
 **Stop at breakeven.** The trades whose stop you moved to the entry (the
 Breakeven button, see The stop at breakeven) against the ones whose stop
@@ -858,7 +915,8 @@ A day counts here by its entries: a position that closed by itself while you
 were away does not turn that day into one owing a card.
 
 **Mistakes** are what the journal itself recorded as one: a rule ticked as not
-met at the entry or at the close, or a loss of -1.2 R and worse, which is past
+met at the entry or at the close, or a loss at the stop edge and worse (1.2 R
+until you set it on the Statistics tab), which is past
 the stop: more was lost than the risk written on the trade, whether by size,
 a moved stop or slippage. A trade that did both counts once; a trade never
 ticked counts neither way, and the tile says how many trades under a playbook
@@ -869,7 +927,7 @@ against the current version of their playbook did not meet, how many trades
 broke it and what they brought, the costliest first, against the
 last row, the trades that kept every rule; the losses past the stop are listed
 under it as **Past the stop**, each a link to the trade and each with what it
-cost past -1.2R beside its R, the total said under the table. The card stands
+cost past the stop edge beside its R, the total said under the table. The card stands
 whenever a trade of the period names a playbook or a loss went past the stop.
 
 **Process** counts the cards against the days traded and quotes the errors
