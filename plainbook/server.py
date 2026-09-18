@@ -15,9 +15,12 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import urllib.parse
+import webbrowser
 from datetime import datetime, timedelta
 
 from . import html as H
@@ -30,9 +33,27 @@ from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
                     PAIR_NOT_SET)
 
 PORT = int(os.environ.get("PLAINBOOK_PORT") or 8778)
+
+
+def default_root():
+    """Where the records live when PLAINBOOK_ROOT is not set.
+
+    Run from its source, the program keeps them in the project folder, next to
+    the code. Run as a downloaded file or as an installed package, it has no
+    folder of its own worth keeping anything in (the file unpacks itself into a
+    temporary folder, the package sits in site-packages), so the records go to
+    a Plainbook folder in the user's home, where a newer file finds them."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    parts = here.replace("\\", "/").split("/")
+    installed = (getattr(sys, "frozen", False) or "site-packages" in parts
+                 or "dist-packages" in parts)
+    if installed:
+        return os.path.join(os.path.expanduser("~"), "Plainbook")
+    return os.path.dirname(here)
+
+
 # the journal root can be overridden; the tests and a split data folder use it
-ROOT = os.path.abspath(os.environ.get("PLAINBOOK_ROOT") or
-                       os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.abspath(os.environ.get("PLAINBOOK_ROOT") or default_root())
 DRAFTS = os.path.join(ROOT, ".drafts")
 # money moved by hand. A correction is not offered here: it has a form of its
 # own, where the real balance is typed in and the difference is worked out.
@@ -2830,7 +2851,7 @@ def apply_shots(record, zones):
         for i, src in enumerate(sources, 1):
             name = f"{prefix}-{i:02d}{os.path.splitext(src)[1] or '.png'}"
             shutil.copyfile(src, os.path.join(fresh, name))
-            names.append(os.path.join(store.SHOTS, name))
+            names.append(store.record_path(name))
         result[zone] = names
     shutil.rmtree(folder, ignore_errors=True)
     os.replace(fresh, folder)
@@ -2854,7 +2875,7 @@ def add_shots(record, prefix, sources):
         name = f"{prefix}-{n:02d}{ext}"
         shutil.copyfile(src, os.path.join(folder, name))
         taken.add(name)
-        names.append(os.path.join(store.SHOTS, name))
+        names.append(store.record_path(name))
     return names
 
 
@@ -7102,15 +7123,103 @@ class Server(http.server.ThreadingHTTPServer):
     allow_reuse_address = True
 
 
-def main():
+# A Chromium-family browser opens the journal as a window of its own with
+# --app, which is what a downloaded file is expected to look like. Any other
+# browser gets a tab. The names are looked up on the PATH, the paths are where
+# the installers of Windows and macOS put these browsers.
+CHROMIUM_NAMES = ("brave", "brave-browser", "google-chrome", "google-chrome-stable",
+                  "chromium", "chromium-browser", "chrome", "msedge")
+CHROMIUM_PATHS = (
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+)
+
+
+def chromium():
+    """The path of a Chromium-family browser on this machine, or None."""
+    for name in CHROMIUM_NAMES:
+        path = shutil.which(name)
+        if path:
+            return path
+    local = os.environ.get("LOCALAPPDATA")
+    paths = list(CHROMIUM_PATHS)
+    if local:
+        paths += [os.path.join(local, "Google", "Chrome", "Application", "chrome.exe"),
+                  os.path.join(local, "BraveSoftware", "Brave-Browser", "Application", "brave.exe")]
+    for path in paths:
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def open_journal(url):
+    """Shows the journal: an app window of a Chromium-family browser when there
+    is one, the default browser otherwise."""
+    browser = chromium()
+    if browser:
+        try:
+            subprocess.Popen([browser, "--app=" + url], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+            return
+        except OSError:
+            pass
+    webbrowser.open(url)
+
+
+def wants_browser(default, env=os.environ):
+    """Whether to open a browser on start. PLAINBOOK_OPEN overrides the
+    default of the entry point: 0 keeps a service or a script quiet, 1 makes
+    python3 -m plainbook.server open one."""
+    flag = env.get("PLAINBOOK_OPEN", "").strip().lower()
+    if flag in ("0", "no", "false"):
+        return False
+    if flag in ("1", "yes", "true"):
+        return True
+    return default
+
+
+def main(open_browser=False):
+    """Serves the journal until Ctrl+C. `python3 -m plainbook.server` and the
+    autostart units come here and open nothing; the `plainbook` command and the
+    downloaded file come through `app` and open the browser."""
+    if sys.stdout is None:            # a build without a console has nowhere to print
+        sys.stdout = open(os.devnull, "w")
+    url = f"http://localhost:{PORT}"
+    show = wants_browser(open_browser)
     os.makedirs(DRAFTS, exist_ok=True)
     store.make_layout(ROOT)
-    server = Server(("127.0.0.1", PORT), Handler)
-    print(f"Plainbook: http://127.0.0.1:{PORT}  (Ctrl+C to stop)")
+    try:
+        server = Server(("127.0.0.1", PORT), Handler)
+    except OSError as e:
+        # the second double-click on the file should show the journal that is
+        # already running, not a traceback
+        print(f"Plainbook could not take port {PORT} ({e.strerror or e}): "
+              f"it is probably already running at {url}")
+        if show:
+            open_journal(url)
+        return
+    print(f"Plainbook: {url}  (Ctrl+C to stop)")
+    print(f"records: {ROOT}")
+    if show:
+        t = threading.Timer(0.5, open_journal, [url])
+        t.daemon = True
+        t.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped")
+
+
+def app():
+    """The entry of the `plainbook` command and of the downloaded file: the
+    same server, with the browser opened on it."""
+    main(open_browser=True)
 
 
 if __name__ == "__main__":

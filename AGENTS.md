@@ -46,7 +46,15 @@ python3 -m unittest discover -s tests    # the whole suite, ~1 s
 python3 tools/check_public.py            # nothing private in the tree
 python3 tools/check_journal.py [root]    # does every record read
 python3 -m plainbook.server              # http://localhost:8778
+python3 -m plainbook                     # the same
 ```
+
+The `plainbook` command of a pipx install and the downloaded file of a release
+run the same server through `server.app` and open the browser on it;
+`python3 -m plainbook.server` and the autostart units open nothing.
+`PLAINBOOK_OPEN=0` or `1` overrides either way. From source the records live in
+the project folder; from the file or the package, in `~/Plainbook`
+(`server.default_root`).
 
 After changing the code, restart the server. On Linux with the unit installed:
 
@@ -81,6 +89,9 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `tools/demo_journal.py` | an invented journal for screenshots and for looking at a change |
 | `tools/attach_playbook.py` | ties the trades a playbook was already traded by to it: its styles, from its `since` date |
 | `tools/import_csv.py` | old trades brought in from a CSV table (a Notion export, a spreadsheet), written as the interface writes them |
+| `tools/app_entry.py` | the entry of the downloaded file: what PyInstaller packs |
+| `pyproject.toml` | the package for pipx: the `plainbook` command; nothing in it is needed to run from source |
+| `.github/workflows/release.yml` | builds one file per system from a published release, attests it, attaches it |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
 reports, share, balances, store → model → mdfile`. Nothing points back up. If you find
@@ -117,7 +128,9 @@ data. Each one is followed by what it prevents.
    and keep the `Origin` check in `_same_origin`.
    *Prevents:* a journal with no login ending up reachable from a network.
 6. **No dependencies.** The standard library is the whole toolbox. A package
-   that looks harmless today is an install failure in five years.
+   that looks harmless today is an install failure in five years. PyInstaller
+   and setuptools are tools of the release workflow, used on GitHub's
+   machines to pack the source; the source never imports them.
 7. **Everything is offline.** No CDN, no web fonts, no analytics, no update
    check. Styles and scripts are inlined into the page.
 8. **Ids are file names.** Anything arriving from a URL and used as a path goes

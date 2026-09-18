@@ -1,6 +1,11 @@
 __pycache__/
 *.pyc
 *.tmp
+# left by pip install . and by PyInstaller
+build/
+dist/
+*.egg-info/
+*.spec
 .trash/
 .drafts/
 # records never belong in this repository; the layout below is kept by .gitkeep

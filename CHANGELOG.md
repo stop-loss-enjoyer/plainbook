@@ -2,6 +2,71 @@
 
 What changed and why. Newest first.
 
+## v1.7.0, 18.09.2026
+
+The journal packed into one file per system, so that it runs on a machine
+with no Python and no agent, and a package for pipx, next to the source it
+always was. The interface and the records are unchanged; a Windows bug in
+the records is fixed.
+
+### What is inside the file
+
+`Plainbook-1.7.0-windows.exe`, `Plainbook-1.7.0-macos-arm64.zip` and
+`Plainbook-1.7.0-linux-x86_64` are not installers. Each is the source of this
+very release, unchanged, packed together with a Python interpreter by
+PyInstaller into a single file, which unpacks itself into a temporary folder
+when started and is gone from there when stopped. It installs nothing, writes
+nothing into the system, registers no service, and talks to no network: the
+server binds 127.0.0.1 as it always did. What it writes is your records, in a
+`Plainbook` folder in your home, as the same markdown and PNG files that
+every other way of running the journal reads. Removing it is deleting the
+file.
+
+GitHub builds the files from this tag on its own machines, by
+`.github/workflows/release.yml`; the log of the build is public on the
+Actions tab, and each file is attested: `gh attestation verify <file>
+--owner stop-loss-enjoyer` proves that a file came out of that build and was
+not touched since. Windows and macOS warn about an unsigned file on the
+first run; the README says what to click and why.
+
+### Added
+
+- **The file per system on every release**, described above. Started, it
+  prints the address and the records folder in a small console window,
+  opens the journal in the browser, as a window of its own when Chrome, Edge
+  or Brave is installed, and stops when the console window is closed. A
+  second start while the journal runs opens the browser on the running one
+  instead of failing.
+- **A package**: `pipx install git+https://github.com/stop-loss-enjoyer/plainbook`
+  gives the `plainbook` command, the same server with the browser opened on
+  it and the records in `~/Plainbook`. `pyproject.toml` describes it and is
+  needed for nothing else: the source runs as before.
+- `python3 -m plainbook` alongside `python3 -m plainbook.server`.
+- `PLAINBOOK_OPEN`: `0` keeps a start from opening a browser, `1` makes the
+  module entry open one. The autostart units and the tests open nothing, as
+  before.
+- README: an **Install** section with the four ways in (the file, an agent
+  with the source zip, pipx, git) and **Checking a downloaded file**, on the
+  public build, the attestation and the warnings of Windows and macOS about
+  an unsigned file. INSTALL.md: getting the code without git, and autostart
+  with the file.
+- The tests run on Windows and macOS as well as Linux on every push, and the
+  release build runs them on the machine that builds the file before packing
+  it.
+
+### Fixed
+
+- **A screenshot pasted on Windows was written into the record as
+  `shots\\idea-01-01.png`**, with the backslash of the system instead of the
+  slash of markdown. The browser hid it, since it reads a backslash in an
+  address as a slash, but the record was wrong, and a journal folder copied
+  from Windows to a Mac or to Linux lost its pictures. Records are written
+  with the slash now, and a record that carries a backslash is read as the
+  same picture and comes right on its next save. The first run of the tests
+  on Windows found it.
+- A record that does not read is named with a slash in its path on Windows
+  too.
+
 ## v1.6.2, 16.09.2026
 
 A map of everything the journal already does, for the agent that is asked to

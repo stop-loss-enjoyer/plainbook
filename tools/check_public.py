@@ -58,7 +58,8 @@ def scan():
     for base, dirs, files in os.walk("."):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for name in files:
-            path = os.path.relpath(os.path.join(base, name), ".")
+            # the slash of the lists above on every system, Windows included
+            path = os.path.relpath(os.path.join(base, name), ".").replace(os.sep, "/")
             if path.endswith(SKIP_SUFFIX):
                 continue
             try:
@@ -79,6 +80,10 @@ def scan():
 
 
 def main():
+    # a Windows console may not know the letter a finding quotes; better a
+    # question mark in the report than a crash before the report
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
     problems = [f"a record is tracked: {f}" for f in tracked_records()]
     problems += scan()
     for p in problems:

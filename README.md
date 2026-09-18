@@ -5,6 +5,7 @@ fast, and built to be kept by an agent. Your trades are markdown files and
 screenshots in a folder you own: no account, no cloud, no network calls.
 
 [![tests](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml)
+[![release](https://img.shields.io/github/v/release/stop-loss-enjoyer/plainbook?label=release)](https://github.com/stop-loss-enjoyer/plainbook/releases/latest)
 [![license: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](#what-it-is-not)
@@ -198,9 +199,61 @@ first place: plain files, no dependencies, a small surface.
 
 `CLAUDE.md` points at the same guide, so Claude Code picks it up unprompted.
 
-## Quick start
+## Install
 
-Python 3.10 or newer. Nothing to install.
+Four ways in, the same journal behind each of them. Pick the one that matches
+what is on the machine.
+
+**1. A file to download.** The [releases page](https://github.com/stop-loss-enjoyer/plainbook/releases/latest)
+carries one file per system: `Plainbook-<version>-windows.exe`,
+`Plainbook-<version>-macos-arm64.zip` (Apple silicon) and
+`Plainbook-<version>-linux-x86_64`. It is not an installer. Inside is this
+same source, unchanged, packed together with a Python interpreter into one
+file, so no Python is needed on the machine; it installs nothing, writes
+nothing into the system and, like every other way of running the journal,
+talks to no network. Download it and run it: a small window says where the
+journal is, and the journal opens in the browser, as a window of its own when
+Chrome, Edge or Brave is installed, as a tab otherwise. Closing the small
+window stops the journal. The records go to a `Plainbook` folder in your home
+folder (`C:\Users\<you>\Plainbook`, `/Users/<you>/Plainbook`,
+`~/Plainbook`) as the same markdown and PNG files the source writes, a newer
+file finds them there, and removing the program is deleting the file.
+Two things to expect on the first run, both about a paid signing certificate
+the project does not have, neither about the file:
+
+- Windows shows a SmartScreen page, "unknown publisher": *More info*, then
+  *Run anyway*.
+- macOS refuses to open it: *System Settings*, *Privacy & Security*, scroll
+  down to the line about Plainbook, *Open Anyway* (older systems: right-click
+  the file, *Open*). Unzip first; the zip is there so that the file stays
+  executable. On Linux, `chmod +x` the file once.
+
+[Checking a downloaded file](#checking-a-downloaded-file), below, says how to
+know that the file is what it claims to be.
+
+**2. With an agent.** Download the source: on the releases page, under
+*Assets*, *Source code (zip)*, or the green *Code* button at the top of this
+page, *Download ZIP*. Unzip it where you keep your projects, open the agent
+(Claude Code or another) in that folder and say: *read INSTALL.md and set the
+journal up on this machine*. [INSTALL.md](INSTALL.md) is written for it: it
+settles with you where the records live, sets up the autostart and checks the
+result together with you. A zip handed to you by another trader is the same
+thing. The agent can just as well start from the file of door 1 and do only
+the autostart.
+
+**3. pipx.** For a machine that already has Python and
+[pipx](https://pipx.pypa.io/):
+
+```bash
+pipx install git+https://github.com/stop-loss-enjoyer/plainbook
+plainbook
+```
+
+The `plainbook` command starts the journal and opens the browser on it, with
+the records in `~/Plainbook`. `pipx upgrade plainbook-journal` brings the next
+version.
+
+**4. From the source, by hand.** Python 3.10 or newer, nothing to install:
 
 ```bash
 git clone https://github.com/stop-loss-enjoyer/plainbook.git
@@ -208,19 +261,55 @@ cd plainbook
 python3 -m plainbook.server
 ```
 
-Open <http://localhost:8778>, go to **Accounts** and create one: a name and a
-start balance. The start balance is a point of reference, not a memory of the
-past. Opening an account today, put in today's real balance, and the computed
-balance is right from the first minute.
+Open <http://localhost:8778>. Here the records live in the project folder,
+next to the code.
+
+Whichever door: go to **Accounts** and create one, a name and a start balance.
+The start balance is a point of reference, not a memory of the past. Opening
+an account today, put in today's real balance, and the computed balance is
+right from the first minute.
 
 - `PLAINBOOK_PORT` changes the port (8778 by default).
-- `PLAINBOOK_ROOT` changes where the records live (the project folder by default).
+- `PLAINBOOK_ROOT` changes where the records live.
+- `PLAINBOOK_OPEN=0` keeps a start from opening a browser (for a service),
+  `PLAINBOOK_OPEN=1` makes `python3 -m plainbook.server` open one.
 
 Autostart on Linux, Windows and macOS, plus desktop integration:
 **[INSTALL.md](INSTALL.md)**. The day-to-day guide: **[GUIDE.md](GUIDE.md)**.
 Writing a playbook, part by part: **[PLAYBOOK.md](PLAYBOOK.md)**.
 What is already here, tab by tab, and which requests it answers:
 **[FEATURES.md](FEATURES.md)**.
+
+## Checking a downloaded file
+
+A file you run deserves more suspicion than a page you read, and the project
+does not buy its way past that with a certificate. It earns it another way:
+the files are not built on anyone's laptop. GitHub builds them from the tag of
+the release, on its own machines, by a recipe that sits in the repository
+([release.yml](.github/workflows/release.yml)), and the log of every build is
+public on the [Actions](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/release.yml)
+tab: which commit, which commands, and that the tests passed first.
+
+What the recipe does is short enough to read: run the tests, hand
+`tools/app_entry.py` to PyInstaller, start the file once and fetch the front
+page from it, attach it to the release. Nothing goes into the file that is not
+in this repository, apart from the Python it carries.
+
+Each file is attested: GitHub signs a statement that this exact file came out
+of that workflow, from that commit. With the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify Plainbook-1.7.0-windows.exe --owner stop-loss-enjoyer
+```
+
+A file altered after the build, or built anywhere else, fails that check.
+
+If that is still not enough, skip the file: the other three doors run the
+source itself, which you can read, and the same file can be built at home with
+`pip install pyinstaller` and `pyinstaller --onefile --paths . tools/app_entry.py`.
+Antivirus software now and then flags any file made by PyInstaller as
+suspicious, because malware has used the same packer; the public build and the
+attestation are the answer to that until the project pays for a signature.
 
 ## Your data
 

@@ -756,3 +756,13 @@ class PlaybookCase(unittest.TestCase):
         self.assertIsNone(store.text_to_trade(store.trade_to_text(
             sample_trade(playbook="pull", deviations=[]))).exit_deviations)
         self.assertNotIn("playbook", store.trade_to_text(sample_trade()))
+
+
+class RecordPathCase(unittest.TestCase):
+    def test_a_picture_is_written_with_the_slash_of_markdown_on_every_system(self):
+        self.assertEqual(store.record_path("idea-01-01.png"), "shots/idea-01-01.png")
+
+    def test_a_record_written_on_windows_before_1_7_still_shows_its_picture(self):
+        text, images = store._text_and_images("the idea\n![](shots\\idea-01-01.png)")
+        self.assertEqual(text, "the idea")
+        self.assertEqual(images, ["shots/idea-01-01.png"])

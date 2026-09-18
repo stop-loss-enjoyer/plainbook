@@ -41,6 +41,14 @@ PLAYBOOK_FILE = "playbook.md"
 NOTE_FILE = "note.md"
 SHOTS = "shots"
 
+
+def record_path(name):
+    """The path of a picture as a record writes it: `shots/<name>`, with the
+    slash of markdown and of a URL, whatever the system. os.path.join would
+    put a backslash in on Windows, and a record with a backslash in it stops
+    showing its pictures the day the folder is copied to another system."""
+    return SHOTS + "/" + name
+
 _IMAGE = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)\s*$")
 # a day and a week share the cards folder, and the name of the file says which
 # one a file is: 2026-08-30.md against 2026-W36.md
@@ -252,7 +260,9 @@ def _text_and_images(chunk):
     for line in chunk.split("\n"):
         m = _IMAGE.match(line.strip())
         if m:
-            images.append(m.group("src"))
+            # records written on Windows before 1.7 carry a backslash;
+            # read them as the same picture, and the next save writes them right
+            images.append(m.group("src").replace("\\", "/"))
         else:
             lines.append(line)
     return "\n".join(lines).strip(), images
@@ -711,7 +721,7 @@ def _load(problems, path, convert, root=None):
     except BROKEN as e:
         if problems is None:
             raise
-        shown = os.path.relpath(path, root) if root else path
+        shown = os.path.relpath(path, root).replace(os.sep, "/") if root else path
         problems.append((shown, str(e) or type(e).__name__))
         return None
 

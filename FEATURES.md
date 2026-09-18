@@ -70,7 +70,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 | delete, undo, restore | Nothing is shredded: a deleted record goes to `.trash` and the **Trash** card on Accounts restores it. |
 | import old trades, history from Notion or a spreadsheet | `tools/import_csv.py` writes trades the way the interface does. |
 | count the trades I already took under this system | `tools/attach_playbook.py` ties the trades of the playbook's styles opened from its *counts from* date. |
-| the app, a window, a hotkey, autostart | [INSTALL.md](INSTALL.md) and the `desktop/` folder: the service, the toggle script, the launcher. |
+| the app, a window, a hotkey, autostart, install without Python | The file per system on the releases page (opens the journal as a window of its own, records in `~/Plainbook`), the `plainbook` command of a pipx install, [INSTALL.md](INSTALL.md) and the `desktop/` folder: the service, the toggle script, the launcher. |
 
 ## The tabs, one by one
 

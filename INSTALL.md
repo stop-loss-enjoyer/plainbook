@@ -16,13 +16,27 @@ the result, not the code. Installing by hand works the same way.
 - **git**, optional but well worth it: the journal is files, and git gives them
   a history and a guard against an accidental mangling.
 
+## Getting the code
+
+- With git: `git clone https://github.com/stop-loss-enjoyer/plainbook.git`.
+- Without git: the releases page,
+  <https://github.com/stop-loss-enjoyer/plainbook/releases/latest>, under
+  *Assets*, *Source code (zip)*. Unzip it; the folder inside is the `Plainbook`
+  folder the steps below speak of. A zip handed over by another trader is the
+  same thing.
+- Or skip the source: the same page has a ready file per system, see
+  [The ready-made file](#the-ready-made-file) at the end. Python is not needed
+  for it, the tests do not apply, and the steps below shrink to where the
+  records live and the autostart.
+
 ## Common steps (every OS)
 
 1. Put the `Plainbook` folder where they keep their projects (agree the
    path with them).
 2. Run the tests: `python3 -m unittest discover -s tests` (Windows:
    `py -m unittest discover -s tests`). They all have to pass; that is the
-   check that Python and the encodings are in order.
+   check that Python and the encodings are in order. (With the ready-made
+   file there is nothing to run here.)
 3. **Decide where the records will live.** Two arrangements:
    - *next to the program*: nothing to do, the journal writes into `./journal`;
    - *in a folder of their own*: set `PLAINBOOK_ROOT` (see the unit below). Prefer
@@ -133,6 +147,34 @@ Put the real paths in (`which python3`, the project folder), then
 
 An application shortcut: Chrome → "Save as application" on the journal page, or
 `open -a "Google Chrome" --args --app=http://localhost:8778`.
+
+## The ready-made file
+
+`Plainbook-<version>-windows.exe`, `Plainbook-<version>-macos-arm64.zip` and
+`Plainbook-<version>-linux-x86_64` on the releases page are the source of
+that release packed with a Python interpreter into one file: not an installer,
+nothing is written into the system, and deleting the file removes it.
+Started by a double-click, the file prints the address and the records folder
+in a small console window, opens the journal in the browser (as an app window
+when Chrome, Edge or Brave is there, a tab otherwise), and stops when that
+console window is closed. The records live in `Plainbook` in the home folder
+unless `PLAINBOOK_ROOT` says otherwise; a newer file finds them there, and the
+same folder serves a source install later, the files are the same. A second
+start while the journal runs does not start a second journal: it opens the
+browser on the one that runs.
+
+The first run: Windows SmartScreen (*More info*, *Run anyway*); macOS
+*Privacy & Security*, *Open Anyway*, after unzipping; Linux `chmod +x` once.
+The README, "Checking a downloaded file", says how the file is verified.
+
+For autostart the file takes the place of `python3 -m plainbook.server` in the
+recipes above, with `PLAINBOOK_OPEN=0` in the environment so that a login does
+not open a browser: `ExecStart=%h/Applications/Plainbook-<version>-linux-x86_64`
+and `Environment=PLAINBOOK_OPEN=0` in the unit; the path of the exe as the
+target of the Windows shortcut (its console window stays open, that is the
+running journal) with `PLAINBOOK_OPEN=0` as a user environment variable; the
+path of the file in `ProgramArguments` of the LaunchAgent with the variable in
+`EnvironmentVariables`.
 
 ## The check after installing (not optional)
 

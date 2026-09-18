@@ -3067,5 +3067,69 @@ class ServerCase(unittest.TestCase):
         self.assertNotIn("← Journal", trade)
 
 
+class LaunchCase(unittest.TestCase):
+    """The entry points: where the records go, whether a browser opens, and
+    a second start on a taken port."""
+    @classmethod
+    def setUpClass(cls):
+        import plainbook.server
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.env_root = os.environ.get("PLAINBOOK_ROOT")
+        os.environ["PLAINBOOK_ROOT"] = cls.tmp.name
+        cls.S = importlib.reload(plainbook.server)
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.env_root is None:
+            os.environ.pop("PLAINBOOK_ROOT", None)
+        else:
+            os.environ["PLAINBOOK_ROOT"] = cls.env_root
+        cls.tmp.cleanup()
+
+    def test_records_next_to_the_source_and_in_home_for_a_file(self):
+        project = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.assertEqual(self.S.default_root(), project)
+        # a downloaded file unpacks into a temporary folder: not a place for records
+        sys.frozen = True
+        try:
+            self.assertEqual(self.S.default_root(),
+                             os.path.join(os.path.expanduser("~"), "Plainbook"))
+        finally:
+            del sys.frozen
+
+    def test_the_browser_flag(self):
+        w = self.S.wants_browser
+        self.assertTrue(w(True, {}))
+        self.assertFalse(w(False, {}))
+        self.assertFalse(w(True, {"PLAINBOOK_OPEN": "0"}))
+        self.assertFalse(w(True, {"PLAINBOOK_OPEN": "no"}))
+        self.assertTrue(w(False, {"PLAINBOOK_OPEN": "1"}))
+        self.assertTrue(w(False, {"PLAINBOOK_OPEN": " yes "}))
+        self.assertTrue(w(True, {"PLAINBOOK_OPEN": "maybe"}))
+
+    def test_a_second_start_on_a_taken_port_says_so_and_returns(self):
+        import contextlib
+        import socket
+        taken = socket.socket()
+        taken.bind(("127.0.0.1", 0))
+        taken.listen(1)
+        port = taken.getsockname()[1]
+        out = io.StringIO()
+        os.environ["PLAINBOOK_OPEN"] = "0"
+        old_port = self.S.PORT
+        self.S.PORT = port
+        try:
+            with contextlib.redirect_stdout(out):
+                self.S.main(open_browser=True)      # returns instead of raising
+        finally:
+            self.S.PORT = old_port
+            os.environ.pop("PLAINBOOK_OPEN", None)
+            taken.close()
+        self.assertIn("already running", out.getvalue())
+        self.assertIn(str(port), out.getvalue())
+        # the start laid the journal folders out before finding the port taken
+        self.assertTrue(os.path.isdir(os.path.join(self.tmp.name, "journal", "trades")))
+
+
 if __name__ == "__main__":
     unittest.main()
