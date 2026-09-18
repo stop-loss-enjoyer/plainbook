@@ -219,6 +219,8 @@ balance is right from the first minute.
 Autostart on Linux, Windows and macOS, plus desktop integration:
 **[INSTALL.md](INSTALL.md)**. The day-to-day guide: **[GUIDE.md](GUIDE.md)**.
 Writing a playbook, part by part: **[PLAYBOOK.md](PLAYBOOK.md)**.
+What is already here, tab by tab, and which requests it answers:
+**[FEATURES.md](FEATURES.md)**.
 
 ## Your data
 

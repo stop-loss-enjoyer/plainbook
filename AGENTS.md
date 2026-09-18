@@ -7,6 +7,13 @@ here instead of living in someone's head.
 
 Read this before you touch anything. It is short on purpose.
 
+Before adding anything, read [FEATURES.md](FEATURES.md): the map of what the
+journal already does and the names traders use for it. A request that uses
+the words of a trader, a trading system, a checklist, risk management, a
+watchlist, nearly always names a thing that is already here under a name of
+its own, and the answer is the tab, not a new one. A new tab has been built
+twice for a thing that existed; do not make it three.
+
 If you are working through Claude Code, `CLAUDE.md` points here. Other tools
 read this file directly.
 

@@ -2,6 +2,24 @@
 
 What changed and why. Newest first.
 
+## v1.6.2, 16.09.2026
+
+A map of everything the journal already does, for the agent that is asked to
+add something. No change to the interface or the records.
+
+### Added
+
+- `FEATURES.md`: what exists, on which tab, and which requests it answers,
+  in the words a trader uses. A person who shared the journal with a
+  friend saw the friend's agent build a **Trading System** tab, because the
+  words were on no tab of the navigation: the trading system is the
+  Playbooks tab, and it had been holding the same rules all along, with
+  the checklist, the limits and the cost of every rule that the copy did
+  not have. The map names the home of every such thing, from a trading
+  system to a watchlist, and `AGENTS.md` now sends an agent there before
+  any code is written. If you keep the journal with an agent, this file is
+  the update: the code is the same as 1.6.1.
+
 ## v1.6.1, 11.09.2026
 
 A plan the market went against is voided rather than deleted, the stop edge

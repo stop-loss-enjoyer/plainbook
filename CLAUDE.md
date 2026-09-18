@@ -13,6 +13,9 @@ their trades rather than about your implementation.
   [INSTALL.md](INSTALL.md).
 - When they ask "how do I…", the answer is usually already in [GUIDE.md](GUIDE.md).
   Point at it, and keep it current when the interface changes.
+- When they ask "can you add…", look in [FEATURES.md](FEATURES.md) first.
+  The thing is usually already there under another name, and the answer is
+  to show them the tab.
 - Trades and cards are entered through the web interface, not by editing files.
   If they ask you to fix a file directly, do it, then run the tests and check
   that the page still renders.
