@@ -2,7 +2,9 @@
 
 **A plain-text trading journal that lives on your machine.** Local, private,
 fast, and built to be kept by an agent. Your trades are markdown files and
-screenshots in a folder you own: no account, no cloud, no network calls.
+screenshots in a folder you own: no account, no cloud, no network calls, no
+subscription. It is free, the whole source is in this repository, and it runs
+on Windows, macOS and Linux, for forex, futures, stocks and crypto alike.
 
 [![tests](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml)
 [![release](https://img.shields.io/github/v/release/stop-loss-enjoyer/plainbook?label=release)](https://github.com/stop-loss-enjoyer/plainbook/releases/latest)
@@ -21,17 +23,23 @@ screenshots in a folder you own: no account, no cloud, no network calls.
 
 <p align="center"><i>The screenshots are made on invented data.</i></p>
 
-## Why
+## Why a journal on your own machine
 
 A trading journal holds the most private thing a trader has: every position, its
-size, and the reasoning behind it. Most journals are web services, so you type
-all that into someone else's database and hope for the best.
+size, and the reasoning behind it. Most journals are web services: TradeZella,
+Edgewonk, TraderSync, Tradervue and TradesViz keep your trades in their
+database, and where they import trades on their own, it is with a read-only
+login to your broker account kept on their servers, or with a sync running
+inside MetaTrader. All of them are paid, a few hundred dollars a year; where
+there is a free tier, it is for stocks only and capped. A beginner does not
+always have that to spare for a good journal, and a trader who has paid it for
+years can keep one for nothing.
 
 This one is a small program that serves a web interface on `127.0.0.1` and
-writes plain files into a folder. Nothing is uploaded, because nothing here
-knows how to upload. If the project disappears tomorrow, your records stay
-exactly as they are: text you can read in any editor, images you can open in any
-viewer.
+writes plain files into a folder. It costs nothing: no plan, no trial, no card,
+no account. Nothing is uploaded, because nothing here knows how to upload. If
+the project disappears tomorrow, your records stay exactly as they are: text
+you can read in any editor, images you can open in any viewer.
 
 It is opinionated where it matters. Balances are computed from history rather
 than stored, so they cannot drift. Risk and R are measured against the balance
@@ -43,11 +51,11 @@ commission.
 ## What it does
 
 **Trades, written in two steps.** You open a position (account, pair, direction,
-style, timeframes, risk, screenshots of the idea) and close it later with the
-result, the PnL, the exit screenshot and your conclusions. The idea
-gets written down before the market says who was right. The same position taken
-on two accounts is filled in once: a duplicate goes to the second account with a
-risk of its own.
+style, timeframes, the risk as a percent of the balance or as money, screenshots
+of the idea) and close it later with the result, the PnL, the exit screenshot
+and your conclusions. The idea gets written down before the market says who was
+right. The same position taken on two accounts is filled in once: a duplicate
+goes to the second account with a risk of its own.
 
 **A stop moved to breakeven frees its risk.** One button on an open
 position says the stop is at the entry: the trade can no longer lose what it
@@ -71,11 +79,12 @@ say how many went with the narrative and how many against it, and answer the
 only question worth asking of a plan.
 
 **A playbook, and a checklist before every trade.** The rules of a way of
-trading, written down once: the setups with their rules, the filters, the
-rules of holding the position, the limits. A trade is opened under a
-playbook and its rules are ticked in the form, a box each with a few words;
-nothing is refused, but every rule left unticked is recorded with the
-trade, with a line for why. The management rules are ticked at the close.
+trading, the trading system, written down once: the setups with their rules,
+the filters, the rules of holding the position, the limits. A trade is opened
+under a playbook and its rules are ticked in the form, a pre-trade checklist
+with a box each and a few words; nothing is refused, but every rule left
+unticked is recorded with the trade, with a line for why. The management
+rules are ticked at the close.
 The statistics then say what each rule is worth: the trades that broke it
 and what they brought in R, against the trades that kept every rule. Rules
 change by version, and a trade keeps the rules it was ticked against.
@@ -94,14 +103,15 @@ missed, the key lesson, and the same trades assessment as the daily card. The
 PnL and the number of trades come from the week you traded, and stay editable.
 
 **Statistics that answer honest questions.** Cut the whole history any way you
-like and the page opens on what that cut did: the EV per trade, the winrate
-beside the winrate it would need to break even, the payoff, the deepest fall
-from a high, the mistakes and the best and worst trade, each read against the
-trades the filter left out. Then the trades one bar each, or the weeks, months
-or quarters once there are too many to tell apart, the distribution of R as
-two rings, losses and wins cut by size, an equity curve per account, by date
-or by trade, coloured against the balance it started from, and the tables,
-dealt into two columns that end together; a row narrows the page to itself.
+like and the page opens on what that cut did: the EV per trade (the expectancy,
+in R), the winrate beside the winrate it would need to break even, the payoff
+ratio, the deepest fall from a high (the maximum drawdown), the mistakes and
+the best and worst trade, each read against the trades the filter left out.
+Then the trades one bar each, or the weeks, months or quarters once there are
+too many to tell apart, the distribution of R multiples as two rings, losses
+and wins cut by size, an equity curve per account, by date or by trade,
+coloured against the balance it started from, and the tables, dealt into two
+columns that end together; a row narrows the page to itself.
 
 **A report read in a second.** A month or a quarter opens on its figures, one
 tile each: the result, the winrate with the EV and the deepest fall from a
@@ -124,10 +134,10 @@ count, win rate, EV, Σ PnL and Σ R in the total row; one switch turns it into 
 or quarters. Filters hide behind a funnel button that says how many of them are on.
 
 **Screenshots by Ctrl+V.** Click the drop zone, paste, done. From TradingView,
-from a screen capture, from anywhere. A cross on the thumbnail takes it back
-out. There is a zone in the idea of a trade, in its conclusions, in the analysis
-and the plan of a trading plan, and in the update of one, so a picture lands
-under the line it belongs to.
+from MetaTrader, from a screen capture, from anywhere. A cross on the thumbnail
+takes it back out. There is a zone in the idea of a trade, in its conclusions,
+in the analysis and the plan of a trading plan, and in the update of one, so a
+picture lands under the line it belongs to.
 
 **Money in and out, counted apart from trading.** Deposits, withdrawals and
 fees are written down on the Accounts tab, and the money taken off an account
@@ -149,14 +159,14 @@ the same check from the terminal.
 idea, conclusion, note, plan, update, review and card, and every hit is a link
 to the record with the matching words shown around it.
 
-**A limit for the day on a prop account.** Set it once, and the tile of the
+**A daily loss limit for a prop firm account.** Set it once, and the tile of the
 account adds up what today has already cost and what the open trades still put
 at risk, turns amber at four fifths of the limit and red when it is reached.
 
-**The deepest fall from a high.** How far a selection went under its own high,
-in R. On the Statistics tab it also says between which dates, whether it has
-been made back and the longest run of losses of the selection; a report carries the
-figure against the period before.
+**The deepest fall from a high**, the maximum drawdown. How far a selection
+went under its own high, in R. On the Statistics tab it also says between which
+dates, whether it has been made back and the longest losing streak of the
+selection; a report carries the figure against the period before.
 
 **The selection as CSV.** One button next to the filters writes the filtered
 list into a file for a spreadsheet, with every stored field and the computed
@@ -181,7 +191,7 @@ first place: plain files, no dependencies, a small surface.
 
 - **Nothing to resolve, nothing to build.** No package manager, no lockfile, no
   bundler. An agent that can run `python3` can run the whole project.
-- **The tests finish in a few seconds.** 273 of them, no fixtures, no network.
+- **The tests finish in a few seconds.** 289 of them, no fixtures, no network.
   A change can be verified in the same breath it was written.
 - **The rules are written down, not remembered.** [AGENTS.md](AGENTS.md) holds
   the map of the code, the invariants that must not be broken, recipes for the
@@ -197,7 +207,8 @@ first place: plain files, no dependencies, a small surface.
   The guard enforces it, so a contributor's own language never leaks into a
   public page.
 
-`CLAUDE.md` points at the same guide, so Claude Code picks it up unprompted.
+`CLAUDE.md` points at the same guide, so Claude Code picks it up unprompted;
+Codex, Cursor and the other agents read `AGENTS.md` on their own.
 
 ## Install
 
@@ -403,11 +414,12 @@ private one that is never pushed anywhere.
 never written to a file. Nothing can go stale, because there is no stored copy
 to go stale.
 
-**R** = PnL / (risk% × the account balance **at the moment of entry**). The exit
-of a trade carries its hour, so a position closed earlier the same day is already
-in that balance; an exit written without an hour counts from the next day, since
-nothing then says which of the two came first. Measured this way, 1% of risk
-stops looking like the same amount of money forever.
+**R** (the R multiple of a trade) = PnL / (risk% × the account balance **at the
+moment of entry**). The exit of a trade carries its hour, so a position closed
+earlier the same day is already in that balance; an exit written without an
+hour counts from the next day, since nothing then says which of the two came
+first. Measured this way, 1% of risk stops looking like the same amount of
+money forever.
 
 **Win rate** = wins / (wins + losses). Break-even trades stay out of the
 denominator: such a trade ended neither way, and diluting the hit rate with it
@@ -415,13 +427,13 @@ would be dishonest. What they do cost (commission, the spread, the opportunity
 spent) is fully visible in the sum and in the EV, where they count like
 everything else.
 
-**EV** = Σ R / closed trades: what a trade brought on average, in R. It stands
-to the right of every win rate on the front page, and is a column of every
-table on the Statistics tab and in the reports. A win rate worked out from
-fewer than five decided trades stands in grey, because a percentage of two
-trades is not a rate. Unlike the win rate, it counts
-the break-evens: a trade closed at zero still paid its commission and never
-comes back at exactly zero R.
+**EV** = Σ R / closed trades: the expectancy, what a trade brought on average,
+in R. It stands to the right of every win rate on the front page, and is a
+column of every table on the Statistics tab and in the reports. A win rate
+worked out from fewer than five decided trades stands in grey, because a
+percentage of two trades is not a rate. Unlike the win rate, it counts the
+break-evens: a trade closed at zero still paid its commission and never comes
+back at exactly zero R.
 
 **A period is what closed in it.** A report, the current-period tile on the
 front page and the cards count the trades that closed in the period, the way a
@@ -474,8 +486,8 @@ described in [INSTALL.md](INSTALL.md).
 Stated plainly, so nobody waits for it:
 
 - **No cloud, no sync, no multi-user.** One person, one machine, one folder.
-- **No broker or exchange API.** Trades are entered by hand, on purpose: typing
-  the idea in is the part that makes a journal worth keeping.
+- **No broker, exchange or MetaTrader connection.** Trades are entered by hand,
+  on purpose: typing the idea in is the part that makes a journal worth keeping.
 - **No dependencies, ever.** The Python standard library is the whole of it.
   That is a design constraint, not an accident: a journal you may still need in
   five years should not rot because a package did.
@@ -485,9 +497,48 @@ Stated plainly, so nobody waits for it:
 
 ## FAQ
 
-**Forex only?** No. A pair is free text, so stocks, futures and crypto tickers
-all work. The trading styles, the entry timeframes and the execution formats are
-lists you edit on the Accounts tab, so the words in the form are your own.
+**Is Plainbook free?** Yes. There is no plan, no trial, no card and no
+account. The licence is PolyForm Noncommercial: run it, change it, pass it on,
+as long as nobody sells it.
+
+**Is it open source?** The whole source is in this repository, to read, change
+and share. The licence is PolyForm Noncommercial rather than an OSI one,
+because it forbids selling the journal or building it into a product that is
+sold; if that is what open source means to you, this is not it.
+
+**Is it a replacement for TradeZella, Edgewonk or TraderSync?** For keeping
+and reading a journal, yes: trades with screenshots, playbooks with their
+checklist, plans, notes, daily and weekly cards, statistics, monthly and
+quarterly reports. What it does not have is what those have by being online:
+broker sync and, for most of them, a mobile app. See
+[What it is not](#what-it-is-not).
+
+**Does it need the internet?** No. It runs on your machine, reads and writes a
+folder, and makes no network request at all; the interface works with the
+cable pulled out.
+
+**Does it connect to my broker or to MetaTrader?** No, on purpose. Trades are
+typed in, because writing the idea down is the part that makes a journal worth
+keeping. Screenshots come from wherever you take them: TradingView,
+MetaTrader, a screen capture.
+
+**Is it for forex only?** No. A pair is free text, so stocks, futures, indices,
+metals and crypto tickers all work. The trading styles, the entry timeframes
+and the execution formats are lists you edit on the Accounts tab, so the words
+in the form are your own.
+
+**Windows, macOS or Linux?** All three: a file per system on the releases
+page, or the source on any Python 3.10 or newer.
+
+**Can I bring in the trades I already have?** Yes. `tools/import_csv.py`
+takes a CSV table, from a spreadsheet, a Notion export or another journal,
+and writes the trades the way the interface does. [INSTALL.md](INSTALL.md)
+walks an agent through it.
+
+**Can a coding agent install and run it?** Yes: Claude Code, Codex, Cursor or
+another agent, opened in the folder and told to read [INSTALL.md](INSTALL.md),
+which is written for it. [AGENTS.md](AGENTS.md) is what it reads before
+changing anything.
 
 **Can I edit the files by hand?** Yes, that is the point. Keep the header keys
 intact; everything else is ordinary markdown.
