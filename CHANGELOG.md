@@ -2,6 +2,19 @@
 
 What changed and why. Newest first.
 
+## v1.7.1, 21.09.2026
+
+A trading plan leaves the journal the way a trade does: as one file, with
+its screenshots inside and no money in it, to be read by another trader.
+
+- **Share on a plan.** The page of a trading plan has the same Share button
+  a trade has: one HTML file with the analysis and its screenshots, what was
+  to be done, the updates, the review, and the trades tied to the plan with
+  their result in R. No money in it, and the preview with the weight of the
+  file before anything leaves.
+- In a document, the bold date of an update stayed alone on its line and the
+  words after it began with a colon; the line reads whole now.
+
 ## v1.7.0, 18.09.2026
 
 The journal packed into one file per system, so that it runs on a machine

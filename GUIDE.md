@@ -989,20 +989,25 @@ holds the record and its screenshots inside itself. It opens in any browser on
 any computer, with no journal running and no network, and it can be sent the
 way any file is sent.
 
-**Share stands in three places.** On a trade, next to Edit: the trade whole,
+**Share stands in four places.** On a trade, next to Edit: the trade whole,
 the plan it followed and the setup it was taken under, the idea with its
 screenshots by timeframe, the checklist with what was met and what was not and
-why, the exit shot and your conclusions. Over the list on
-the front page, next to CSV: whatever the filters are showing right now, with
-the figures of that selection above it. And on a report: the month or the
-quarter with its figures, your conclusions and every trade it closed.
+why, the exit shot and your conclusions. On a plan, next to Edit as well: the
+days and the pair, the narrative, the analysis with its screenshots, what was
+to be done, the updates written while it ran, the review, and the trades tied
+to the plan with their R, so that the reader sees what was expected and what
+came of it. Over the list on the front page, next to CSV: whatever the
+filters are showing right now, with the figures of that selection above it.
+And on a report: the month or the quarter with its figures, your conclusions
+and every trade it closed.
 
 **You see what leaves before it leaves.** Share opens the document itself, with
 one strip across the top: how much the file will weigh, whether the screenshots
 go with it, and the **Download** button. The strip is not part of the file. On
 a selection and a report you can drop the screenshots and send the figures
 alone, which turns a file of forty megabytes into one of forty kilobytes; a
-single trade always carries them, since they are the reason to show it at all.
+single trade or a plan always carries them, since they are the reason to show
+it at all.
 When the trades go in full, the file reads as pages: it opens on the report,
 a line of the list opens its trade alone, and the head of the trade leads to
 the list and to the trades before and after it. The browser's Back works

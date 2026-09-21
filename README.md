@@ -162,8 +162,8 @@ figure against the period before.
 list into a file for a spreadsheet, with every stored field and the computed
 ones: R, the balance at entry, the risk in money.
 
-**Something to show another trader.** Share, on a trade, over the filtered
-list, or on a report, writes one HTML file with the screenshots carried inside
+**Something to show another trader.** Share, on a trade, on a plan, over the
+filtered list, or on a report, writes one HTML file with the screenshots carried inside
 it: it opens on any machine, offline, with no journal running, and prints to a
 PDF that reads like the journal. Money never travels in it, not the PnL, the
 risk in money, a balance or the size of an account, only R and the percent the
@@ -190,7 +190,7 @@ first place: plain files, no dependencies, a small surface.
 - **A guard stands between an agent and your records.** `tools/check_public.py`
   refuses a push that would carry trade records, private paths or anything
   else it recognises as yours; it runs as a pre-push hook and in CI.
-- **The whole program is ~13 100 lines** of straightforward Python, and the
+- **The whole program is ~13 400 lines** of straightforward Python, and the
   routing table fits on one screen. It fits in a context window, so an agent
   reasons about the real thing rather than about a summary of it.
 - **One language throughout:** code, comments, documents and commit messages.
@@ -456,7 +456,7 @@ Measured on a journal of 159 trades with 363 screenshots:
 | a trade page | **2 ms**, 14 KB |
 | statistics with charts | **7 ms**, 37 KB |
 | server memory | **25 MB** |
-| the whole program | **~13 100 lines of Python** |
+| the whole program | **~13 400 lines of Python** |
 
 Pages are plain HTML rendered by one Python process: no framework, no bundler,
 no build step. The charts are SVG generated on the server. There is nothing to

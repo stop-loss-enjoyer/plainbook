@@ -3382,27 +3382,8 @@ def plan_result(j, trades):
 
 
 def plan_followed(j, k, trades):
-    """Did the trades go the way the plan said? One line, or nothing when the
-    plan expected nothing in particular.
-
-    A bullish plan is followed by a long and gone against by a short; a plan
-    that said "no trade" is gone against by every trade taken under it."""
-    side = {"bullish": "long", "bearish": "short"}.get(k.narrative)
-    if not trades or not (side or k.narrative == "no trade"):
-        return ""
-
-    def told(xs):
-        if not xs:
-            return "none"
-        s = stats.summary(j, xs)
-        words = f"{len(xs)} trade" if len(xs) == 1 else f"{len(xs)} trades"
-        return words + (f" at {s.sum_r:+.2f} R" if s.trades else "")
-
-    if k.narrative == "no trade":
-        return f"the plan was not to trade; taken anyway: {told(trades)}"
-    with_it = [t for t in trades if t.direction == side]
-    against = [t for t in trades if t.direction != side]
-    return f"with the narrative: {told(with_it)} · against it: {told(against)}"
+    """The line the document of a plan says, so the page says the same."""
+    return share.plan_followed(j, k, trades)
 
 
 def plan_state(k, today):
@@ -3542,7 +3523,9 @@ def plan_page(plan_id):
                      f'<div class="actions"><button class="btn danger">'
                      f'Void</button></div></form></div>')
         void_button = f'<a class="btn danger" href="#void">Void</a>'
-    buttons = (f'<a class="btn" href="/plan/{U(k.id)}/edit">Edit</a>'
+    buttons = (f'<a class="btn" href="/share/plan/{U(k.id)}" '
+               f'title="the plan as one file, to show another trader">Share</a>'
+               f'<a class="btn" href="/plan/{U(k.id)}/edit">Edit</a>'
                f'{void_button}'
                f'<form method="post" action="/plan/{U(k.id)}/delete" '
                f'style="display:inline" onsubmit="return confirm('
@@ -6613,6 +6596,24 @@ def share_trade(trade_id, q):
     return name, share.trade_document(ROOT, j, t, book, carry, note)
 
 
+def share_plan(plan_id, q):
+    """One plan whole: what was expected, what was done, and the trades
+    taken under it, the way it is read back with another trader."""
+    try:
+        k = store.load_plan(ROOT, plan_id)
+    except (OSError, RecordError):
+        return None
+    j = journal()
+    trades = plan_trades(j, k.id)
+    carry, _ = share_wanted(q)
+    name = share_name(k.id)
+    note = ""
+    if not carry:
+        note = share_bar(f"/share/plan/{U(k.id)}", q, f"/plan/{U(k.id)}",
+                         share.weigh_plan(ROOT, k), name=name)
+    return name, share.plan_document(ROOT, j, k, trades, carry, note)
+
+
 def share_filters(j, q):
     """The cut in words, for the line under the title of the document."""
     said = []
@@ -6731,6 +6732,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             made = share_trade(parts[2], q)
         elif len(parts) == 3 and parts[1] == "report" and store.safe_dir_name(parts[2]):
             made = share_report(parts[2], q)
+        elif len(parts) == 3 and parts[1] == "plan" and store.safe_dir_name(parts[2]):
+            made = share_plan(parts[2], q)
         elif len(parts) == 2 and parts[1] == "journal":
             made = share_selection(q)
         if made is None:

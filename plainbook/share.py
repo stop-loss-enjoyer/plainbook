@@ -25,6 +25,7 @@ import re
 from datetime import datetime, timedelta
 
 from . import __version__, flags, stats, store
+from .model import PAIR_NOT_SET
 from .html import (ACCENT, AXIS, BAD, DIM, EDGE, FAVICON, GOOD, GRID, GROUND,
                    INK, INK2, MONO, RAISED, SURFACE, WARN, esc, mark, pair)
 
@@ -397,6 +398,128 @@ def trade_card(root, j, t, book=None, carry=True, heading=None, near=None,
             + ways + "</section>")
 
 
+# --- a plan ----------------------------------------------------------------
+# A plan is written before the market opens and read back after: what was
+# expected, what was to be done, what happened, and the trades taken under it.
+# It carries no money either way; what its trades came to is said in R.
+
+def plan_shots(root, plan_id, carry=True):
+    return Shots(os.path.join(store.plan_dir(root, plan_id), store.SHOTS),
+                 f"/plan-shot/{plan_id}", carry)
+
+
+def plan_shot_names(k):
+    """Every picture a plan holds, in the order the document draws them."""
+    names = [n for block in k.analysis for n in block.images]
+    for text in (k.plan, k.updates, k.review):
+        names += re.findall(r"!\[\]\(([^)]+)\)", text)
+    return names
+
+
+def weigh_plan(root, k):
+    """What the file of a plan will weigh, in bytes."""
+    return (empty_weight() + CARD
+            + plan_shots(root, k.id).weight(plan_shot_names(k)))
+
+
+def plan_outcome(j, trades):
+    """What the trades tied to a plan came to, in one line and in R."""
+    if not trades:
+        return "no trade was tied to it"
+    s = stats.summary(j, trades)
+    open_now = sum(1 for t in trades if t.is_open)
+    bits = [f"{len(trades)} trade" + ("" if len(trades) == 1 else "s")]
+    if open_now:
+        bits.append(f"{open_now} open")
+    if s.trades:
+        if s.decided:
+            bits.append(f"WR {s.wr:.0f}%")
+        bits.append(f"{r_text(s.sum_r)} R")
+    return " · ".join(bits)
+
+
+def plan_followed(j, k, trades):
+    """Did the trades go the way the plan said? One line, or nothing when the
+    plan expected nothing in particular. The page of a plan says the same
+    line, and reads it from here so that the two cannot drift apart.
+
+    A bullish plan is followed by a long and gone against by a short; a plan
+    that said "no trade" is gone against by every trade taken under it."""
+    side = {"bullish": "long", "bearish": "short"}.get(k.narrative)
+    if not trades or not (side or k.narrative == "no trade"):
+        return ""
+
+    def told(xs):
+        if not xs:
+            return "none"
+        s = stats.summary(j, xs)
+        words = f"{len(xs)} trade" if len(xs) == 1 else f"{len(xs)} trades"
+        return words + (f" at {s.sum_r:+.2f} R" if s.trades else "")
+
+    if k.narrative == "no trade":
+        return f"the plan was not to trade; taken anyway: {told(trades)}"
+    with_it = [t for t in trades if t.direction == side]
+    against = [t for t in trades if t.direction != side]
+    return f"with the narrative: {told(with_it)} · against it: {told(against)}"
+
+
+def plan_facts(j, k, trades):
+    """The fields of a plan a reader is shown: its days, the pair, what it
+    expected, and what came of it."""
+    until = (day_text(k.until, False) if k.until and k.until != k.day
+             else "the same day")
+    rows = [("from", esc(day_text(k.day, False))),
+            ("until", esc(until)),
+            ("pair", pair(k.pair)),
+            ("narrative", esc(k.narrative or "-")),
+            ("trades", esc(plan_outcome(j, trades)))]
+    if k.voided:
+        rows.append(("voided", esc(f"{day_text(k.voided, False)}, the reason "
+                                   "is under Updates")))
+    followed = plan_followed(j, k, trades)
+    if followed:
+        rows.append(("plan against fact", esc(followed)))
+    return "".join(f'<tr><td class="dim">{esc(name)}</td><td>{value}</td></tr>'
+                   for name, value in rows)
+
+
+def plan_card(root, j, k, trades, carry=True):
+    """One plan whole: the facts, the analysis with its screenshots, what
+    was to be done, the updates written while it ran, the review, and the
+    trades that were tied to it."""
+    shots = plan_shots(root, k.id, carry)
+    analysis = ""
+    for block in k.analysis:
+        pictures = "".join(shots.img(n, "analysis screenshot")
+                           for n in block.images)
+        analysis += (f'<div class="block">'
+                     + (f"<h3>{esc(block.tf)}</h3>" if block.tf else "")
+                     + f'<div class="text">{bold(block.text)}</div>'
+                     + (f'<div class="shots">{pictures}</div>' if pictures else "")
+                     + "</div>")
+
+    def text_card(heading, text):
+        if not text.strip():
+            return ""
+        return (f'<div class="card"><h2>{heading}</h2>'
+                f'<div class="text shots">{with_shots(text, shots)}</div></div>')
+
+    tied = ""
+    if trades:
+        tied = (f'<div class="card"><h2>Trades of this plan</h2>'
+                f'{trades_table(j, trades)}'
+                f'<p class="caption">{esc(plan_outcome(j, trades))}</p></div>')
+    return (f'<section class="plan"><div class="card">'
+            f'<p class="meta">{esc(k.id)}</p>'
+            f'<table class="props">{plan_facts(j, k, trades)}</table></div>'
+            + (f'<div class="card"><h2>Analysis</h2>{analysis}</div>'
+               if analysis else "")
+            + text_card("Plan", k.plan)
+            + text_card("Updates", k.updates)
+            + text_card("Review", k.review)
+            + tied + "</section>")
+
+
 def slice_card(j, heading, rows):
     """A breakdown of the selection, in R. The column of money the journal
     prints here has no place in a document."""
@@ -460,6 +583,18 @@ def trade_document(root, j, t, book=None, carry=True, note=""):
                                   t.result or "position open") if x)
     return document(f"{t.pair} {t.direction}".strip(), esc(lead),
                     trade_card(root, j, t, book, carry), note)
+
+
+def plan_document(root, j, k, trades, carry=True, note=""):
+    span = day_text(k.day, False)
+    if k.until and k.until != k.day:
+        span += f" to {day_text(k.until, False)}"
+    lead = " · ".join(x for x in (span, k.narrative,
+                                  "voided" if k.voided else "") if x)
+    title = k.title or ("Trading plan" if k.pair == PAIR_NOT_SET
+                        else f"{k.pair} plan")
+    return document(title, esc(lead), plan_card(root, j, k, trades, carry),
+                    note)
 
 
 def trade_pages(root, j, trades, book_of, carry):
@@ -611,6 +746,11 @@ tr.go:hover a.to{{border-color:{DIM}}}
 .shots{{display:flex;flex-direction:column;gap:12px;margin-top:12px}}
 .shots img{{display:block;width:100%;height:auto;border:1px solid {AXIS};
  border-radius:5px;background:{GROUND}}}
+/* a text with pictures standing inside it is a paragraph, not a column: in a
+   flex column the bold date of an update and the words after it become two
+   items and the line breaks at the colon */
+.text.shots{{display:block}}
+.text.shots img{{margin:12px 0}}
 
 ol.rules{{list-style:none;margin:0;padding:0;counter-reset:none}}
 ol.rules li{{display:flex;gap:10px;padding:7px 0;

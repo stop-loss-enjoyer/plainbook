@@ -2835,6 +2835,38 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/")
         self.assertIn('href="/share/journal"', html)
 
+    def test_94b_a_plan_is_shown_as_one_file_too(self):
+        """The same preview and the same file for a plan: the button on its
+        page, the strip over the preview, the pictures inside the file."""
+        _, form = self.get("/plan/new")
+        token = self.form_token(form)
+        shot = self.paste_shot(token, "idea-1")
+        _, where = self.post("/plan/new", {
+            "token": token, "blocks": "1", "title": "shown week", "pair": "EURUSD",
+            "narrative": "bullish", "from": "2026-07-06", "until": "2026-07-10",
+            "idea_tf_1": "D1", "idea_text_1": "range formed",
+            "file_idea-1": shot["file"],
+            "plan_text": "long from the nearest SNR, no shorts"})
+        plan_id = self.landed(where)
+        q = urllib.parse.quote(plan_id)
+        self.open_trade(plan=plan_id, direction="long", entry="2026-07-07T10:00")
+        _, html = self.get(f"/plan/{q}")
+        self.assertIn(f'href="/share/plan/{plan_id}"', html)
+        code, html = self.get(f"/share/plan/{q}")
+        self.assertEqual(code, 200)
+        self.assertIn('class="bar"', html)
+        self.assertIn(f'src="/plan-shot/{plan_id}/', html)
+        self.assertIn("range formed", html)
+        self.assertIn("Trades of this plan", html)
+        code, html = self.get(f"/share/plan/{q}?file=1")
+        self.assertEqual(code, 200)
+        self.assertNotIn('class="bar"', html)
+        self.assertNotIn('src="/plan-shot/', html)
+        self.assertIn("data:image/png;base64,", html)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.get("/share/plan/no-such-plan")
+        self.assertEqual(caught.exception.code, 404)
+
     def test_95_breakeven_frees_the_risk_of_an_open_trade(self):
         """Two trades of 1% against a limit of 150 $: over. The first moved
         to breakeven: 100 $ at risk, the tile calms down, the trade says

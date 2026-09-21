@@ -48,9 +48,23 @@ class ShareCase(unittest.TestCase):
                         management=[Rule(number=3, text="Stop to break-even at 1 R")])
         store.save_playbook(cls.root, book)
         cls.book = book
-        store.save_plan(cls.root, Plan(id="2026-08-12-eurusd", title="Sweep of the Asian high",
-                                       pair="EURUSD", narrative="bullish",
-                                       day=datetime(2026, 8, 12).date()))
+        k = Plan(id="2026-08-12-eurusd", title="Sweep of the Asian high",
+                 pair="EURUSD", narrative="bullish",
+                 day=datetime(2026, 8, 12).date(),
+                 until=datetime(2026, 8, 14).date(),
+                 analysis=[IdeaBlock(tf="D1", text="Higher lows into the level.",
+                                     images=["shots/idea-01-01.png"])],
+                 plan="Buy the sweep of the Asian high only.",
+                 updates="**13.08.2026**: swept, waiting for the retest"
+                         "\n![](shots/update-01.png)",
+                 review="It played out.\n\n![](shots/review-01.png)")
+        store.save_plan(cls.root, k)
+        folder = os.path.join(store.plan_dir(cls.root, k.id), store.SHOTS)
+        os.makedirs(folder, exist_ok=True)
+        for name in ("idea-01-01.png", "update-01.png", "review-01.png"):
+            with open(os.path.join(folder, name), "wb") as f:
+                f.write(PNG)
+        cls.k = k
         t = Trade(id="2026-08-12-01-eurusd", account="broker", pair="EURUSD",
                   direction="long", style="swing", entry_tf="H4",
                   execution=["SNR"], risk=0.85,
@@ -94,7 +108,7 @@ class ShareCase(unittest.TestCase):
     def test_it_names_the_plan_the_trade_followed(self):
         text = without_pictures(self.document())
         self.assertIn("Sweep of the Asian high", text)
-        self.assertIn("12.08.2026 · EURUSD", text)
+        self.assertIn("12.08.2026 to 14.08.2026 · EURUSD", text)
 
     def test_the_r_is_the_figure_it_carries(self):
         r = self.j.r(self.t.id)
@@ -131,6 +145,34 @@ class ShareCase(unittest.TestCase):
         text = self.document(carry=False)
         self.assertNotIn("data:image/png;base64,", text)
         self.assertEqual(text.count(f'src="/shot/{self.t.id}/'), 4)
+
+    def plan_document(self, **kw):
+        return share.plan_document(self.root, self.j, self.k,
+                                   [t for t in self.j.trades
+                                    if t.plan == self.k.id], **kw)
+
+    def test_a_plan_is_shown_the_same_way(self):
+        """The plan whole, with its trades in R, and no money anywhere."""
+        text = without_pictures(self.plan_document())
+        for word in ("Sweep of the Asian high", "12.08.2026 to 14.08.2026",
+                     "bullish", "Higher lows into the level.",
+                     "Buy the sweep of the Asian high only.",
+                     "swept, waiting for the retest", "It played out.",
+                     "Trades of this plan", "with the narrative: 1 trade"):
+            self.assertIn(word, text, word)
+        self.assertIn(f"{self.j.r(self.t.id):+.2f}", text)
+        for figure in (PNL, START_BALANCE):
+            for shape in (f"{figure:,.0f}".replace(",", " "),
+                          f"{figure:,.0f}".replace(",", ""),
+                          f"{figure:.2f}"):
+                self.assertNotIn(shape, text, shape)
+        self.assertEqual(self.plan_document().count("data:image/png;base64,"), 3)
+        preview = self.plan_document(carry=False)
+        self.assertNotIn("data:image/png;base64,", preview)
+        self.assertEqual(preview.count(f'src="/plan-shot/{self.k.id}/'), 3)
+        guess = share.weigh_plan(self.root, self.k)
+        real = len(self.plan_document().encode("utf-8"))
+        self.assertLess(abs(guess - real), real * 0.2)
 
     def test_a_missing_picture_does_not_kill_the_document(self):
         os.rename(os.path.join(store.trade_dir(self.root, self.t.id),
