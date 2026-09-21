@@ -78,17 +78,23 @@ followed, so the plan page can show every trade that came out of it with its R,
 say how many went with the narrative and how many against it, and answer the
 only question worth asking of a plan.
 
-**A playbook, and a checklist before every trade.** The rules of a way of
-trading, the trading system, written down once: the setups with their rules,
-the filters, the rules of holding the position, the limits. A trade is opened
-under a playbook and its rules are ticked in the form, a pre-trade checklist
-with a box each and a few words; nothing is refused, but every rule left
-unticked is recorded with the trade, with a line for why. The management
-rules are ticked at the close.
-The statistics then say what each rule is worth: the trades that broke it
-and what they brought in R, against the trades that kept every rule. Rules
-change by version, and a trade keeps the rules it was ticked against.
-[PLAYBOOK.md](PLAYBOOK.md) takes the form apart.
+**A playbook: the trading system, present at every trade.** The rules of a
+way of trading, written down once: the setups with their rules, the filters,
+the rules of holding the position, the limits. The system stands in the trade
+form itself: a trade is opened under a playbook and its rules are ticked
+there, a pre-trade checklist with a box each and a few words, and the
+management rules are ticked at the close. Nothing is refused. Any rule can be
+broken, and every rule left unticked is recorded with the trade, with a line
+for why.
+
+**So every broken rule has a price.** The statistics say what each rule is
+worth: the trades that broke it and what they brought in R, against the
+trades that kept every rule. An edge that has been ticked against every trade
+is a figure rather than a belief, and the place in the trading process where
+the most is lost shows on its own, because the rules and the numbers were
+collected as the trades were written. Rules change by version, and a trade
+keeps the rules it was ticked against. [PLAYBOOK.md](PLAYBOOK.md) takes the
+form apart.
 
 **A daily card.** The day reviewed on the pattern of a paper Daily Report Card:
 process grade, opportunity quality, focus, what went well, errors, best trade,
