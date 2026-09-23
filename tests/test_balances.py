@@ -8,6 +8,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from plainbook import store
 from plainbook.balances import Journal
 from plainbook.model import Trade, Account, Adjustment
 
@@ -370,6 +371,8 @@ class PropRules(unittest.TestCase):
                      result="Win" if pnl > 0 else "Lose", pnl=pnl,
                      closed=closed, closed_time=True)
 
+    @unittest.skipUnless(store.zone("Europe/Prague"),
+                         "no time zone data here: Python on Windows needs tzdata")
     def test_the_firm_counts_its_day_on_its_own_clock(self):
         """Midnight in Prague is 01:00 in Moscow in September: a loss closed at
         00:30 Moscow time belongs to the firm's day before."""

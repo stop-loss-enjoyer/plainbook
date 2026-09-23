@@ -48,11 +48,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+      # tzdata goes into the file and not into the source: the clocks of the
+      # prop firms have names Python on Windows cannot read without it. It is
+      # installed before the tests, so the file is tested with what it carries
+      - run: python -m pip install pyinstaller==6.22.3 tzdata==2026.4
       - name: the tests, on the Python that goes into the file
         run: python -m unittest discover -s tests
-      # tzdata goes into the file and not into the source: the clocks of the
-      # prop firms have names Python on Windows cannot read without it
-      - run: python -m pip install pyinstaller==6.22.3 tzdata==2026.4
       - name: one file
         run: python -m PyInstaller --onefile --clean --name Plainbook --paths . --hidden-import tzdata --collect-data tzdata tools/app_entry.py
       - name: name it after the release

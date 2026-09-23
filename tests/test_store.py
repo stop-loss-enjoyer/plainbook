@@ -539,6 +539,8 @@ class Settings(unittest.TestCase):
         self.root = tempfile.mkdtemp()
         store.make_layout(self.root)
 
+    @unittest.skipUnless(store.zone("Europe/Prague"),
+                         "no time zone data here: Python on Windows needs tzdata")
     def test_the_clock_is_this_computers_until_named(self):
         self.assertEqual(store.clock(self.root), "")
         self.assertEqual(store.save_clock(self.root, "Europe/Prague"), "Europe/Prague")

@@ -1974,7 +1974,9 @@ class ServerCase(unittest.TestCase):
         self.post("/account/prop-5k/rules", {
             "kind": "prop", "firm": "SomeFirm", "daily": "5%", "max": "500",
             "mode": "trailing", "target": "8%", "days": "3", "day_start": "00:00",
-            "zone": "Europe/Prague"})
+            # a clock by name needs the zone data, which Python on Windows
+            # has only with tzdata; the rules read the same without one
+            "zone": "Europe/Prague" if store.zone("Europe/Prague") else ""})
         a = store.all_accounts(self.root)["prop-5k"]
         self.assertEqual((a.daily_loss_limit, a.max_loss, a.profit_target, a.min_days),
                          (250, 500, 400, 3))
