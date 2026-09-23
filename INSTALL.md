@@ -1,8 +1,9 @@
 # Install
 
 Written for an agent (Claude Code) setting the journal up on someone's machine.
-Talk to them in their own language; they are a trader, not a developer, so show
-the result, not the code. Installing by hand works the same way.
+Talk to them in their own language, and remember they are a trader: show them
+the result and keep the code to yourself. Installing by hand follows the same
+steps.
 
 ## What is needed
 
@@ -11,8 +12,9 @@ the result, not the code. Installing by hand works the same way.
     `xcode-select --install` or Homebrew.
   - Windows: `py --version`. If missing, the installer from python.org, ticking
     "Add python.exe to PATH".
-- **A browser**, any of them. A Chromium-based one (Chrome, Edge, Brave) understands
-  `--app=URL`, which makes the journal look like an application rather than a tab.
+- **A browser**, any of them. A Chromium-based one (Chrome, Chromium, Edge,
+  Brave) understands `--app=URL`, which opens the journal in a window of its
+  own.
 - **git**, optional but well worth it: the journal is files, and git gives them
   a history and a guard against an accidental mangling.
 
@@ -21,9 +23,10 @@ the result, not the code. Installing by hand works the same way.
 - With git: `git clone https://github.com/stop-loss-enjoyer/plainbook.git`.
 - Without git: the releases page,
   <https://github.com/stop-loss-enjoyer/plainbook/releases/latest>, under
-  *Assets*, *Source code (zip)*. Unzip it; the folder inside is the `Plainbook`
-  folder the steps below speak of. A zip handed over by another trader is the
-  same thing.
+  *Assets*, *Source code (zip)*. Unzip it; the folder inside is the program
+  folder the steps below speak of (the records folder of the downloaded file
+  is called `Plainbook` as well, so keep the two apart). A zip handed over by
+  another trader is the same thing.
 - Or skip the source: the same page has a ready file per system, see
   [The ready-made file](#the-ready-made-file) at the end. Python is not needed
   for it, the tests do not apply, and the steps below shrink to where the
@@ -31,8 +34,8 @@ the result, not the code. Installing by hand works the same way.
 
 ## Common steps (every OS)
 
-1. Put the `Plainbook` folder where they keep their projects (agree the
-   path with them).
+1. Put the program folder where they keep their projects (agree the path
+   with them).
 2. Run the tests: `python3 -m unittest discover -s tests` (Windows:
    `py -m unittest discover -s tests`). They all have to pass; that is the
    check that Python and the encodings are in order. (With the ready-made
@@ -49,17 +52,19 @@ the result, not the code. Installing by hand works the same way.
    folder, the one worth a history. Agree a rhythm with them (new
    trades do not commit themselves).
 5. Start the server (see your OS below) and open http://localhost:8778.
-6. Create their account together: name and start balance. **The start balance
-   is the real balance of the account today**, then the computed balance is
-   right from the first minute. Add their trading pairs.
+6. Create their account together, on the **Accounts** tab, *Create account*:
+   name and start balance. **The start balance is the real balance of the
+   account today**, then the computed balance is right from the first minute.
+   Add their trading pairs on the same tab.
 7. Check it together: create a test trade, close it, see that the balance and R
-   were worked out, then delete the test trade (it lands in `.trash`, show them
-   that, deleting has to feel reversible). Show where the files live.
+   were worked out, then delete the test trade and show them where it landed,
+   in `.trash`, so they know a deletion can be undone. Show where the files
+   live.
 8. Hand them [GUIDE.md](GUIDE.md); the daily round is all in there. Do not
    recite it: show it once on a live example and say where the text is. The
-   **Playbooks** tab is amber until the first playbook is written; that is
-   the journal asking for the rules, not an error. When they are ready to
-   write them down, [PLAYBOOK.md](PLAYBOOK.md) takes the form apart.
+   **Playbooks** tab is amber until the first playbook is written; the colour
+   means the journal is asking for the rules. When they are ready to write
+   them down, [PLAYBOOK.md](PLAYBOOK.md) takes the form apart.
 
 The default port is 8778; if it is taken, set another one through `PLAINBOOK_PORT` (and
 use it everywhere below).
@@ -86,16 +91,17 @@ On top of the unit, if they want it:
   `localhost` and not `127.0.0.1`. With another browser or another way of
   launching, check the real class (`hyprctl clients -j | jq -r '.[].class'`
   with the journal open) and fix the `test("localhost__")` line.
-  Do NOT look the window up by TITLE: "Plainbook" is also the title of a
-  file manager window opened on the project folder and of a terminal sitting in
-  that directory, or the toggle would raise those instead of the journal.
+  Look the window up by its class, never by its title: "Plainbook" is also
+  the title of a file manager window opened on the project folder and of a
+  terminal sitting in that directory, and a toggle that went by the title
+  would raise those instead of the journal.
 - **A hotkey**: in `~/.config/hypr/bindings.lua` a line like
   `o.bind("SUPER + E", "Trading journal", "plainbook-toggle")`. Agree the
   combination with them, SUPER+E may be taken.
 - **A button in the top bar**: `desktop/trader.plainbook/` →
   `~/.config/omarchy/plugins/`, then add `{"id":"trader.plainbook"}` to
-  `bar.layout` in `~/.config/omarchy/shell.json`. The icon carries the number of
-  open positions. After editing the QML, `omarchy restart shell` is required.
+  `bar.layout.right` in `~/.config/omarchy/shell.json`. The icon carries the
+  number of open positions. After editing the QML, `omarchy restart shell` is required.
 
 Load the `omarchy` skill before touching the bar or the hotkeys, if it is available.
 
@@ -112,7 +118,7 @@ Autostart without a console window, through a shortcut in the startup folder:
 
 1. Win+R → `shell:startup`.
 2. Create a shortcut there with the target `pythonw -m plainbook.server` and "Start in"
-   set to the `Plainbook` folder.
+   set to the program folder.
 
 To keep the records elsewhere, set `PLAINBOOK_ROOT` as a user environment variable
 (System properties → Environment Variables).
@@ -152,12 +158,12 @@ An application shortcut: Chrome → "Save as application" on the journal page, o
 
 `Plainbook-<version>-windows.exe`, `Plainbook-<version>-macos-arm64.zip` and
 `Plainbook-<version>-linux-x86_64` on the releases page are the source of
-that release packed with a Python interpreter into one file: not an installer,
-nothing is written into the system, and deleting the file removes it.
-Started by a double-click, the file prints the address and the records folder
-in a small console window, opens the journal in the browser (as an app window
-when Chrome, Edge or Brave is there, a tab otherwise), and stops when that
-console window is closed. The records live in `Plainbook` in the home folder
+that release packed with a Python interpreter into one file. It installs
+nothing and writes nothing into the operating system, and deleting the file
+removes it. Started by a double-click, the file prints the address and the
+records folder in a small console window and opens the journal in the
+browser, as an app window when Chrome, Chromium, Edge or Brave is there and
+as a tab otherwise. Closing the console window stops the journal. The records live in `Plainbook` in the home folder
 unless `PLAINBOOK_ROOT` says otherwise; a newer file finds them there, and the
 same folder serves a source install later, the files are the same. A second
 start while the journal runs does not start a second journal: it opens the
@@ -167,16 +173,21 @@ The first run: Windows SmartScreen (*More info*, *Run anyway*); macOS
 *Privacy & Security*, *Open Anyway*, after unzipping; Linux `chmod +x` once.
 The README, "Checking a downloaded file", says how the file is verified.
 
-For autostart the file takes the place of `python3 -m plainbook.server` in the
-recipes above, with `PLAINBOOK_OPEN=0` in the environment so that a login does
-not open a browser: `ExecStart=%h/Applications/Plainbook-<version>-linux-x86_64`
-and `Environment=PLAINBOOK_OPEN=0` in the unit; the path of the exe as the
-target of the Windows shortcut (its console window stays open, that is the
-running journal) with `PLAINBOOK_OPEN=0` as a user environment variable; the
-path of the file in `ProgramArguments` of the LaunchAgent with the variable in
-`EnvironmentVariables`.
+For autostart the file takes the place of `python3 -m plainbook.server` in
+the recipes above, with `PLAINBOOK_OPEN=0` in the environment so that a login
+does not open a browser.
 
-## The check after installing (not optional)
+- Linux: `ExecStart=%h/Applications/Plainbook-<version>-linux-x86_64` and
+  `Environment=PLAINBOOK_OPEN=0` in the unit, and the `WorkingDirectory` line
+  taken out, since there is no source folder for it to point at. A unit whose
+  working directory does not exist never starts.
+- Windows: the path of the exe as the target of the shortcut, with
+  `PLAINBOOK_OPEN=0` as a user environment variable. Its console window stays
+  open; that window is the running journal.
+- macOS: the path of the file in `ProgramArguments` of the LaunchAgent, with
+  the variable in `EnvironmentVariables`.
+
+## The check after installing
 
 1. The tests are green.
 2. http://localhost:8778 opens, their account is there, and the balance on the
@@ -188,27 +199,27 @@ path of the file in `ProgramArguments` of the LaunchAgent with the variable in
 5. With you watching, they filled a daily card (**+ DRC**) and it opened again
    filled in after saving.
 
-Pasting a screenshot is the one place where browser script does the work: if
-something breaks, it usually breaks there. Check it by hand, because the tests go
+Pasting a screenshot is the one place where browser script does the work, so
+it is where a break usually shows. Check it by hand, because the tests go
 around the browser on that path.
 
 ## Moving old trades in
 
 Once the check is done, ask them one question: did they keep trades somewhere
 before, in Notion, in a spreadsheet, in another app, and do they want that
-history here, so the statistics count from the first day? "No" is a fine
-answer, and the journal starts with what they enter from now on. "Yes" is the
-job of `tools/import_csv.py`: they export the old journal as CSV, you map its
-columns to the fields of a trade, the tool writes the trades the way the
-interface would, and the balance is then reconciled with the broker on the
-Accounts tab. Run `python3 tools/import_csv.py --help` for the columns it takes,
-and mind the one difference from step 6 above: for an import, the start balance
-of an account is the balance it had before the first old trade, not the balance
-today, and the difference to today is written as a correction afterwards.
+history here, so the statistics count from the first day? If the answer is
+no, the journal starts with what they enter from now on. If it is yes, the
+job belongs to `tools/import_csv.py`: they export the old journal as CSV, you
+map its columns to the fields of a trade, the tool writes the trades the way
+the interface would, and the balance is then reconciled with the broker on
+the Accounts tab. Run `python3 tools/import_csv.py --help` for the columns it
+takes. One thing differs from step 6 above: for an import, the start balance
+of an account is the balance it had before the first old trade, and the
+difference to today is written as a correction afterwards.
 
-You need the header line of their table, nothing more. Do not read the rows,
-and do not ask for them: the tool prints only counts and sums, and that is
-what you check against the old journal.
+You need the header line of their table and nothing more. Leave the rows
+unread and do not ask for them; the tool prints only counts and sums, and
+those are what you check against the old journal.
 
 ### With a Notion connection
 
@@ -234,8 +245,8 @@ consent; afterwards, never retell what was in a trade. The order that worked:
    the tool takes, the page body in the idea and conclusions columns, the
    Notion id in the id column, the picture file names in a column and their
    folder as `--pictures-dir`. Then it is the same `tools/import_csv.py`, the
-   dry run, the summary, the real run. Do not write the trade files yourself:
-   the tool checks every row the way the interface does, and a second run
+   dry run, the summary, the real run. Leave the writing of the trade files to
+   the tool: it checks every row the way the interface does, and a second run
    skips what is already in.
 5. **The check.** Counts and the sum of PnL per account against Notion, then
    trade by trade: if Notion kept an R for each trade, compare it with the R
@@ -246,5 +257,6 @@ consent; afterwards, never retell what was in a trade. The order that worked:
    too. Keep it beside the data, never beside the code, or delete it once the
    check is done and they agree.
 
-When you are done, read [CLAUDE.md](CLAUDE.md), the rules for living with the
-journal afterwards.
+When you are done, read [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md),
+the rules for living with the journal afterwards: whose data this is, how a
+change is checked, what must not be broken.

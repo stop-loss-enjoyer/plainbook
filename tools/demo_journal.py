@@ -47,6 +47,85 @@ CONCLUSIONS = [
 ]
 
 
+# --- an invented chart -------------------------------------------------------
+# A trade page with an empty idea looks like a form, not a journal, so the demo
+# pastes a picture where a trader would: a candlestick chart drawn from a random
+# walk, in the colours of the interface. The standard library writes the PNG.
+
+def chart_png(seed, width=800, height=420):
+    """A dark chart of invented candles, a level and a marked zone, as PNG bytes."""
+    import struct
+    import zlib
+    rnd = random.Random(seed)
+    bg, grid, up, down = (13, 15, 20), (28, 31, 40), (61, 176, 116), (217, 95, 95)
+    level, zone = (230, 176, 60), (28, 52, 44)
+    px = bytearray(bg * (width * height))
+
+    def fill(x0, y0, x1, y1, rgb):
+        x0, x1 = max(0, min(x0, x1)), min(width, max(x0, x1) + 1)
+        y0, y1 = max(0, min(y0, y1)), min(height, max(y0, y1) + 1)
+        row = bytes(rgb) * (x1 - x0)
+        for y in range(y0, y1):
+            px[(y * width + x0) * 3:(y * width + x1) * 3] = row
+
+    for y in range(0, height, 60):
+        fill(0, y, width - 1, y, grid)
+    for x in range(0, width, 80):
+        fill(x, 0, x, height - 1, grid)
+
+    # the walk: sixty candles that drift, then react at a level
+    n, step = 60, width // 64
+    price, candles = 100.0, []
+    drift = rnd.choice([0.25, -0.25])
+    for i in range(n):
+        if i == 40:
+            drift = -drift
+        o = price
+        c = o + rnd.gauss(drift, 0.9)
+        hi = max(o, c) + abs(rnd.gauss(0, 0.5))
+        lo = min(o, c) - abs(rnd.gauss(0, 0.5))
+        candles.append((o, c, hi, lo))
+        price = c
+    top = max(h for _, _, h, _ in candles)
+    bottom = min(l for _, _, _, l in candles)
+    pad = (top - bottom) * 0.12 or 1
+
+    def y_of(v):
+        return int((top + pad - v) / (top - bottom + 2 * pad) * (height - 1))
+
+    turn = candles[40][0]
+    fill(0, y_of(turn) - 12, width - 1, y_of(turn) + 12, zone)
+    for x in range(0, width, 14):
+        fill(x, y_of(turn), x + 7, y_of(turn), level)
+    for i, (o, c, hi, lo) in enumerate(candles):
+        x = 24 + i * step
+        rgb = up if c >= o else down
+        fill(x, y_of(hi), x, y_of(lo), rgb)
+        fill(x - 3, y_of(o), x + 3, y_of(c), rgb)
+
+    raw = b"".join(b"\x00" + bytes(px[y * width * 3:(y + 1) * width * 3])
+                   for y in range(height))
+
+    def chunk(tag, data):
+        body = tag + data
+        return (struct.pack(">I", len(data)) + body
+                + struct.pack(">I", zlib.crc32(body) & 0xffffffff))
+
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 9))
+            + chunk(b"IEND", b""))
+
+
+def shot(folder, name, seed):
+    """Writes one invented chart into the shots folder of a record and returns
+    the path the record keeps for it."""
+    os.makedirs(os.path.join(folder, store.SHOTS), exist_ok=True)
+    with open(os.path.join(folder, store.SHOTS, name), "wb") as f:
+        f.write(chart_png(seed))
+    return f"{store.SHOTS}/{name}"
+
+
 def build(root, days=40):
     random.seed(12)
     for account in ACCOUNTS:
@@ -73,6 +152,10 @@ def build(root, days=40):
                      "no entry in the hour before the Thursday news.",
                 updates=f"**{monday + timedelta(days=1):%d.%m.%Y}**: the "
                         f"imbalance was filled overnight, waiting for the retest.")
+    folder = store.plan_dir(root, plan.id)
+    plan.analysis[0].images = [shot(folder, "idea-01-01.png", 101)]
+    plan.analysis[1].images = [shot(folder, "idea-02-01.png", 102)]
+    plan.plan += "\n\n![](" + shot(folder, "plan-01.png", 103) + ")"
     store.save_plan(root, plan)
 
     # a plan of the week before, called off when the market went the other
@@ -180,17 +263,23 @@ def build(root, days=40):
                    9: "forgot the calendar", 12: "moved the stop at the news",
                    13: "closed by hand at the first pullback"}
             trade.reasons = {n: why[n] for n in broke + trade.exit_deviations}
+        folder = store.trade_dir(root, trade.id)
+        trade.idea[0].images = [shot(folder, "idea-01-01.png", 200 + i)]
+        trade.exit_images = [shot(folder, "exit-01.png", 300 + i)]
         store.save_trade(root, trade)
 
     # one position still open: the front page has a card of its own for those
     open_day = today - timedelta(hours=6)
+    open_id = store.new_id(root, open_day, "EURUSD")
     store.save_trade(root, Trade(
-        id=store.new_id(root, open_day, "EURUSD"), account="broker", pair="EURUSD",
+        id=open_id, account="broker", pair="EURUSD",
         direction="short", style="swing", entry_tf="H4", risk=1.0,
         opened=open_day, opened_time=True, plan=plan.id,
         playbook="pullback", playbook_version="1.0",
         setup="A: reaction at a higher level", deviations=[],
-        idea=[IdeaBlock(tf="H4", text=IDEAS[0])],
+        idea=[IdeaBlock(tf="H4", text=IDEAS[0],
+                        images=[shot(store.trade_dir(root, open_id),
+                                     "idea-01-01.png", 400)])],
         updates=f"**{open_day + timedelta(hours=3):%d.%m.%Y %H:%M}**: first "
                 "push down held under the level, stop left where it was"))
 
@@ -238,13 +327,17 @@ def build(root, days=40):
     # the Notes tab, the note page and the way back from a trade can be seen
     examples = [t.id for t in store.all_trades(root)
                 if t.pair == "GBPUSD" and not t.is_open][:2]
+    note_id = store.new_note_id(root, today - timedelta(days=3),
+                                "Sweep before the London open")
     store.save_note(root, Note(
-        id=store.new_note_id(root, today - timedelta(days=3), "Sweep before the London open"),
+        id=note_id,
         title="Sweep before the London open",
         day=today - timedelta(days=3),
         blocks=[IdeaBlock(text="GBPUSD takes the Asian high or low in the hour "
                           "before London opens, then turns. The turn is the "
-                          "trade; the sweep itself is not."),
+                          "trade; the sweep itself is not.",
+                          images=[shot(store.note_dir(root, note_id),
+                                       "note-01-01.png", 500)]),
                 IdeaBlock(tf="What to wait for",
                           text="The M15 close back inside the range. An entry "
                                "on the wick alone was stopped twice in August.")],

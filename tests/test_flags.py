@@ -18,8 +18,11 @@ class Parsing(unittest.TestCase):
         self.assertEqual(flags.parts("XAUUSD"), ["xau", "us"])
 
     def test_separators_and_broker_suffixes(self):
-        for name in ("EUR/USD", "EURUSD.pro", "EURUSD-ecn", "EURUSD_m"):
+        for name in ("EUR/USD", "EURUSD.pro", "EURUSD-ecn", "EURUSD_m",
+                     "EUR_USD", "EUR-USD", "EURUSDm", "EURUSD.m"):
             self.assertEqual(flags.parts(name), ["eu", "us"], name)
+        self.assertEqual(flags.parts("XAU_USD"), ["xau", "us"])
+        self.assertEqual(flags.parts("US30_m"), ["us"])
 
     def test_index_is_one_coin(self):
         self.assertEqual(flags.parts("US30"), ["us"])

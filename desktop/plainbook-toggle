@@ -9,7 +9,7 @@
 # localhost and not 127.0.0.1, which keeps this window apart from other local
 # web apps.
 #
-# Do NOT look it up by TITLE, even though that seems easier: "TradingJournal" is
+# Do NOT look it up by TITLE, even though that seems easier: "Plainbook" is
 # also the title of a file manager window opened on the project folder, and of a
 # terminal sitting in that directory. The toggle would quietly raise those.
 URL='http://localhost:8778'

@@ -1,7 +1,7 @@
 # Desktop
 
-Samples for wiring the journal into a Linux desktop. Fix the paths inside to
-match the machine.
+A user systemd unit for any Linux, and a window toggle and a bar widget for
+Omarchy (Hyprland). Fix the paths inside to match the machine.
 
 | file | where it goes |
 |---|---|

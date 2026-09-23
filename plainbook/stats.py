@@ -733,7 +733,7 @@ def by_period(journal, trades, group="month"):
     counts this week, so a row here holds exactly the trades of the report of
     that period. by_values with a lambda comes close, but it orders by the
     number of trades and leaves the entry or the exit to the caller, which is
-    where invariant 11 gets broken; the choice is made here, once, where it
+    where invariant 12 gets broken; the choice is made here, once, where it
     can be tested. A period with nothing in it keeps its place: a month the
     account stood still is part of the picture, and a chart with the gaps
     squeezed out would draw a year of trading as if it had been continuous."""

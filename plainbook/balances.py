@@ -159,10 +159,6 @@ class Journal:
         return [t for t in self.trades if t.is_open and t.breakeven is not None
                 and (account_id is None or t.account == account_id)]
 
-    def risk_in_money(self, account_id, risk_percent):
-        """A hint for the form: how many dollars that is right now."""
-        return self.balance(account_id) * risk_percent / 100.0
-
     def r(self, trade_id):
         computed = self.computed.get(trade_id)
         return computed.r if computed else None

@@ -3,9 +3,11 @@
 A guide for the person using it. How it is built and what the files look like:
 [README.md](README.md). How to install it: [INSTALL.md](INSTALL.md).
 
-The journal opens in a browser at **http://localhost:8778**. On Linux with
-Omarchy there is also a button in the top bar and a hotkey. The server runs on
-its own and survives a reboot; there is nothing to "start" by hand.
+The journal opens in a browser at **http://localhost:8778**. Installed with
+the autostart of [INSTALL.md](INSTALL.md), the server comes up with the
+machine and there is nothing to start by hand; the downloaded file and the
+`plainbook` command of a pipx install open the browser themselves. On Linux
+with Omarchy there is also a button in the top bar and a hotkey.
 
 ## The daily round
 
@@ -13,14 +15,16 @@ its own and survives a reboot; there is nothing to "start" by hand.
    **+ Plan** button.
 2. **Opened a position?** Write it down at once, with the **+ Trade** button,
    pick the plan it follows and the playbook, and tick its rules.
-3. **Closed it?** Close the trade too: the **Close** button in the open
-   positions block or on the trade page.
-4. **At the end of the day**, a card: the **+ DRC** button.
-5. **At the end of the week**, a card for the week: the **+ WRC** button.
+3. **Closed it?** Close the trade too: the **Close** button on its row of the
+   open positions block, or **Close trade** on the trade page.
+4. **At the end of the day**, a daily card: the **+ DRC** button, after the
+   paper Daily Report Card the card follows.
+5. **At the end of the week**, a weekly card: the **+ WRC** button.
 6. **At the end of a month or a quarter**, a report: the **Reports** tab.
 
-The point of the first step: the idea is written down before the market shows
-who was right. In hindsight an idea always looks tidier than it was.
+The first step matters because the idea is written down before the market
+shows who was right, and an idea read back afterwards always looks tidier
+than it was.
 
 ## A new trade
 
@@ -47,7 +51,8 @@ who was right. In hindsight an idea always looks tidier than it was.
 - **plan**: the trading plan this trade follows, picked from the plans you have
   written. Left at "-" if the trade belongs to none.
 - **playbook**: the playbook the trade is opened under, if any. Picking one
-  sets the style and opens its checklist under the form; see Playbooks above.
+  sets the style and opens its checklist under the header fields, above the
+  idea blocks; see [Playbooks](#playbooks) below.
 - **execution**: the checkboxes. They come from your list too, so the formats
   you actually trade are the ones offered.
 
@@ -55,8 +60,8 @@ Below is the idea block: timeframe, text and screenshots. **+ idea block** adds
 another one when the idea rests on several timeframes.
 
 **Screenshots**: click inside the dashed frame and press **Ctrl+V**. Whatever is
-on the clipboard goes in: a shot from TradingView, a cut of the screen. To take
-a screenshot out, press the cross in its top right corner.
+on the clipboard goes in, a screenshot from TradingView or a cut of the screen.
+To take a screenshot out, press the cross in its top right corner.
 
 **Duplicate on other accounts** is for the same position taken on several
 accounts, for example on the exchange and on two prop accounts. Open the block:
@@ -67,24 +72,26 @@ direction, style, entry, idea text and screenshots, and differ only in the
 account and the risk, so each is measured against its own balance. After that
 they are ordinary trades: each is closed with its own result and PnL.
 
-**Open trade** saves it. The position counts as open until it is closed.
+**Open trade** saves it, and the position counts as open until it is closed.
 
 ## Playbooks
 
-The **Playbooks** tab holds the standing rules of a way of trading: what has
-to be true before a trade is opened. A plan is written for a day and a pair;
-a playbook has no date and no pair, it is the system itself, and it changes
-by version rather than by the week.
+The **Playbooks** tab holds the standing rules of a way of trading, what has
+to be true before a trade is opened. Where a plan is written for a day and a
+pair, a playbook has no date and no pair. It is the trading system itself,
+and it changes by version.
 
-The tab is drawn amber while the journal has no playbook: the rules are what
-the trade form will hold the trades against, and until they are written
-nothing can be held.
+The tab is drawn amber while the journal has no playbook, because the rules
+are what the trade form will hold the trades against, and until they are
+written nothing can be held.
 
 **+ Playbook** on the tab writes one. The form is six cards: the header, the
 setups, the filters, the management, the limits and the notes. What each part is for, and how the journal uses it, is
 laid out in [PLAYBOOK.md](PLAYBOOK.md).
 
-- **name, status, version, counts from, block, styles.** The status is
+- **name, status, version, counts from, block, styles, what the playbook
+  is.** The last is a few lines on the idea behind the rules, shown above
+  them on the page; it is not ticked and changes freely. The status is
   `experiment` while the sample is being built, `active` once the rules are
   trusted, `retired` when they are not offered any more; a retired playbook
   stays for the trades that carry it. *Counts from* (`since` in the file) is
@@ -95,16 +102,18 @@ laid out in [PLAYBOOK.md](PLAYBOOK.md).
 - **setups.** One way of entering per setup: a name, a line on what it is,
   and its rules, a row each. A rule is a few words, which is what the
   checklist in the trade form will show, and then the whole rule, if the
-  words need it; the page shows both. Enter in a row adds the next one under
-  it, the cross takes one away, and an empty row is simply dropped.
+  words need it; the page shows both. **+ rule** under the rows, or Enter in
+  a row, adds the next one; the cross takes one away, and an empty row is
+  dropped.
   **+ setup** adds another setup. A playbook with one way of entering leaves
   the name empty.
 - **filters**: rules checked before every trade, whatever the setup, in the
   same fields.
 - **management**: the rules of holding the position, in the same fields.
-  They are ticked when the trade is closed, not when it is opened: the stop
-  not moved, the position held to its target, closed by Friday. Three to
-  five is a list that gets ticked.
+  They are ticked when the trade is closed rather than when it is opened:
+  the stop kept where it was, the position held to its target, closed by
+  Friday. A list of three to five rules gets ticked; a list of ten gets
+  skipped.
 - **limits**: a row each, **+ limit** adds one and the cross takes one
   away. A value is a plain number, the unit stands in the label, and the
   loss per week is written as a positive number. The first five kinds are
@@ -117,16 +126,16 @@ laid out in [PLAYBOOK.md](PLAYBOOK.md).
   text with no heading lands under *Notes*.
 
 The rules are numbered through the whole playbook, setups first, then the
-filters, then the management. That number is what a trade will record when a rule was not met.
+filters, then the management. That number is what a trade records when a
+rule was not met.
 
 **Revising the rules.** Until the first trade is ticked against a version,
-the rules are a draft: edit them as often as you like. Once a trade has been
-through the checklist under the number, a change of the rules asks for a new
-number, and the rules as they
-were are kept under *Earlier versions* on the page: a trade opened under the
-old number keeps the rules it was ticked against. Only the rules and the names of
-the setups are held to this; the intro, the notes, the limits and the status
-change freely.
+the rules are a draft, and you edit them as often as you like. Once a trade
+has been through the checklist under the number, a change of the rules asks
+for a new number. The rules as they were are kept under *Earlier versions* on
+the page, and a trade opened under the old number keeps the rules it was
+ticked against. Only the rules and the names of the setups are held to this;
+the intro, the notes, the limits and the status change freely.
 
 The file it writes, `journal/playbooks/<id>/playbook.md`, reads by eye like
 every other record:
@@ -175,18 +184,18 @@ other heading is kept and shown as text. Earlier versions sit next to it in
 `versions/<number>.md`.
 
 **In the form of a trade.** Next to *plan* there is *playbook*. Picking one
-sets the style to the playbook's and opens its checklist under the form: the
-setups to choose from, the rules of the chosen setup and the filters, a box
+sets the style to the playbook's and opens its checklist under the header
+fields, above the idea blocks: the setups to choose from, the rules of the chosen setup and the filters, a box
 each with the few words of the rule; the question mark shows the whole rule.
-Tick what holds. The trade opens with any number of boxes ticked, nothing is
-refused, but the rules left unticked are recorded with it, and the line under
-the list says how many. Under every box left empty stands a line for why,
-and ticking the box folds it away: the fact, not the verdict. "Target 1.6R, took it anyway" is enough; whether it
-was a good reason is a question for the review, where the reasons given
-for every rule stand together. Leaving every box empty is recorded too: every rule
-not met. The page of the trade then shows the rules with a tick or a cross,
-and the rules of the version it was ticked against, whatever the playbook
-says later.
+Tick what holds. The trade opens with any number of boxes ticked; the rules
+left unticked are recorded with it, and the line under the list says how
+many. Under every box left empty stands a line for why, and ticking the box
+folds it away. The line asks for the fact, and "Target 1.6R, took it anyway"
+is enough; whether it was a good reason is a question for the review, where
+the reasons given for every rule stand together. Leaving every box empty is
+recorded too, as every rule not met. The page of the trade then shows the
+rules with a tick or a cross, in the version it was ticked against, whatever
+the playbook says later.
 
 Editing a trade shows its checklist as it was ticked. A trade tied to a
 playbook later, with no checklist, says so on its page; tick the rules in
@@ -202,18 +211,20 @@ stand there as a plain list, to be kept in mind. A closed trade edited later
 keeps its ticks unless the list is touched.
 
 **The frame.** When the playbook has limits, a line above its checklist
-holds them against the playbook's own trades at that moment: trades this week and this
-month against the caps, the R of the week against the loss limit, positions
-open against the cap, and the risk typed in the form against its cap. A
-figure turns red where this trade would go past the limit. Nothing is
-refused; the figure is there to be seen before the box is ticked.
+holds them against the playbook's own trades at that moment: trades this
+week and this month against the caps, the R of the week against the loss
+limit, positions open against the cap, and the risk typed in the form
+against its cap. A figure turns red where this trade would go past the
+limit. The trade still opens; the figure is there to be seen before the box
+is ticked.
 
-**Reviewing a block.** The page of the playbook ends with *Review*: one
-field, a dated entry each time, and screenshots pasted with it stay under
+**Reviewing a block.** The page of the playbook carries a *Review* card near
+its end, under the trades and before the earlier versions: one field, a
+dated entry each time, and screenshots pasted with it stay under
 that entry, the way an update is added to a plan. That is where a block is
-taken apart when its count is reached: what the trades said, what leaked,
-what the next version changes. Then the rules are revised in the form under
-a new number. When a block has run its course and has no review yet, the
+taken apart when its count is reached, what the trades said, what leaked and
+what the next version changes, before the rules are revised in the form
+under a new number. When a block has run its course and has no review yet, the
 Playbooks tab turns amber, the list says *review due* and the page of the
 playbook says which block is complete; a dated entry per completed block
 settles it.
@@ -234,9 +245,10 @@ it, run
 It names how many trades would be tied, by account and by style: the ones of
 the playbook's styles opened on or after its *counts from* date that carry
 no playbook yet. Add `--apply` to write it. These trades get the playbook
-and its version, no setup and no checklist: nobody ticked the rules for
-them, and they do not hold the version, so the rules stay a draft. Open each
-one and fill that in if you remember.
+and nothing else: no setup, no checklist and no version, because nobody
+ticked the rules for them, so the rules stay a draft until a trade is ticked.
+A trade takes the version on the day its rules are ticked. Open each one and
+fill that in if you remember.
 
 **The figures.** The Statistics tab carries *By playbook*: a row per
 playbook with its setups beneath it, the trades taken under none last, and
@@ -254,7 +266,8 @@ the trader's own words, a line per trade.
 ## Trading plans
 
 **+ Plan** in the header, or the **Plans** tab. A plan is written before the
-market opens and holds what a trade cannot: what was supposed to happen.
+market opens and holds the one thing a trade cannot, what was supposed to
+happen.
 
 - **title, pair, narrative**: a name of your own, the instrument, and what you
   expect: bullish, bearish, neutral or no trade. A decision not to trade is a
@@ -263,8 +276,8 @@ market opens and holds what a trade cannot: what was supposed to happen.
   plan that lives one day. The list marks the state of a plan with a pill:
   green **current** for one that covers today, blue **ahead** for one whose
   first day has not come, red **voided** for one called off. A plan that has
-  run its course wears nothing. The card of a current plan is outlined on
-  its page.
+  run its course wears nothing. The card of a current plan carries an amber
+  stripe on its left edge, like an open trade.
 - **analysis blocks**: timeframe, text and screenshots, the same blocks as the
   idea of a trade. **+ analysis block** adds another timeframe.
 - **plan**: what you will do, and what you will not. This is the part you read
@@ -272,20 +285,22 @@ market opens and holds what a trade cannot: what was supposed to happen.
   own: the levels you marked, the position you set up, Ctrl+V and they sit with
   the plan itself.
 
-**Updates** are added from the plan page, not from the form: one line, and the
-journal stamps it with the date. The plan stays as it was written and the week
+**Updates** are added from the plan page rather than from the form: one line,
+and the journal stamps it with the date. The plan stays as it was written and the week
 is written under it. An update takes screenshots too: paste into the zone under
-the field before pressing **Add**, and the pictures stay under that line, so a
+the field before pressing **Add**, and the screenshots stay under that line, so a
 week of a plan reads as it happened. Nothing else in the plan is touched when
-an update is added.
+an update is added. Editing the plan shows the updates as they were written,
+text and screenshots, so a slip in one can be put right; a new one is still
+added from the page.
 
 **Review** is written later, in the plan form: how it went, with screenshots.
 
 **Void.** A plan the market went against, the direction or the variables
-wrong, is voided rather than deleted: the **Void** button in the header of
-its page leads to a short form at the bottom, one line for what went against
-it, and the plan is called off. It stops being current, the list says
-**voided** next to it, its card is outlined in red, and the reason stands
+wrong, is voided and kept. The **Void** button in the header of its page
+leads to a short form at the bottom, one line for what went against it, and
+the plan is called off. It stops being current, the list says
+**voided** next to it, the stripe on its card turns red, and the reason stands
 under **Updates** with the date. Everything else stays: the analysis, the
 plan, the trades tied to it, so the mistake can be read back later. The
 trade form still offers a voided plan, with the word in its name. **Restore**
@@ -294,8 +309,8 @@ all. **Delete** is for a plan written by mistake: that one goes to the trash.
 
 **What came of the plan.** Every trade you tied to it is listed on its page with
 its result, PnL and R, and the line under the table says how many trades, the
-winrate, the Σ R and the money. That is the answer a plan in a document cannot
-give: whether following it was worth anything.
+winrate, the Σ R and the money. That line answers what a plan in a document
+cannot, whether following it was worth anything.
 
 **Plan against fact.** For a bullish or a bearish plan the page also says how
 many of its trades went with the narrative (a long under a bullish plan) and
@@ -304,10 +319,9 @@ counts every trade taken under it as against it.
 
 ## Market notes
 
-The **Notes** tab. A note is about the market rather than about one trade: a
-level a pair keeps respecting, a pattern that keeps coming back, a lesson
-wider than a day. It is the page you write when you notice something for the
-third time.
+**+ Note** on the **Notes** tab writes one. A note is about the market and
+wider than one trade: a level a pair keeps respecting, a pattern that keeps
+coming back, a lesson wider than a day.
 
 - **title** and **date**: the name of the note and the day it was written.
   The date is yours to set, a note about last month can carry last month.
@@ -337,8 +351,10 @@ like a plan does.
 
 The **Breakeven** button, on the trade beside Close trade and on its row of
 the open positions block. It says that the stop now stands at the entry, and
-the journal frees the risk of that trade: the daily loss limit of the account
-counts only the trades that can still lose. The page of the trade says since
+the journal frees the risk of that trade, so the daily loss limit of the
+account counts only the trades that can still lose. Two spellings stand for
+two things in this journal: *breakeven* is the stop moved to the entry, and
+*break-even* (BE in the lists) is a trade that ended at zero. The page of the trade says since
 when, and the line stays on a closed trade as the history of its stop.
 **Risk back** puts the risk where it was, for a stop moved by mistake. The
 playbook limits are not touched: a trade at breakeven is still a position
@@ -350,21 +366,24 @@ The **Update** button on the page of an open trade leads to the **Updates**
 card at the bottom of it: a line about what changed since the entry (the
 stop moved, a partial taken, what the market did at the level) and a
 screenshot zone under it, then **Add**. Every update is written under the
-trade with its date and time, in the order they came, and the pictures
+trade with its date and time, in the order they came, and the screenshots
 pasted with it stay under its line. The rest of the trade is not touched:
-the idea and its screenshots stay exactly as they were.
+the idea and its screenshots stay as they were.
 
 The updates stay on the trade after it is closed and go into the file that
 **Share** makes; the search reads them. A closed trade takes no more of
-them: what is learned at the exit goes into the conclusions. Editing the
-trade shows the updates as they were written, text and pictures, in a card
+them, because what is learned at the exit goes into the conclusions. Editing the
+trade shows the updates as they were written, text and screenshots, in a card
 of their own, so a slip in one can be put right.
 
 ## Closing a trade
 
-The **Close trade** button. You fill in the result (Win / Lose / BE), the PnL in
-dollars and the moment of the exit; below that go the screenshots of the exit and
-the conclusions with their own screenshots.
+The **Close trade** button. You fill in the result (Win / Lose / BE), the PnL
+in the currency of the account (its sign stands in the label) and the moment
+of the exit; below that go the screenshots of the exit and the conclusions
+with their own screenshots. A trade closed once is not closed again: its
+result and exit are changed with **Edit**, and the close address of a closed
+trade opens the edit form.
 
 The result starts on **pick one** and the form will not be sent until you choose,
 so a trade cannot be closed with a result nobody picked.
@@ -376,8 +395,8 @@ entry. An exit dated before the entry is refused. A Win with a negative PnL,
 or a Lose with a positive one, is saved but pointed out on the trade page:
 nearly always one of the two is a slip, and Edit puts it right.
 
-R is worked out by itself: `PnL / (risk% × the balance at the moment of entry)`.
-There is nothing to recompute by hand.
+R is worked out by the journal, `PnL / (risk% × the balance at the moment of
+entry)`, and there is nothing to recompute by hand.
 
 ## Editing and deleting
 
@@ -396,9 +415,9 @@ There is nothing to recompute by hand.
   they are now. An account that already holds the position (the same pair,
   side and entry) says so instead of offering a box. A closed trade has no
   block: its result and PnL are its own.
-- **Delete** sends the trade to `.trash` next to the `journal` folder. It is not
-  shredded: the **Trash** card on the Accounts tab lists everything deleted,
-  and **Restore** puts it back, screenshots and all. A record written again
+- **Delete** sends the trade to `.trash` next to the `journal` folder, where
+  the **Trash** card on the Accounts tab lists everything deleted and
+  **Restore** puts it back, screenshots and all. A record written again
   under the same id in the meantime is never overwritten: the one in the trash
   stays there until you sort it out by hand.
 
@@ -407,12 +426,13 @@ There is nothing to recompute by hand.
 **+ DRC** opens today's card; if there already is one for that day, it opens
 that one. The **Cards** tab lists them, the daily ones in the upper table.
 
-- **date**: you can change it when reviewing yesterday. Changing the date moves
-  the card, it does not create a second one; if the new day already has a card,
-  the journal refuses rather than overwrite it, and says so.
-- **process grade** and **opportunity quality**: the suggestion offers
-  A / B / C / D / F, but the field is free, so write in whatever scale you use.
-- **P&L** is filled in from the trades closed that day. The field is editable:
+- **date**: you can change it when reviewing yesterday. Changing the date
+  moves the card rather than creating a second one; if the new day already
+  has a card, the journal refuses to overwrite it, and says so.
+- **process grade**, **PnL**, **opportunity quality**, in the order of the
+  form. The grades offer A / B / C / D / F, but the field is free, so write
+  in whatever scale you use. The PnL is filled in from the trades closed that
+  day, and the line under it says how many closed; the field is editable, so
   a day can have a tally of its own that differs from the journal's sum.
 - **trades assessment**: numbered lines for the trades of the day, the mark
   each one earned and how it ended, the three columns of the paper, the same
@@ -429,8 +449,9 @@ that one. The **Cards** tab lists them, the daily ones in the upper table.
   is untouched by it: a period counts the trades it closed, and the R of that
   swing belongs to the week it closed in. Type your own words into the result
   and they are kept as typed, exactly as before.
-- Then, laid out as on paper: focus, process, what went well, errors, then the
-  best trade beside the assessment, and the overview under them.
+- Then, laid out as on paper: *current focus (goal)*, *trading process*,
+  *what I learned / did well today?*, *errors & improvement*, then the best
+  trade beside the assessment, and the overview under them.
 - **best trade** is your text, and over it stands **pick a trade**, a
   drop-down of the day's trades: choose one and its name is put into the text
   where the cursor stands, spelled as the assessment spells it. The list goes
@@ -447,8 +468,8 @@ and both kinds are stored side by side in `journal/cards`.
 - **week**: the calendar week, Monday to Sunday, the same week the journal
   groups the trades by. Changing it moves the card, exactly as the date moves a
   daily one, and the journal refuses to write one week over another.
-- **P&L** and **trades** are filled in from the trades that week closed. Both
-  are editable: the count you review by is yours, not the journal's. Under the
+- **PnL** and **trades** are filled in from the trades that week closed. Both
+  are editable, because the count you review by is yours. Under the
   count stand the week's trades in figures and colour, no words: green won,
   red lost, amber break-even, blue still in the market when the week ended.
   That is why the field can say 3 while the colours say `2 / 1 / 1`: the field
@@ -458,9 +479,9 @@ and both kinds are stored side by side in `journal/cards`.
   means, from `1 · not moved` to `10 · done, take a new focus`. A 10 is a focus
   worked through: retire it and write the next one. The words are there so that
   the same number means the same week in January and in June. A card written
-  when the scale ran to 5 keeps its number and reads as it did, but that number
-  was a fifth of the way, not a tenth: change it by hand if you want the old
-  weeks on the new scale.
+  when the scale ran to 5 keeps its number and reads as it did; that number
+  was a fifth of the way rather than a tenth, so change it by hand if you want
+  the old weeks on the new scale.
 - **trades assessment**: the same table as the daily card, for the trades of
   the week, the mark each one earned and how each ended. The trade field
   suggests the trades you closed that week, and the result fills in from the
@@ -478,15 +499,20 @@ and both kinds are stored side by side in `journal/cards`.
 The **trades** column of both tables is the same row of figures: green won,
 red lost, amber break-even, blue what was still in the market when the day or
 the week ended. Hover for the words. A card brought in from before the journal
-held those trades has nothing to count, and shows the number written on it.
+held those trades has nothing to count: the weekly table then shows the number
+written on the card, the daily one a hyphen.
 
-## Two small things everywhere
+## On every page
 
 - **The name in the top left corner is a link home**, to the journal with its
   trades, from wherever you are.
 - **Every form answers.** Save a trade, a card, a plan or an update, and the
-  journal says what it did in the middle of the screen for a second, then takes
-  the message away. Nothing has to be clicked.
+  journal says what it did in the middle of the screen for a second, then
+  takes the message away without a click.
+- **A page that cannot show its record says why.** An address that leads
+  nowhere, a trade moved to the trash and reopened from the browser's
+  history, gets a page with the navigation and a way back; a record whose
+  file does not read gets the file and the reason on top of the page.
 
 ## The front page
 
@@ -503,10 +529,11 @@ held those trades has nothing to count, and shows the number written on it.
   a **Breakeven** button and a Close button. Press Breakeven when you have
   moved the stop of that trade to the entry: the trade can no longer lose what
   it was sized for, so its risk is freed. The money column shows a green
-  **BE** chip in place of the sum, the title of the block counts the trades
-  held that way, and the daily loss limit of the account stops counting
-  them, so three trades at breakeven and two fresh ones read as 2% at risk
-  and not 5%. Pressed by mistake, **Risk back** on the page of the trade
+  **BE** chip in place of the sum, and the title of the block counts the
+  trades held that way. The daily loss limit of the account stops counting
+  them: with three trades at breakeven and two fresh ones the tile counts the
+  risk of the two, in money, and says how many stand at breakeven. Pressed by
+  mistake, **Risk back** on the page of the trade
   undoes it. The R of the trade is still measured against the risk it was
   opened with, whatever happened to the stop later.
 - **Summary tiles**: the current period, the size of the selection, the
@@ -521,33 +548,35 @@ held those trades has nothing to count, and shows the number written on it.
   opens that trade**: its fields, the idea you wrote before the entry with its
   screenshots, the exit moment and the conclusions. The same goes for a row in
   the open positions block.
-- **Filters** sit behind the funnel button to the left of the switch: account, pair,
-  style, direction, result, a range of months. They apply both to the list and
-  to the summary tiles. While a filter is on, the funnel is lit and shows how
-  many fields are set; **Reset** clears them. To close the form: click away or
-  press Escape. **A filter survives a trade being opened**: a trade opened
+- **Filters** sit behind the funnel button to the left of the switch: account,
+  pair, style, direction, result, a range of months. They apply both to the
+  list and to the summary tiles. While a filter is on, the funnel is lit and
+  shows how many fields are set; **Reset** clears them. The form closes on a
+  click away or on Escape. **A filter survives a trade being opened**: a trade opened
   from a filtered list carries the selection, its page has a **← Journal**
   button that names the filter, the Journal tab leads to the same list, and
   editing, closing or deleting the trade lands back on it.
 - **CSV** next to the switch writes the list as it is filtered into a file for
   a spreadsheet: every stored field and the computed ones, R, the balance at
-  entry, the risk in money, one trade per line.
+  entry, the risk in money and its currency, one trade per line.
 
 ## How the figures are worked out
 
-**Account balance** = start balance + the PnL of every closed trade +
-adjustments (deposits, withdrawals, fees, reconciliations). It is stored
-nowhere: it is worked out afresh every time, so it cannot fall behind reality.
+**Account balance** = start balance + the PnL of every closed trade + the
+money that moved outside trades (deposits, withdrawals, fees, corrections).
+It is stored nowhere and worked out afresh every time, so it cannot fall
+behind reality.
 
 **R** = PnL / (risk in percent × the account balance at the moment of entry).
-A trade closed earlier the same day is already in that balance, because the exit
-carries its hour. If the exit was left at midnight, that is an exit whose hour is
-unknown, and its PnL counts from the next day.
+A trade closed earlier the same day is already in that balance when both
+moments carry their hour, the exit of the one and the entry of the other. An
+exit or an entry left at midnight is a moment whose hour is unknown, and the
+PnL of that close then counts from the next day.
 
 **Winrate** = wins / (wins + losses). Break-even trades stay out of the
-denominator: such a trade ended neither way. What they cost (commission, the
-spread, the opportunity spent) is visible in the sum and in the EV, where
-break-evens count like everything else. Under the winrate stand three numbers:
+denominator, because such a trade ended neither way. What they cost, the
+commission, the spread and the opportunity spent, is visible in the sum and
+in the EV, where break-evens count like everything else. Under the winrate stand three numbers:
 wins in green, losses in red, break-evens in yellow.
 
 **EV** = Σ R / the number of closed trades: what a trade brought on average,
@@ -562,9 +591,9 @@ and a report cuts the same way by its own months. A
 pair gets its row, and its EV, from its first closed trade; nothing has to be
 added anywhere for a new one.
 
-**Total R** is more honest than a total in money when there is more than one
-account: a dollar on a prop account and a dollar on your own are different kinds
-of money, which is why the front page carries no grand total in dollars.
+**Total R** is the figure that spans accounts. A dollar on a prop account and
+a dollar on your own are different kinds of money, which is why the front
+page adds up R across accounts and leaves the money per account.
 
 **Money is shown in the currency of its account.** A sum that spans accounts,
 the PnL column of the list, the total of a week, carries the currency they all
@@ -573,13 +602,15 @@ sum of two currencies has no name.
 
 ## The Statistics tab
 
-**What the tab is for.** The front page says where you stand now, a report says
-how one month went, a playbook page says whether one system works. This tab is
-the only page with no period of its own and a free filter: cut the whole
-history any way you like, and see whether that cut has an edge and whether
-there is enough of it to believe. It is laid out the way a report is, in the
-same order: the cut as the title, a strip of figures, two pictures, the equity,
-then the playbooks with the rules and the tables.
+**What the tab is for.** The front page says where you stand now, a report
+says how one month went, a playbook page says whether one trading system
+works. This tab is the one page with no period of its own and a free filter.
+Cut the whole history any way you like, and see whether that cut has an edge
+and whether there is enough of it to believe. It is laid out the way a report
+is, in the same order: the cut as the title, a strip of figures, two charts,
+the equity, then the playbooks with the rules and the tables. The cut, the
+selection and the filter are one thing on this page, the trades the figures
+are worked out on.
 
 **The cut is written out at the top.** Under the word Statistics stands the
 selection in words, `XAUUSD · swing · Broker · August 2026`, and every part of it
@@ -614,42 +645,42 @@ has no month before it, but it always has a rest.
 - **Payoff**: how many R a win brings for every R a loss costs, the average
   win and the average loss under it. A ratio carries no sign; whether it is
   enough is what the winrate needed beside it answers.
-- **Deepest fall from a high**: how far the selection went under its own high,
-  between which dates, whether it has been made back or how far under it still
-  stands, and the longest run of losses. The figure is never painted red: a
-  fall is negative by definition, so a colour would say nothing.
+- **Deepest fall from a high**, the maximum drawdown: how far the selection
+  went under its own high, between which dates, whether it has been made back or how far under it still
+  stands, and the longest run of losses. The figure is never painted red,
+  because a fall is negative by definition and a colour would say nothing.
 - **Mistakes**, counted the way a report counts them: a rule ticked as not
-  met, at the entry or at the close, or a loss past the stop, a trade that did
-  both being one mistake; under the count, what the losses ran past the stop
-  by, what those trades brought, and how many trades under a playbook were
-  never ticked. The two figures answer different questions: the first is what
-  the overruns themselves cost, the second is everything those trades did,
-  wins included.
+  met, at the entry or at the close, or a loss past the stop, a trade that
+  did both being one mistake. Under the count stand what the losses ran past
+  the stop by, what those trades brought, and how many trades under a
+  playbook were never ticked. The first two answer different questions: the
+  overruns themselves cost the one, and the other is everything those trades
+  did, wins included.
 - **Best and worst trade** by R, each a link to the trade.
 
 A winrate or a payoff worked out from fewer than five decided trades is grey,
-because a percentage of two trades is not a rate. An empty tile is a hyphen
+because a percentage of two trades says little. An empty tile is a hyphen
 with the reason under it.
 
-**Trade by trade, or week by week.** The left picture under the strip is the
-selection over time. With thirty closed trades or fewer, and on any cut to a
-week, every trade is one bar in the order of the exits against the line of the
-stop, the way a report draws its month, and each bar opens its trade. Past
-thirty the bars are weeks, months or quarters, the R of the trades that closed
-in each, oldest on the left, each bar named while the picture has room for a
-name and the months or years marked across it whether it has or not; the page
-opens on whichever grain
-the span of the selection asks for, and the switch in the corner reads it any
-other way. A period that closed nothing keeps its place and draws no bar,
-because a week the account stood still is part of the picture. The same
+**Trade by trade, or week by week.** The left chart under the strip, the
+tape, is the selection over time. With thirty closed trades or fewer, and on
+any cut to a week, every trade is one bar in the order of the exits against
+the line of the stop, the way a report draws its month, and each bar opens
+its trade. Past thirty the bars are weeks, months or quarters, the R of the
+trades that closed in each, oldest on the left. Each bar is named while the
+chart has room for a name, and the months or years are marked across it
+either way. The page opens on whichever grain the span of the selection asks
+for, and the switch in the corner reads it any other way. A period that
+closed nothing keeps its place and draws no bar, because a week the account
+stood still is part of the history. The same
 figures as a table, newest first, stand among the tables at the foot of the
 page; the newest twelve periods are open and the rest fold under one line.
 
 **A bar or a row narrows the page to that period**, counted the same way it
-was counted, by the exit. This is the one cut that does not go through the
-months of the filter: those pick trades by the entry, the way the list of
-trades does, and a period picks by the exit, the way a report does. Mixing them
-would print a total that disagrees with the row you clicked on. The period
+was counted, by the exit. This is the one cut that goes around the months of
+the filter, because those pick trades by the entry, the way the list of
+trades does, and a period picks by the exit, the way a report does. Mixing
+them would print a total that disagrees with the row you clicked on. The period
 stands in the title like every other part of the cut, drops itself the same
 way, and is shown in the filter form so that the count on the funnel adds up.
 A trade belongs to the period it closed in, so one entered in July and closed
@@ -667,15 +698,15 @@ carries a button back to this cut, the whole cut and not only its period: the
 statistics of August and the statistics of August on one pair are two pages
 under one title.
 
-This is why **The trades** no longer hands you to the journal when a period is
-chosen. The journal picks by the entry, so its August is a different set of
-trades: one entered in July and closed in August is counted here and stands in
-July there. A cut with no period in it, a pair or a style, lists its trades
+This is why **The trades** keeps you on this page when a period is chosen.
+The journal picks by the entry, so its August is a different set of trades:
+one entered in July and closed in August is counted here and stands in July
+there. A cut with no period in it, a pair or a style, lists its trades
 at the foot of the page as well, as **Trades of this cut**: the closed ones,
 newest exit first, so a pair and then a month reads down to the very trades
 of that pair closed in that month. Only with no cut at all does the button
-open the journal. The CSV button never had the trouble, since
-the file is written from the same selection the page counted.
+open the journal. The CSV file is written from the same selection the page
+counted.
 
 **R distribution.** Two rings beside the tape: the losses on the left, the
 wins on the right, each cut by the size of R. Pointing at a slice, or at its
@@ -699,22 +730,22 @@ figure until you set your own: the slider on the **Past the stop** card,
 below, moves it by a tenth between 1 and 2 R, and the rings follow. At an edge
 of exactly 1 the stop bucket is gone, and the last one reads **-1R and worse**.
 
-Read together the two rings answer the question a trader actually asks: are the
-losses one size, and do the wins reach far enough to pay for them. The rings in
+Read together the two rings answer two questions: are the losses one size,
+and do the wins reach far enough to pay for them. The rings in
 a monthly or quarterly report are cut the same way, on the trades of that period.
 
-**Equity.** Across the page under the pictures: one curve per account, side
+**Equity.** Across the page under the charts: one curve per account, side
 by side, each on its own scale, because the small moves of a small account
 would vanish next to a 100k prop. The switch in the head picks a single
-account, which is the account filter itself, so the whole page follows it;
-the switch on the right reads the curve **by date** or **by trade**, one step
-per closed trade, which is how an equity curve is usually looked at: the
-calendar stretches a quiet month and squeezes a busy day, and by trade every
-trade takes the same room. Archived accounts are not drawn: the account is done
+account, which is the account filter itself, so the whole page follows it.
+The switch on the right reads the curve **by date** or **by trade**, one step
+per closed trade. By date the calendar stretches a quiet month and squeezes a
+busy day; by trade every trade takes the same room, which is how an equity
+curve is usually looked at. Archived accounts are not drawn: the account is done
 with and there is nothing left to watch. Their trades stay in every figure on
 the page.
 
-The dashed line across the picture is the balance the curve starts from: the
+The dashed line across the chart is the balance the curve starts from: the
 opening balance of the account, or the balance it entered the cut with. The
 wash under the curve is green above that line and red below it, so which side
 of the start the account is on is read before a single number is. A hollow dot
@@ -725,27 +756,28 @@ account red. The numbers at the end of the line are the balance the curve ends
 at, which is the balance now unless the page is cut to a period, and how far it
 is from that line.
 
-The line is drawn softly, but it never invents a high or a low: the curve is
-bent only between the points it has. A peak on the picture is a peak that
-happened. Trades closed on the same day are laid out across that day in the
-order they were closed, because a journal records the date of a close and not
-the hour, and stacking them on one x would make a vertical wall out of an
+The line is drawn softly, and the curve is bent only between the points it
+has, so a peak on the chart is a peak that happened. A close carries its hour
+and is drawn at it. Exits written without
+an hour on one day are laid out across that day in the order they were
+closed, because stacking them on one x would make a vertical wall out of an
 ordinary day.
 
 With a **from month** filter on, or a cut to a period, the curve starts at the
 balance the account entered it with: everything before is folded into the
 first point, and a period also ends the curve where it ended. With a filter by
 style, pair or direction, only the chosen trades move the line from there, so
-the picture says what those trades alone did to the account.
+the chart says what those trades alone did to the account.
 
 **By playbook.** A row per playbook with its setups beneath it, the trades
 under none last, with trades, WR, Σ R, EV, money, and the *clean* and *held*
 shares. A row leads to the playbook's page. The Playbooks section above says
 what the shares mean.
 
-**Rules.** Beside it, the report's table: every rule ticked as not met in the
-selection with how many trades broke it and what they brought, the dearest
-first, and under them the trades that kept every rule, which is the measure.
+**What a rule costs.** Beside it, the report's table: every rule ticked as
+not met in the selection with how many trades broke it and what they
+brought, the dearest first, and under them the trades that kept every rule,
+which is the measure.
 Only trades that went through a checklist stand there, at the entry or at the
 close; one tied to a playbook later and never ticked was never held against
 its rules. When trades of more than one playbook are in the cut, the name of
@@ -753,11 +785,11 @@ the playbook stands before the number of the rule. **Past the stop**, a table
 of its own: the losses that went deeper than the stop edge, worst first, ten
 at most, each a way to its trade. Beside the R of each stands **over**, what
 that loss cost past the edge, and the head of the card carries the total of
-them. The stop itself is not the mistake: -1R is the attempt working as it
-was meant to, and commission and swap carry it to the edge, which the trade
-was still sized for. What lies past that edge is the only part discipline was
-there to keep, so with the edge at 1.2 a loss back at -1.35R overran the risk
-by 0.15R and not by the whole of it.
+them. The stop itself is the attempt working as it was meant to, at -1R, and
+commission and swap carry it to the edge, which the trade was still sized
+for. What lies past that edge is the part discipline was there to keep, so
+with the edge at 1.2 a loss back at -1.35R overran the risk by 0.15R rather
+than by the whole of it.
 
 **The stop edge is yours to set.** The slider in the head of the card runs
 from 1 to 2 R by tenths and stands at 1.2 until you move it: how much a stop
@@ -770,8 +802,8 @@ the edge it was written with in its text; rebuild it to read it at the new one.
 
 **Stop at breakeven.** The trades whose stop you moved to the entry (the
 Breakeven button, see The stop at breakeven) against the ones whose stop
-stayed: the same four figures for each, so the two rows answer whether
-moving the stop pays. Under them, how the moved trades ended, won, stopped at
+stayed: the same figures as every table for each, so the two rows answer
+whether moving the stop pays. Under them, how the moved trades ended, won, stopped at
 the entry or lost after the move, and how soon after the entry the stop was
 moved in the middle case, with the share of the hold that had passed. The
 journal cannot tell whether a trade stopped at the entry would have gone on
@@ -826,19 +858,20 @@ was. The line on the tile adds up exactly:
 Every movement is listed under the form, newest first, and **Delete** sends one
 to `.trash` like any other record. Balances are recomputed from what is left.
 
-**Correcting a balance.** When the broker shows a different number, do not touch
-the start balance and do not edit old trades. Use the **Correct a balance** card:
-type the balance the broker really shows, and the journal writes the difference
-down as a correction with your comment. The gap becomes a record with a date,
-which is what keeps the history honest. If there is nothing to correct, the
-journal says so and writes nothing.
+**Correcting a balance.** When the broker shows a different number, leave the
+start balance and the old trades as they are. Open the **Correct a balance**
+fold in the same card and type the balance the broker really shows; the
+journal writes the difference down as a correction with your comment. The gap
+becomes a record with a date, in `journal/adjustments/` with the kind
+`reconciliation`, next to the deposits, withdrawals and fees. If there is
+nothing to correct, the journal says so and writes nothing.
 
 ## Accounts and pairs
 
 The **Accounts** tab.
 
-- **Start balance** is not "what it once was" but the point the journal counts
-  from. Opening an account today, put in today's real balance.
+- **Start balance** is the point the journal counts from. Opening an account
+  today, put in today's real balance.
 - **Currency** is shown next to every sum of the account: a sign for the usual
   ones ($, €, £, ¥), the code for the rest.
 - **Daily loss limit** is the prop rule: the most a day may lose before the firm
@@ -848,8 +881,9 @@ The **Accounts** tab.
   ones still put at risk at their stops, and changes colour as the limit comes
   near.
 - **Archive** keeps the account in the history and the statistics but stops
-  offering it when a trade is opened. An account with trades cannot be deleted,
-  only archived; one without them is deleted into `.trash` like everything else.
+  offering it when a trade is opened. An account with trades or money
+  movements cannot be deleted, only archived; one without them is deleted into
+  `.trash` like everything else.
 - **Trash** lists everything deleted, newest first, with a **Restore** button.
   The card is folded, the count on it; a click opens the list.
 - **Pairs** are the suggestions for the form. Taking a pair out of the list does
@@ -863,7 +897,7 @@ The **Accounts** tab.
   timeframes of the entry TF field and the execution checkboxes. Each opens on a
   click, takes a new word in the field and removes one with the button next to
   it. A new word goes to the end of its list, so the timeframes stay in the
-  order you trade them rather than in the alphabet.
+  order you trade them.
 
   Removing a word only stops the form offering it. The trades that carry it keep
   it: it stays in the filters, the statistics and the reports, it is still shown
@@ -875,12 +909,6 @@ The **Accounts** tab.
   Every style you keep in the list gets a winrate tile of its own on the journal
   page, as soon as it has trades. **Winrate overall** counts every trade of the
   selection, whatever its style, retired or not.
-
-**The balance does not match the real one?** Do not change the start balance and
-do not edit old trades: use **Correct a balance** above. The gap is written down
-as a record of its own in `journal/adjustments/`, with the kind
-`reconciliation`, `fee`, `deposit` or `withdrawal` and a comment saying where
-the difference came from. That way the history stays honest.
 
 ## Reports
 
@@ -902,33 +930,35 @@ across the boundary.
 
 **What is in a report.** The header leads to the report of the period before
 and the one after, and for a month to its quarter, when those reports exist.
-The page opens on the figures a review asks for first, one tile each, the
-period before in grey under the first three: the result in R with the money
-under it; the winrate with the EV and the trades won, lost, break-even by
-colour, the positions open now in blue while the period runs; the **deepest
-fall from a high**, how far
-the period went below its own best point, in R, because a month can end in
-plus and still have been survived rather than traded; the **mistakes**; the
-**process**, the daily cards written against the days you took a trade on
-and their grades; and the best and the worst trade by R, each a link to the trade.
-A day counts here by its entries: a position that closed by itself while you
-were away does not turn that day into one owing a card.
+The page opens on the figures a review asks for first, one tile each, with
+the period before in grey under the first three. The **result** in R, with
+the money under it. The **winrate** with the EV, and the trades won, lost and
+break-even by colour, with the positions open now in blue while the period
+runs. The **deepest fall from a high**, how far the period went below its own
+best point in R, because a month can end in plus and still have been a hard
+one. The **mistakes**. The **process**, the daily cards written against the
+days you took a trade on, with their grades; a day counts here by its
+entries, so a position that closed by itself while you were away does not
+turn that day into one owing a card. And the best and the worst trade by R,
+each a link to the trade.
 
-**Mistakes** are what the journal itself recorded as one: a rule ticked as not
-met at the entry or at the close, or a loss at the stop edge and worse (1.2 R
-until you set it on the Statistics tab), which is past
-the stop: more was lost than the risk written on the trade, whether by size,
-a moved stop or slippage. A trade that did both counts once; a trade never
-ticked counts neither way, and the tile says how many trades under a playbook
-were never ticked. The
-count is plain ink and only the R of those trades is coloured: a report does
-not grade a month. The **Rules** card names every rule the trades ticked
-against the current version of their playbook did not meet, how many trades
-broke it and what they brought, the costliest first, against the
-last row, the trades that kept every rule; the losses past the stop are listed
-under it as **Past the stop**, each a link to the trade and each with what it
-cost past the stop edge beside its R, the total said under the table. The card stands
-whenever a trade of the period names a playbook or a loss went past the stop.
+**Mistakes** are what the journal itself recorded as one: a rule ticked as
+not met at the entry or at the close, or a loss at the stop edge and worse
+(1.2 R until you set it on the Statistics tab), which means more was lost
+than the risk written on the trade, whether by size, a moved stop or
+slippage. A trade that did both counts once; a trade never ticked counts
+neither way, and the tile says how many trades under a playbook were never
+ticked. The count is plain ink and only the R of those trades is coloured,
+because a report reports a month rather than grading it.
+
+The **What a rule costs** card names every rule the trades did not meet,
+among the trades ticked against the current version of their playbook: how
+many trades broke it and what they brought, the costliest first, against the
+last row, the trades that kept every rule. Under it, **Past the stop** lists
+the losses that went deeper than the stop edge, each a link to the trade and
+each with what it cost past the edge beside its R, and the total under the
+table. The card stands whenever a trade of the period names a playbook or a
+loss went past the stop.
 
 **Process** counts the cards against the days traded and quotes the errors
 written on them; when a stop was moved to breakeven in the period it adds one
@@ -936,30 +966,30 @@ sentence: on how many trades, how they ended, what they brought against the
 trades whose stop stayed, and how soon the stop was moved. The sentence goes
 into the saved file too.
 
-**Trade by trade** is every closed trade of the period as one bar, in the
-order of the exits: a win stands up in green, a loss hangs down in red, a
-break-even is an amber tick on the zero line, and a thin line marks where a new
-week begins, or a new month in a quarter. The dashed line is the stop, -1 R. A
-bar that reaches past it lost more than the risk allowed, and it shows without a
-label.
-Hover a bar for the trade, click it to open it. Beside it stand **the rings**,
-the R distribution of the period, the same as on the Statistics tab.
+**Trade by trade**, the tape, is every closed trade of the period as one bar,
+in the order of the exits: a win stands up in green, a loss hangs down in
+red, a break-even is an amber tick on the zero line, and a thin line marks
+where a new week begins, or a new month in a quarter. The dashed line is the
+stop, -1 R, and a bar that reaches past it lost more than the risk allowed.
+Hover a bar for the trade, click it to open it. Beside the tape stand **the
+rings**, the R distribution of the period, the same as on the Statistics tab.
 
-Then **By playbook** with its setups beneath, when any trade names one;
-**Process**, with the daily cards against the days you took a trade on, the weekly cards
-of the period, the grades, the D and F days and the errors you wrote on the
-cards, each a link to its card; and your **Conclusions**: an open field until they are
-written, then your text with an **Edit** fold under it. Saving writes the
-figures and the text into `journal/reports/<period>.md`, an ordinary markdown
-file you can read anywhere. The text is never overwritten by a rebuild. The
-page itself is always the journal as it is now, so there is nothing to
-recalculate; the file catches up when you save or press *rebuild* on the shelf.
+Then come **By playbook** with its setups beneath, when any trade names one,
+and **Process**: the daily cards against the days you took a trade on, the
+weekly cards of the period, the grades, the D and F days and the errors you
+wrote on the cards, each a link to its card. Your **Conclusions** end the
+story, an open field until they are written, then your text with an **Edit**
+fold under it. Saving writes the figures and the text into
+`journal/reports/<period>.md`, an ordinary markdown file you can read
+anywhere, and a rebuild never overwrites the text. The page itself is always
+the journal as it is now, so there is nothing to recalculate; the file
+catches up when you save or press *rebuild* on the shelf.
 
-After the story come the tables: for a quarter its months, each a link to its
-own report when one exists; then by pair, by style, the accounts with the
-balance of each before and after the period, by direction, by entry timeframe
-and by execution format, every row with its trades, WR, Σ R, EV and money, Σ R
-the one coloured column.
+After the story come the tables, dealt into two columns: the accounts with
+the balance of each before and after the period, for a quarter its months,
+each a link to its own report when one exists, and the cuts by pair, style,
+direction, entry timeframe and execution format, every row with its trades,
+WR, Σ R, EV and money, Σ R the one coloured column.
 
 **Every row leads to its trades.** Click a pair, an account, a style or a
 direction in the report tables and the journal opens filtered to it, over the
@@ -971,28 +1001,29 @@ trade opened from a report has a button back to that report in its header,
 and one opened from the Statistics tab, from a row of the list, a bar of the
 tape or the best and worst tile, has a button back to the cut it came from.
 
-**The trades of the month stand at the foot of the report**, the same card the
-Statistics tab carries under a period cut: every trade the month closed,
+**The trades of the month stand at the foot of the report**, the same card
+the Statistics tab carries under a period cut: every trade the month closed,
 newest exit first, with the exit and the entry side by side, thirty open and
-the rest folded. The tape above says the shape of the month, this says which
-trades made it. **The trades** in the header jumps down to it, and a row opens
-its trade with the way back to this report. It is worked out from the journal
-on every look, like everything else on the page; the file the report saves
-keeps the figures and your conclusions, not the list, since the trades are
-already in the journal and a stored copy would be one more thing to drift.
+the rest folded. The tape above says the shape of the month, and this list
+says which trades made it. **The trades** in the header jumps down to it, and
+a row opens its trade with the way back to this report. The list is worked
+out from the journal on every look, like everything else on the page; the
+file the report saves keeps the figures and your conclusions, since the
+trades are already in the journal and a stored copy would be one more thing
+to drift.
 
 ## Showing your journal to somebody
 
-Sooner or later a trade has to be shown to another trader, and the journal has
-no way out of this machine on purpose. **Share** makes one: a single file that
-holds the record and its screenshots inside itself. It opens in any browser on
+Sooner or later a trade has to be shown to another trader. **Share** makes
+the one way out of this machine: a single file that holds the record and its
+screenshots inside itself. It opens in any browser on
 any computer, with no journal running and no network, and it can be sent the
 way any file is sent.
 
 **Share stands in four places.** On a trade, next to Edit: the trade whole,
 the plan it followed and the setup it was taken under, the idea with its
 screenshots by timeframe, the checklist with what was met and what was not and
-why, the exit shot and your conclusions. On a plan, next to Edit as well: the
+why, the exit screenshot and your conclusions. On a plan, next to Edit as well: the
 days and the pair, the narrative, the analysis with its screenshots, what was
 to be done, the updates written while it ran, the review, and the trades tied
 to the plan with their R, so that the reader sees what was expected and what
@@ -1019,37 +1050,42 @@ press it, and a big one takes a moment, so the button counts itself up
 it again while it works does nothing, and the whole journal with every
 screenshot in it is the only case where the counting is worth watching.
 
-**Money never leaves.** Not the PnL of a trade, not the risk in money, not a
-balance and not the size of an account. What travels is R, the result measured
-against the risk you took, the percent the risk was written as, and the words
-you wrote. Account names travel, since a trader reading your journal should
-know which account a trade sat on. This is not a switch, it is how the document
-is built: it carries only what it names, so a field added to a trade tomorrow
-will not quietly walk out in it.
+**Money stays home.** The PnL of a trade, the risk in money, the balances
+and the size of an account are left out of every document, and so is the
+name of the account, since traders name accounts by their size. What travels
+is R, the result measured against the risk you took, the percent the risk
+was written as, and the words you wrote. This is how the document is built
+rather than a switch: it carries only what it names, so a field added to a
+trade tomorrow stays home as well.
 
-**A PDF, when a file is not what you want.** Open the downloaded file and print
-it, `Ctrl+P`, then save as PDF. The document knows it is being printed and
-turns itself into ink on paper: white ground, dark text, and in a selection
-every trade starting its own page. That is the way to a PDF that looks like the
-journal, and it needs nothing installed.
+**A PDF, when that is what is wanted.** Open the downloaded file and print
+it, `Ctrl+P`, then save as PDF. The document has a print layout of its own:
+white ground, dark text, and in a selection every trade starting its own
+page. That is the way to a PDF that looks like the journal, and it needs
+nothing installed.
 
-**A document is a copy, not a window.** It holds the record as it was the
-moment you saved it. Write another line into the trade and the file you already
-sent will not know about it; make it again and send the new one.
+**A document is a copy.** It holds the record as it was the moment you saved
+it. Write another line into the trade and the file you already sent will not
+know about it; make it again and send the new one.
 
 ## Search
 
 The **Search** tab. A word or a phrase is looked for in everything you have
-written: the ideas and conclusions of trades, their notes, the analysis, plan,
-updates and review of every plan, the text of every market note, and every
-field of every card, daily and weekly alike. Case does not
+written: the ideas, conclusions and updates of trades, the analysis, plan,
+updates and review of every plan, the text of every market note, the name,
+intro, rules, setups, sections and review of every playbook, and every field
+of every card, daily and weekly alike. Case does not
 matter. Every hit is a link to the record, with the matching words shown in
-the text around them. It is the way to find the trade where you wrote "moved
-the stop too early" three months ago.
+the text around them, which is how the trade where you wrote "moved the stop
+too early" three months ago is found again.
 
 ## Where the data lives
 
-Everything is in the `journal/` folder: ordinary text files and pictures.
+Everything is in the `journal/` folder: ordinary text files and PNG images. Run
+from the source, that folder sits next to the code; the downloaded file and
+the `plainbook` command of a pipx install keep it in `Plainbook` in your home
+folder (`C:\Users\<you>\Plainbook`, `/Users/<you>/Plainbook`, `~/Plainbook`);
+`PLAINBOOK_ROOT` points it anywhere else, see INSTALL.md.
 
     journal/trades/2026-08-30-01-eurusd/trade.md
     journal/trades/2026-08-30-01-eurusd/shots/*.png
@@ -1065,32 +1101,46 @@ Everything is in the `journal/` folder: ordinary text files and pictures.
     journal/accounts/*.md
     journal/adjustments/*.md
     journal/reports/2026-08.md
+    journal/reports/2026-Q3.md
+    journal/vocabulary.md      the styles, timeframes and execution formats the form offers
+    journal/pairs.md           the pairs the form offers
+    journal/settings.md        the stop edge
 
-If `PLAINBOOK_ROOT` is set, that folder is somewhere else. See INSTALL.md.
-
-The files open in any text editor and read by eye. No database, no format of its
-own: if the program breaks tomorrow, the records are still yours in the same
-shape.
+The files open in any text editor and read by eye. There is no database and
+no format of its own, so if the program breaks tomorrow, the records are
+still yours in the same shape.
 
 Two service folders sit next to the journal: `.trash` (what was deleted) and
 `.drafts` (screenshots from forms that were never submitted, swept after a day).
 
-**A backup** is a copy of the `journal/` folder. If it is under git the history
-is already kept; a copy on an external drive is still not a waste.
+**A backup** is a copy of the `journal/` folder. A git repository of its own
+in the data folder keeps the history as well; the records are never part of
+the program's repository. A copy on an external drive is worth having too.
 
 ## When something goes wrong
 
-- **The page does not open.** The server is not running. On Linux:
-  `systemctl --user restart plainbook`. Otherwise run `python3 -m plainbook.server`
-  in the program folder.
-- **A screenshot did not paste.** The journal says so outright. Check that the
-  clipboard holds a picture and not a file or a link.
+- **The page does not open.** The server is not running. Start it the way it
+  was installed: the downloaded file by a double-click, `plainbook` after a
+  pipx install, `python3 -m plainbook.server` in the program folder from the
+  source; on Linux with the unit, `systemctl --user restart plainbook`.
+- **A screenshot did not paste.** Nothing happens when the clipboard holds a
+  file or a link instead of a picture; copy the picture itself and paste
+  again. The journal speaks up only when a picture was taken and could not be
+  saved.
+- **A page says the record could not be read.** Its file was edited by hand
+  and something in it does not parse; the page names the file and the reason
+  and leads back to the list. The reports and the shelf name such a card the
+  same way and leave it out of their figures.
+- **A page says there is no such trade, plan or note.** The address leads
+  nowhere: the record was moved to the trash, or its folder was renamed when
+  its date or pair was edited. The list of its tab has the current address.
 - **A yellow box at the top of every page says a record could not be read.**
   A file was edited by hand and something in it does not parse: a date written
   the wrong way round, a letter in a number, a header without its closing
   line. The box names the file and the reason; everything else keeps working
   and the figures simply leave that record out until it is fixed. From the
-  terminal, `python3 tools/check_journal.py` (with the data folder as an
-  argument if it is not `./journal`) prints the same list.
+  terminal, `python3 tools/check_journal.py` prints the same list, for the
+  folder that holds `journal/` given as an argument, or for `PLAINBOOK_ROOT`
+  when none is given.
 - **Deleted the wrong thing.** The Trash card on the Accounts tab, **Restore**.
 - **Port 8778 is taken.** Set another one through `PLAINBOOK_PORT`.

@@ -16,8 +16,6 @@ from datetime import datetime, timedelta
 from . import html as H
 from . import mdfile, stats, store
 
-DIR = "reports"
-_PERIOD = re.compile(r"^(\d{4})-(?:(\d{2})|Q([1-4]))$")
 
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July",
                "August", "September", "October", "November", "December"]
@@ -33,26 +31,22 @@ SLICES = (("By style", lambda t: [t.style]),
 
 
 def path(root, period):
-    return os.path.join(root, store.JOURNAL, DIR, period + ".md")
+    return os.path.join(root, store.JOURNAL, store.REPORTS, period + ".md")
 
 
 def parse_period(period):
-    """'2026-08' | '2026-Q3' -> (start, end, human readable name)."""
-    m = _PERIOD.match(period or "")
-    if not m:
+    """'2026-08' | '2026-Q3' -> (start, end, human readable name).
+
+    The calendar is the one of stats.py (period_bounds), so that a month or
+    a quarter is cut in one place for the reports, the Statistics tab and
+    the front page alike; a report knows no week."""
+    grain = stats.grain_of(period or "")
+    if grain not in ("month", "quarter"):
         raise ValueError(f"cannot read the period: {period!r}")
-    year = int(m.group(1))
-    if m.group(2):
-        month = int(m.group(2))
-        if not 1 <= month <= 12:
-            raise ValueError(f"cannot read the period: {period!r}")
-        start = datetime(year, month, 1)
-        end = datetime(year + (month == 12), (month % 12) + 1, 1)
-        return start, end, f"{MONTH_NAMES[month - 1]} {year}"
-    q = int(m.group(3))
-    start = datetime(year, 3 * (q - 1) + 1, 1)
-    end = datetime(year + (q == 4), (3 * q) % 12 + 1, 1)
-    return start, end, f"Q{q} {year}"
+    start, end = stats.period_bounds(period)
+    name = (f"Q{(start.month - 1) // 3 + 1} {start.year}" if grain == "quarter"
+            else f"{MONTH_NAMES[start.month - 1]} {start.year}")
+    return start, end, name
 
 
 def kind_of(period):
@@ -61,28 +55,14 @@ def kind_of(period):
 
 def previous_period(period):
     """'2026-08' -> '2026-07', '2026-Q1' -> '2025-Q4'. The one to compare with."""
-    m = _PERIOD.match(period or "")
-    if not m:
-        raise ValueError(f"cannot read the period: {period!r}")
-    year = int(m.group(1))
-    if m.group(2):
-        month = int(m.group(2))
-        return f"{year - 1}-12" if month == 1 else f"{year}-{month - 1:02d}"
-    q = int(m.group(3))
-    return f"{year - 1}-Q4" if q == 1 else f"{year}-Q{q - 1}"
+    start, _, _ = parse_period(period)
+    return period_of(start - timedelta(days=1), kind_of(period))
 
 
 def next_period(period):
     """'2026-08' -> '2026-09', '2026-Q4' -> '2027-Q1'."""
-    m = _PERIOD.match(period or "")
-    if not m:
-        raise ValueError(f"cannot read the period: {period!r}")
-    year = int(m.group(1))
-    if m.group(2):
-        month = int(m.group(2))
-        return f"{year + 1}-01" if month == 12 else f"{year}-{month + 1:02d}"
-    q = int(m.group(3))
-    return f"{year + 1}-Q1" if q == 4 else f"{year}-Q{q + 1}"
+    _, end, _ = parse_period(period)
+    return period_of(end, kind_of(period))
 
 
 def period_of(moment, kind):
@@ -108,9 +88,8 @@ def trades_of_period(journal, period):
     change of one report disagreed by every trade that ran across its edge.
     The list on the front page groups by the entry, so a trade that crossed a
     boundary stands in one month there and in the other here."""
-    start, end, _ = parse_period(period)
-    return [t for t in journal.trades
-            if not t.is_open and t.closed and start <= t.closed < end]
+    parse_period(period)                   # a bad period is refused here
+    return stats.closed_in(journal.trades, period)
 
 
 def still_open(journal, period, now=None):
@@ -186,7 +165,7 @@ class Report:
     order: list = field(default_factory=list)      # the closed trades, by the exit
 
 
-def compose(root, journal, period):
+def compose(root, journal, period, problems=None):
     """The report of a period, from the journal as it stands."""
     start, end, name = parse_period(period)
     trades = trades_of_period(journal, period)
@@ -200,7 +179,7 @@ def compose(root, journal, period):
                fall=stats.drawdown_r(journal, trades),
                was_fall=stats.drawdown_r(journal, was_trades))
     r.held = still_open(journal, period)
-    r.playbooks = playbook_rows(root, journal, trades)
+    r.playbooks = playbook_rows(root, journal, trades, problems)
     r.slices = [(heading, stats.by_values(journal, trades, key))
                 for heading, key in SLICES]
     r.balances = [(a, balance_at(journal, a, start), balance_at(journal, a, end))
@@ -208,8 +187,12 @@ def compose(root, journal, period):
                   if not journal.accounts[a].archived
                   or any(t.account == a for t in trades)]
     r.best, r.worst = extremes(journal, trades)
-    r.cards = [k for k in store.all_cards(root) if k.day and start <= k.day < end]
-    r.weeks = [k for k in store.all_weeks(root)
+    # a card that does not read is named through `problems` and left out,
+    # the way every other page treats such a file (invariant 10); without
+    # the list it raises, which is what the tests want
+    r.cards = [k for k in store.all_cards(root, problems)
+               if k.day and start <= k.day < end]
+    r.weeks = [k for k in store.all_weeks(root, problems)
                if k.week and start <= k.monday < end]
     # A day counted here is a day worked, and work is an entry: the morning
     # the owner sat down, took the trades and wrote the card for. A position
@@ -225,7 +208,7 @@ def compose(root, journal, period):
         grades[k.grade or "not graded"] = grades.get(k.grade or "not graded", 0) + 1
     r.grades = sorted(grades.items())
     r.breakeven = stats.breakeven_split(journal, trades)
-    d = discipline(root, journal, trades)
+    d = discipline(root, journal, trades, problems)
     for f in fields(Discipline):
         setattr(r, f.name, getattr(d, f.name))
     # the order the account felt them: by the exit, the way the tape draws them
@@ -233,13 +216,13 @@ def compose(root, journal, period):
     return r
 
 
-def playbook_rows(root, journal, trades):
+def playbook_rows(root, journal, trades, problems=None):
     """The trades by the playbook they were opened under, its setups beneath
     it, the ones under none last. Empty when no trade names one."""
     rows = stats.by_playbook(journal, trades)
     if not any(pid != stats.NO_PLAYBOOK for pid, _, _ in rows):
         return []
-    names = {b.id: b.name or b.id for b in store.all_playbooks(root, [])}
+    names = {b.id: b.name or b.id for b in store.all_playbooks(root, problems)}
     out = []
     for pid, s, c in rows:
         if pid == stats.NO_PLAYBOOK:
@@ -270,7 +253,7 @@ class Discipline:
     mistakes_sum: stats.Summary = None
 
 
-def discipline(root, journal, trades):
+def discipline(root, journal, trades, problems=None):
     """How the trades went through their checklists, and which rules were
     broken at what cost.
 
@@ -291,7 +274,7 @@ def discipline(root, journal, trades):
     ticked = [t for t in trades if stats.ticked(t)]
     r = Discipline(ticked=c.ticked, unticked=c.unticked, kept=c.kept, broke=c.broke)
     rows = []
-    for p in store.all_playbooks(root, []):
+    for p in store.all_playbooks(root, problems):
         same = [t for t in trades
                 if t.playbook == p.id and t.playbook_version == p.version]
         if not same:
@@ -345,7 +328,7 @@ def balance_at(journal, account, moment):
 # --- the file -------------------------------------------------------------
 
 def _money(x):
-    return f"{x:+,.0f}".replace(",", " ")
+    return H.money(x, signed=True)
 
 
 def _figures(s):
@@ -406,7 +389,7 @@ def to_markdown(r, journal, conclusions):
         lines.append("")
     if r.ticked:
         lines += ["### Rules", "",
-                  f"{r.ticked} {_trades(r.ticked)} ticked against a playbook: "
+                  f"{r.ticked} {_plural(r.ticked, 'trade')} ticked against a playbook: "
                   f"{r.kept.trades} kept every rule, {r.broke.trades} broke one or more.", ""]
         if r.rules:
             lines += ["| rule not met | trades | Σ R | EV |", "|---|---|---|---|"]
@@ -424,10 +407,10 @@ def to_markdown(r, journal, conclusions):
     lines += ["### Process", ""]
     if not r.cards:
         lines += [f"No cards written for this period, and {r.days_traded} "
-                  f"{_days(r.days_traded)} had entries.", ""]
+                  f"{_plural(r.days_traded, 'day')} had entries.", ""]
     else:
-        lines += [f"{len(r.cards)} {_cards(len(r.cards))} written, {r.days_traded} "
-                  f"{_days(r.days_traded)} had entries.", "",
+        lines += [f"{len(r.cards)} {_plural(len(r.cards), 'card')} written, {r.days_traded} "
+                  f"{_plural(r.days_traded, 'day')} had entries.", "",
                   "| process grade | days |", "|---|---|"]
         lines += [f"| {grade} | {n} |" for grade, n in r.grades]
         lines.append("")
@@ -447,7 +430,7 @@ def breakeven_words(b):
     if m.losses:
         ends.append(f"{m.losses} lost after it")
     words = (f"Stop moved to breakeven on {m.trades} of {m.trades + b.stayed.trades} "
-             f"{_trades(m.trades + b.stayed.trades)}: {', '.join(ends)}, "
+             f"{_plural(m.trades + b.stayed.trades, 'trade')}: {', '.join(ends)}, "
              f"{m.sum_r:+.2f} R, EV {m.average_r:+.2f}")
     if b.stayed.trades:
         words += f"; the stop stayed on {b.stayed.trades}, EV {b.stayed.average_r:+.2f}"
@@ -474,16 +457,8 @@ def _clean(c):
     return share + (f" ({c.unticked} not ticked)" if c.unticked else "")
 
 
-def _trades(n):
-    return "trade" if n == 1 else "trades"
-
-
-def _days(n):
-    return "day" if n == 1 else "days"
-
-
-def _cards(n):
-    return "card" if n == 1 else "cards"
+def _plural(n, word):
+    return word if n == 1 else word + "s"
 
 
 def _held(c):
@@ -492,9 +467,9 @@ def _held(c):
     return f"{c.held_share:.0f}%"
 
 
-def build(root, journal, period, conclusions=None):
+def build(root, journal, period, conclusions=None, problems=None):
     """Writes the file. Conclusions: the new ones, or the old ones kept."""
-    r = compose(root, journal, period)
+    r = compose(root, journal, period, problems)
     text = conclusions if conclusions is not None else previous_conclusions(root, period)
     head = {"period": period, "kind": r.kind,
             "updated": datetime.now().strftime("%Y-%m-%d %H:%M")}
@@ -518,7 +493,7 @@ def is_period(period):
 def existing(root):
     """The periods a report file stands for. A note or a copy left in the
     folder is passed over: the shelf composes every name it gets."""
-    folder = os.path.join(root, store.JOURNAL, DIR)
+    folder = os.path.join(root, store.JOURNAL, store.REPORTS)
     if not os.path.isdir(folder):
         return []
     names = [i[:-3] for i in os.listdir(folder)

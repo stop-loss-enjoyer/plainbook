@@ -29,6 +29,14 @@ PNG = bytes.fromhex(
 
 
 class ServerCase(unittest.TestCase):
+    """The routes walked on one shared journal.
+
+    The number in a test's name is its place in one story: test_02 opens the
+    trade that test_04, test_08 and test_20 read through ServerCase.trade_id,
+    and test_43 writes the plan test_44 and test_45 read. unittest runs the
+    methods in the order of their names, which is what keeps that story in
+    order, so a test that needs a record of its own opens it through
+    open_trade or new_plan rather than borrowing one."""
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
@@ -156,6 +164,12 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/new")
         token = self.form_token(html)
         shot = self.paste_shot(token, "idea-1")
+        # the picture the paste shows back while the form is open
+        self.assertEqual(self.get(shot["url"], as_text=False)[1], PNG)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.get("/draft/not-a-token/x.png")
+        self.assertEqual(e.exception.code, 400)
+        e.exception.close()
         code, where = self.post("/new", {
             "token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
             "direction": "long", "style": "swing", "entry_tf": "H4",
@@ -261,7 +275,8 @@ class ServerCase(unittest.TestCase):
     def test_11_statistics_renders(self):
         code, html = self.get("/stats")
         self.assertEqual(code, 200)
-        self.assertIn("<svg", html)
+        self.assertIn('class="ring"', html)                 # the rings are drawn
+        self.assertIn('class="tape"', html)                # and the tape of the trades
         self.assertIn("<h2>R distribution</h2>", html)
 
     def test_12_open_trade_counter(self):
@@ -446,7 +461,7 @@ class ServerCase(unittest.TestCase):
     def test_21a_a_daily_card_carries_a_trades_assessment(self):
         """The paper's numbered lines, same as the weekly card's."""
         _, html = self.get("/card/2026-08-30")
-        self.assertIn("trades assessment", html)
+        self.assertIn("<h3>trades assessment</h3>", html)   # the markup, not the CSS comment
         self.post("/card/save", {
             "date": "2026-08-30", "previous": "2026-08-30", "grade": "A",
             "focus": "one setup a day",
@@ -1583,6 +1598,202 @@ class ServerCase(unittest.TestCase):
             self.S.drop_cache()
         self.assertNotIn('<div class="notice">', self.get("/")[1])
 
+    def test_50a_a_broken_card_is_named_on_the_reports_and_left_out(self):
+        # invariant 10 on the pages that read the cards folder themselves:
+        # one card with a date that does not parse used to take the whole
+        # Reports tab down with a traceback
+        trade_id = self.open_trade(entry="2026-08-10T10:00")
+        q = urllib.parse.quote(trade_id)
+        token = self.form_token(self.get(f"/close/{q}")[1])
+        self.post(f"/close/{q}", {"token": token, "result": "Win", "pnl": "10",
+                                  "exit": "2026-08-11T10:00"})
+        path = os.path.join(self.root, "journal", "cards", "2026-08-03.md")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("---\ndate: 2026-13-45\ngrade: B\n---\n")
+        try:
+            # the report is still built, without the card
+            self.post("/report/build", {"what": "month", "period_month": "2026-08"})
+            for where in ("/reports", "/report/2026-08", "/cards"):
+                code, html = self.get(where)
+                self.assertEqual(code, 200, where)
+                self.assertIn('<div class="notice">', html, where)
+                self.assertIn("cards/2026-08-03.md", html, where)
+            # the card of that very day: the page says why, with the way back
+            code, html = self.get("/card/2026-08-03")
+            self.assertEqual(code, 200)
+            self.assertIn("This record could not be read", html)
+            self.assertIn("cards/2026-08-03.md", html)
+        finally:
+            os.remove(path)
+        self.assertNotIn("cards/2026-08-03.md", self.get("/reports")[1])
+
+    def test_50b_a_broken_plan_note_or_playbook_names_itself_instead_of_a_500(self):
+        broken = {
+            "plans/bad-plan/plan.md": ("---\ntitle: bad\nfrom: 2026-13-45\n---\n",
+                                       "/plan/bad-plan", "/plan/bad-plan/edit", "plans"),
+            "notes/bad-note/note.md": ("---\ntitle: bad\ndate: 2026-99-99\n---\n",
+                                       "/note/bad-note", "/note/bad-note/edit", "notes"),
+            "playbooks/bad-book/playbook.md": ("no header at all\n",
+                                              "/playbook/bad-book",
+                                              "/playbook/bad-book/edit", "playbooks"),
+            "cards/2026-W03.md": ("---\nweek: 2026-W03\ntrades: many\n---\n",
+                                 "/week/2026-W03", None, "cards"),
+        }
+        for rel, (text, *_) in broken.items():
+            path = os.path.join(self.root, "journal", rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+        try:
+            for rel, (_, shown, edit, tab) in broken.items():
+                for where in (shown, edit):
+                    if not where:
+                        continue
+                    code, html = self.get(where)
+                    self.assertEqual(code, 200, where)
+                    self.assertIn("This record could not be read", html, where)
+                    self.assertIn(rel, html, where)
+                    self.assertIn(f'href="/{tab}"', html, where)
+            # a POST at the record answers with the same page, not a traceback
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                self.post("/plan/bad-plan/edit", {"token": "x", "title": "y"})
+            self.assertEqual(e.exception.code, 400)
+            self.assertIn("This record could not be read", e.exception.read().decode())
+            e.exception.close()
+        finally:
+            import shutil
+            for rel in broken:
+                path = os.path.join(self.root, "journal", rel)
+                if rel.startswith("cards/"):
+                    os.remove(path)
+                else:
+                    shutil.rmtree(os.path.dirname(path))
+
+    def test_50c_a_record_that_is_not_there_gets_a_page_not_a_phrase(self):
+        for where, tab in (("/plan/never-was", "plans"), ("/note/never-was", "notes"),
+                           ("/playbook/never-was", "playbooks"),
+                           ("/trade/never-was", "journal"), ("/plan/never-was/edit", "plans")):
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                self.get(where)
+            self.assertEqual(e.exception.code, 404, where)
+            html = e.exception.read().decode()
+            e.exception.close()
+            self.assertIn("<h2>No such ", html, where)
+            self.assertIn('<header', html, where)      # a page of the journal, with its navigation
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.get("/plan/.hidden/edit")
+        self.assertEqual(e.exception.code, 400)
+        self.assertIn("<h2>Bad plan id</h2>", e.exception.read().decode())
+        e.exception.close()
+
+    def test_50d_a_closed_trade_is_not_closed_again(self):
+        trade_id = self.open_trade(entry="2026-08-12T10:00")
+        q = urllib.parse.quote(trade_id)
+        token = self.form_token(self.get(f"/close/{q}")[1])
+        self.post(f"/close/{q}", {"token": token, "result": "Lose", "pnl": "-50",
+                                  "exit": "2026-08-13T10:00", "exit_ticked": "1"})
+        before = store.load_trade(self.root, trade_id)
+        # the close form of a closed trade is the edit form
+        code, html = self.get(f"/close/{q}")
+        self.assertIn(f'action="/edit/{trade_id}"', html)
+        # and a stale close form sent again is refused, the record untouched
+        self.refused(f"/close/{q}", {"token": token, "result": "Win", "pnl": "500",
+                                     "exit": "2026-08-14T10:00"})
+        after = store.load_trade(self.root, trade_id)
+        self.assertEqual((after.result, after.pnl, after.exit_deviations),
+                         (before.result, before.pnl, before.exit_deviations))
+
+    def test_50e_a_screenshot_gone_from_the_disk_does_not_stop_a_close(self):
+        _, html = self.get("/new")
+        token = self.form_token(html)
+        shot = self.paste_shot(token, "idea-1")
+        trade_id = self.open_trade(token=token, entry="2026-08-12T10:00",
+                                   **{"file_idea-1": shot["file"]})
+        folder = store.trade_dir(self.root, trade_id)
+        kept = store.load_trade(self.root, trade_id).idea[0].images
+        self.assertEqual(kept, ["shots/idea-01-01.png"])
+        os.remove(os.path.join(folder, "shots", "idea-01-01.png"))
+        self.S.drop_cache()
+        q = urllib.parse.quote(trade_id)
+        token = self.form_token(self.get(f"/close/{q}")[1])
+        code, where = self.post(f"/close/{q}", {"token": token, "result": "Win",
+                                                "pnl": "10", "exit": "2026-08-13T10:00"})
+        self.assertEqual(code, 200)
+        t = store.load_trade(self.root, trade_id)
+        self.assertFalse(t.is_open)
+        self.assertEqual(t.idea[0].images, [])       # the file is gone, so is the name
+        self.assertEqual(self.get(f"/trade/{q}")[0], 200)
+
+    def test_50f_the_word_of_the_last_page_stays_off_the_next_error(self):
+        # one kept-alive connection serves the GET and the POST, the way a
+        # browser does; the toast of the GET must not be drawn on the 400
+        import http.client
+        trade_id = self.open_trade(entry="2026-08-12T10:00")
+        q = urllib.parse.quote(trade_id)
+        conn = http.client.HTTPConnection("127.0.0.1", self.port)
+        try:
+            conn.request("GET", f"/trade/{q}?said=Trade+opened")
+            html = conn.getresponse().read().decode()
+            self.assertIn('class="toast"', html)
+            token = self.form_token(html)
+            body = urllib.parse.urlencode({"token": token, "update": " "})
+            conn.request("POST", f"/trade/{q}/update", body=body,
+                         headers={"Content-Type": "application/x-www-form-urlencoded"})
+            r = conn.getresponse()
+            html = r.read().decode()
+            self.assertEqual(r.status, 400)
+            self.assertNotIn('class="toast"', html)
+            self.assertNotIn("history.replaceState", html)
+        finally:
+            conn.close()
+
+    def test_50g_an_accounts_message_is_said_once(self):
+        code, where = self.post("/account/new", {"id": "once-acc", "name": "Once",
+                                                 "start": "1000", "currency": "USD"})
+        self.assertIn("said=", where)
+        self.assertNotIn("?m=", where)
+        _, html = self.get(urllib.parse.urlparse(where).path + "?" +
+                           urllib.parse.urlparse(where).query)
+        self.assertEqual(html.count("Account once-acc created"), 1)   # the toast, without the full stop
+
+    def test_50i_the_daily_loss_limit_counts_closed_losses_and_open_risk(self):
+        from datetime import timedelta
+        from plainbook.balances import Journal
+        from plainbook.model import Account, Trade
+        now = datetime(2026, 8, 20, 15, 0)
+        acc = Account(id="prop", name="Prop", start_balance=10000, daily_loss_limit=500)
+
+        def trade(i, pnl=None, risk=1.0, breakeven=None):
+            return Trade(id=f"2026-08-20-0{i}-eurusd", account="prop", pair="EURUSD",
+                         direction="long", style="swing", entry_tf="H4", risk=risk,
+                         opened=now - timedelta(hours=i), opened_time=True,
+                         result=None if pnl is None else "Lose", pnl=pnl,
+                         closed=None if pnl is None else now - timedelta(minutes=i),
+                         closed_time=pnl is not None, breakeven=breakeven)
+
+        def state(*trades):
+            j = Journal({"prop": acc}, list(trades), [])
+            return self.S.daily_limit_state(j, acc, now)
+
+        self.assertEqual(state(), ("", '<div class="sub">today +0 $ · limit 500 $</div>'))
+        cls, line = state(trade(1, pnl=-300), trade(2, risk=1.0))       # 300 + 100 at risk
+        self.assertEqual(cls, " warn")
+        self.assertIn("today -300 $, 100 $ at risk in open trades", line)
+        cls, _ = state(trade(1, pnl=-300), trade(2, risk=2.0))          # 300 + 200 = the limit
+        self.assertEqual(cls, " over")
+        # a stop at breakeven frees its risk and is counted in words
+        cls, line = state(trade(1, pnl=-300), trade(2, risk=2.0, breakeven=now))
+        self.assertEqual(cls, "")
+        self.assertIn("1 at breakeven", line)
+
+    def test_50h_the_plan_form_calls_its_blocks_analysis(self):
+        _, html = self.get("/plan/new")
+        self.assertIn(">analysis</label>", html)
+        self.assertNotIn(">idea text</label>", html)
+        _, html = self.get("/new")
+        self.assertIn(">idea text</label>", html)
+
     def test_51_a_pair_is_one_pair_whatever_the_case(self):
         trade_id = self.open_trade(pair="eurusd")
         self.assertEqual(store.load_trade(self.root, trade_id).pair, "EURUSD")
@@ -2210,7 +2421,7 @@ class ServerCase(unittest.TestCase):
         """A note or a copy left in journal/reports, and a header edited by
         hand, must not take the shelf or the report down."""
         from plainbook import reports
-        folder = os.path.join(self.root, store.JOURNAL, reports.DIR)
+        folder = os.path.join(self.root, store.JOURNAL, store.REPORTS)
         stray = [os.path.join(folder, "notes.md"), os.path.join(folder, "2026-08 copy.md"),
                  os.path.join(folder, "2026-13.md")]
         for f in stray:

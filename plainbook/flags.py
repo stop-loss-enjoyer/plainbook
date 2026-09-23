@@ -314,25 +314,40 @@ def parts(symbol):
     # a ticker is one word: "pair not set" is a state, not a symbol
     if not name or " " in name:
         return []
-    name = re.split(r"[.\-_]", name)[0]        # EURUSD.pro, XAUUSD-ecn, US30_m
-    name = _CLEAN.sub("", name.replace("/", ""))
+    # a broker that writes the two currencies apart (EUR_USD, XAU/USD) is
+    # read whole first; only then is a suffix cut off (EURUSD.pro, US30_m)
+    whole = _CLEAN.sub("", name)
+    joined = _pair(whole)
+    if joined:
+        return joined
+    name = _CLEAN.sub("", re.split(r"[.\-_]", name)[0])
     if not name or len(name) > 12:
         return []
     if name in INDICES:
         return [INDICES[name]]
     if name in CURRENCIES:
         return [CURRENCIES[name]]
+    return _pair(name) or _pair(name, loose=True) or [name[:3]]
+
+
+def _pair(name, loose=False):
+    """Two faces out of one name, or None. Loose: one side may be a word
+    the table does not know, such as a broker's suffix glued to the quote
+    (EURUSDm), and its first three letters are looked up before they are
+    written on a plain coin."""
     for size in (4, 3):                     # USDT first, then the three-letter codes
         head, tail = name[:size], name[size:]
         if head in CURRENCIES and tail in CURRENCIES:
             return [CURRENCIES[head], CURRENCIES[tail]]
+    if not loose:
+        return None
     for size in (4, 3):                     # a known base against an unknown quote
         head, tail = name[:size], name[size:]
         if head in CURRENCIES and 2 <= len(tail) <= 5:
-            return [CURRENCIES[head], tail[:3]]
+            return [CURRENCIES[head], CURRENCIES.get(tail[:3], tail[:3])]
         if tail in CURRENCIES and 2 <= len(head) <= 5:
-            return [head[:3], CURRENCIES[tail]]
-    return [name[:3]]
+            return [CURRENCIES.get(head[:3], head[:3]), CURRENCIES[tail]]
+    return None
 
 
 # --- the markup ------------------------------------------------------------

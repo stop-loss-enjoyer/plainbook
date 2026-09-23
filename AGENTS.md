@@ -2,8 +2,8 @@
 
 This project is meant to be kept by a coding agent. Not tolerated by one, but
 built for it: no dependencies to resolve, no build step to wait for, a test
-suite that finishes in under a second, and every rule that matters written down
-here instead of living in someone's head.
+suite that finishes in a couple of seconds, and every rule that matters written
+down here instead of living in someone's head.
 
 Read this before you touch anything. It is short on purpose.
 
@@ -42,7 +42,7 @@ records.
 ## 2. Running it
 
 ```bash
-python3 -m unittest discover -s tests    # the whole suite, ~1 s
+python3 -m unittest discover -s tests    # the whole suite, a few seconds
 python3 tools/check_public.py            # nothing private in the tree
 python3 tools/check_journal.py [root]    # does every record read
 python3 -m plainbook.server              # http://localhost:8778
@@ -84,22 +84,33 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/flags.py` | the round flag icons of a trading symbol, and what a symbol is taken apart into |
 | `plainbook/share.py` | the document a record leaves in: one file, its pictures inside it, no money in it |
 | `plainbook/server.py` | routes, pages, forms: everything HTTP |
+| `plainbook/__main__.py` | `python3 -m plainbook`: the same server |
 | `tools/check_public.py` | the guard that keeps records out of the repository |
 | `tools/check_journal.py` | loads every record the way the server does and names the ones that do not read |
 | `tools/demo_journal.py` | an invented journal for screenshots and for looking at a change |
 | `tools/attach_playbook.py` | ties the trades a playbook was already traded by to it: its styles, from its `since` date |
 | `tools/import_csv.py` | old trades brought in from a CSV table (a Notion export, a spreadsheet), written as the interface writes them |
 | `tools/app_entry.py` | the entry of the downloaded file: what PyInstaller packs |
+| `tools/browser_check.mjs` | the scripted forms driven in a headless Chromium against a demo journal |
+| `tools/screenshots.py` | retakes the pictures of README.md in `docs/` on the demo journal; run it after a release |
+| `tests/` | the suite: `test_server.py` walks the routes on one shared journal, the others take the modules one by one |
+| `docs/` | the screenshots of README.md, taken on the demo journal |
+| `.githooks/pre-push` | runs `check_public.py` before a push; turned on once with `git config core.hooksPath .githooks` |
+| `.github/workflows/tests.yml` | the suite and the guard on every push, on Python 3.10 and 3.13, three systems |
 | `pyproject.toml` | the package for pipx: the `plainbook` command; nothing in it is needed to run from source |
 | `.github/workflows/release.yml` | builds one file per system from a published release, attests it, attaches it |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
-reports, share, balances, store → model → mdfile`. Nothing points back up. If you find
-yourself importing `server` from anywhere, the design has gone wrong.
+reports, share, balances, store → model → mdfile`, with `reports` and `share`
+reading `html` and `stats` sideways for the words and the figures they print,
+and `balances` reading `store`. Nothing points back up. If you find yourself
+importing `server` from anywhere, the design has gone wrong.
 
 Routes live in `Handler.do_GET` and `Handler.do_POST` at the bottom of
 `server.py`, and they are a flat list of `if` statements on purpose, so that the
-whole routing table fits on one screen and needs no framework to read.
+routing table reads top to bottom and needs no framework to read. A record
+that is not there answers with `_gone`, a page, never a bare phrase; a record
+whose file does not read answers with the same page and the reason on top.
 
 ## 4. Invariants
 
@@ -107,7 +118,11 @@ Break one of these and something breaks quietly, days later, in the owner's
 data. Each one is followed by what it prevents.
 
 1. **Nothing computable is stored.** Balance and R are worked out on every load.
-   *Prevents:* a stored number drifting away from the history that produced it.
+   The one exception is written down: a card keeps the PnL of its day, and a
+   weekly card its PnL and its count of trades, prefilled from the journal and
+   saved as the owner left them, because the figure a day is reviewed by is the
+   owner's. *Prevents:* a stored number drifting away from the history that
+   produced it.
 2. **A trade's `shots/` folder is rewritten whole** from what the form sent
    (`apply_shots`). Every form that edits a trade must therefore send back
    **all** of its screenshot zones, including the ones it does not display.
@@ -272,7 +287,8 @@ In this order, every time:
 - **`CHANGELOG.md` gets a line** for anything a user would notice, phrased as
   what changed for them. When a version is released, its heading goes in here
   and `__version__` in `plainbook/__init__.py` is raised to the same number:
-  that is the figure the front page shows.
+  that is the figure the front page shows, and the one on the pictures of the
+  README, which `tools/screenshots.py` retakes.
 - **`GUIDE.md` gets updated** when the interface changes. It is the owner's
   manual; an out-of-date manual is worse than none.
 - **Comments explain the reason**, never the mechanics. `# closewindow does not

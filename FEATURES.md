@@ -2,14 +2,13 @@
 
 A map of everything the journal does, written for the agent that is about to
 be asked to add something. Read it before writing code, and read it again when
-the request uses the words of a trader rather than the words of this program.
-Almost every such request names a thing that already exists here under a name
-of its own. The one that has been built twice already is the trading system:
-a person asked their agent for a "trading system" tab, the agent did not find
-the words on any tab and built a new one, and the journal ended up with two
-places holding the same rules, one of which nothing checks a trade against.
-The trading system is the **Playbooks** tab. Everything else has a home too,
-and this file names it.
+the request comes in the words of a trader. Almost every such request names a
+thing that already exists here under a name of its own. The trading system
+has been built twice already: a person asked their agent for a "trading
+system" tab, the agent found the words on no tab and built a new one, and the
+journal ended up with two places holding the same rules, one of which no
+trade was checked against. The trading system is the **Playbooks** tab.
+Everything else has a home too, and this file names it.
 
 The full manual is [GUIDE.md](GUIDE.md); the playbook, part by part, is
 [PLAYBOOK.md](PLAYBOOK.md). This file does not repeat them. It says what
@@ -30,9 +29,9 @@ exists, where it stands, and which requests it answers, so that the answer to
    cards, statistics, reports, accounts, search. A tenth kind of record is
    a rare thing; a tenth view of an existing kind belongs on the tab of that
    kind.
-4. **Text the journal cannot count goes into notes, not into a form.** A
-   playbook takes any `## heading` in its notes and shows it as a section
-   of its own; a note takes any text with screenshots. Neither needs code.
+4. **Text the journal cannot count goes into notes.** A playbook takes any
+   `## heading` in its notes and shows it as a section of its own; a note
+   takes any text with screenshots. Neither needs code.
 
 ## If you are asked for...
 
@@ -56,7 +55,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 | daily review, end of day, journal grade, process grade, report card | **Cards, + DRC**: the day on the pattern of a paper Daily Report Card, with the trades of the day graded. |
 | weekly review | **Cards, + WRC**: the same for a trading week. |
 | monthly review, quarterly review, period report | **Reports.** A shelf of every month and quarter since the first closed trade; a report opens on its figures against the period before, the mistakes, the rules not met, the errors from the cards, your conclusions, kept through every rebuild. |
-| statistics, analytics, dashboard, equity curve, win rate, expectancy, R multiples, distribution | **Statistics.** Any cut of the history: the strip (EV, winrate against the break-even winrate, payoff, deepest fall, mistakes, best and worst trade), the bars per trade or per period, the R rings, the equity per account, the tables by pair, style, account, direction, playbook. The front page holds the current period, the account tiles and the list. |
+| statistics, analytics, dashboard, equity curve, winrate, win rate, expectancy, R multiples, distribution | **Statistics.** Any cut of the history: the strip (EV, winrate against the break-even winrate, payoff, deepest fall, mistakes, best and worst trade), the bars per trade or per period, the R rings, the equity per account, the tables by pair, style, account, direction, playbook. The front page holds the current period, the account tiles and the list. |
 | trade commentary while open, updates, journaling during the trade | **The page of an open trade, Update**: a dated line with a screenshot, kept after the close. |
 | breakeven, stop moved to entry, risk-free | **Breakeven** on an open position: frees its risk in the daily loss limit, and Statistics says what moving the stop was worth. |
 | stop overrun, slippage, losses past the stop, what a stop costs | **Statistics, Past the stop** with the stop edge slider, and the rings of losses cut where a stop lands. |
@@ -66,7 +65,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 | screenshots, charts, pictures | Paste with Ctrl+V into any drop zone: the idea and the exit of a trade, its updates, a plan and its updates, a note, a playbook review. |
 | export, spreadsheet, CSV, backup | **CSV** next to the filters of the list; the records themselves are markdown and PNG files in `journal/`, a copy of that folder is the backup. |
 | share with a mentor, send a trade, send a plan, print a report, PDF | **Share** on a trade, on a plan, on the filtered list and on a report: one HTML file with the screenshots inside and no money in it, opens offline, prints to PDF. |
-| search | **Search**: every idea, conclusion, note, plan, update, review and card. |
+| search | **Search**: every idea, conclusion, update, note, plan, playbook, review and card. |
 | delete, undo, restore | Nothing is shredded: a deleted record goes to `.trash` and the **Trash** card on Accounts restores it. |
 | import old trades, history from Notion or a spreadsheet | `tools/import_csv.py` writes trades the way the interface does. |
 | count the trades I already took under this system | `tools/attach_playbook.py` ties the trades of the playbook's styles opened from its *counts from* date. |
@@ -82,16 +81,16 @@ position: account, pair, direction, style, timeframes, risk as a percent or as
 money, the plan and the playbook it is taken under, the checklist, the idea
 with screenshots by timeframe. A click on a row opens the trade: every field,
 the idea, the updates, the exit, the conclusions, the rules with a tick or a
-cross, and the buttons Edit, Update, Breakeven, Close, Share, Delete;
-the same trade goes onto other accounts from its form, Duplicate on other
-accounts, each copy with a risk of its own.
+cross, and the buttons Close trade, Breakeven, Update, Share, Edit, Delete.
+The same trade goes onto other accounts from its form, through Duplicate on
+other accounts, each copy with a risk of its own.
 
 **Playbooks**, the trading systems. One record per way of trading, each with
 its own sample and figures. The list shows every playbook with its status,
-version and block progress; the page shows the intro, the numbered rules by
-setup, the filters, the management rules, the limits, every section of the
-notes, By setup, What a rule costs with the reasons given, Earlier versions,
-and Review. **+ Playbook** is a form of six cards: header, setups, filters,
+version and block progress; the page shows the intro, By setup, What a rule
+costs with the reasons given, the numbered rules by setup with the filters and
+the management rules, the limits, every section of the notes, Trades of this
+playbook, Review and Earlier versions. **+ Playbook** is a form of six cards: header, setups, filters,
 management, limits, notes. The tab is amber while the journal has no
 playbook, and again when a block has run its course without a review.
 
@@ -101,9 +100,9 @@ plan, updates while it runs, the review. The list marks the current plan,
 the ones ahead and the voided ones. A trade names the plan it follows, and
 the plan page shows its trades with their R.
 
-**Notes**, what is not one trade. A level, a pattern, a lesson; text and
-screenshots; the trades tied to the note as examples, so it is read next to
-the trades that show it.
+**Notes**, what is wider than one trade. A level, a pattern, a lesson, as
+text and screenshots, with the trades tied to the note as examples, so it is
+read next to the trades that show it.
 
 **Cards**, the reviews of a day and a week. The daily card follows a paper
 Daily Report Card, the weekly card a Weekly Report Card: process grade,
@@ -111,23 +110,24 @@ opportunity quality, focus, what went well, errors, the best trade, the
 trades assessment with the mark of every trade next to its result. The PnL
 and the counts come from the trades and stay editable.
 
-**Statistics**, the honest questions. Any cut of the history by account,
+**Statistics**, any cut of the history. A cut by account,
 pair, style, direction, result, period, and the page opens on what
 that cut did: the strip, the bars, the R rings, the losses cut at the stop
 edge, the equity per account, By playbook, the stop at breakeven, the tables.
 A bar or a row narrows the page to itself, Back steps out one click at a
 time, the trades of the cut stand at the foot.
 
-**Reports**, a month or a quarter in a second. The shelf of every period
+**Reports**, a month or a quarter on one page. The shelf of every period
 since the first closed trade, with its figures whether a report was built
 or not. A built report is a file, the archive of that month, and holds the
 conclusions; its figures are read off the journal at every look.
 
-**Accounts**, the things set once. Accounts with a start balance, a
+**Accounts**, what is set once. Accounts with a start balance, a
 currency, a daily loss limit, archive; money in and out; corrections; the
 vocabularies of the trade form; the pairs; the trash.
 
-**Search**, every word ever written into the journal.
+**Search** finds every word ever written into the journal, with the record
+it stands in.
 
 ## The records and where they live
 
@@ -147,18 +147,20 @@ is a backup; any editor reads it.
       vocabulary.md   the styles, timeframes and execution formats the form offers
       pairs.md        the pairs the form offers
       settings.md     the stop edge
-      .trash/         what was deleted, restorable from Accounts
+    .trash/           next to journal/: what was deleted, restorable from Accounts
+    .drafts/          next to journal/: pictures pasted into forms not yet submitted
 
 Nothing computable is stored: balances, R, the figures of every table are
 worked out from the history on every load. A field a record does not have
 yet is added to the form and the file, never to a separate store.
 
-## What is deliberately not here
+## What stays out
 
-Not because nobody thought of it, but because it is not this program, and a
-request for it is answered with a fork rather than a feature: broker and
-exchange integrations, automatic trade import, cloud sync, accounts and
-logins, multi-user, a front-end framework, a build step, a stored balance.
-Likewise the journal refuses nothing at the moment of a trade: a rule left
-unticked, a limit gone past, a plan not followed are recorded with the
-reason and counted later, never blocked. Do not add a block.
+Some things are out of scope by design, and a request for them is answered
+with a fork rather than a feature: broker and exchange integrations,
+automatic trade import, cloud sync, accounts and logins, multi-user, a
+front-end framework, a build step, a stored balance. The journal also refuses
+nothing at the moment of a trade: a rule left unticked, a limit gone past, a
+plan set aside are recorded with the reason and counted later. Keep it that
+way; a block at the moment of entry belongs to the trader, and the journal
+only counts what the block would have cost.

@@ -36,6 +36,7 @@ const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise(r => ws.onopen = r);
 let id = 0; const waiting = new Map(); const events = [];
 const errors = [];
+let expect400 = false;                 // set right before the submit that is refused
 ws.onmessage = e => {
   const m = JSON.parse(e.data);
   if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
@@ -45,8 +46,13 @@ ws.onmessage = e => {
       errors.push("exception: " + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text));
     if (m.method === "Runtime.consoleAPICalled" && (m.params.type === "error" || m.params.type === "warning"))
       errors.push(m.params.type + ": " + m.params.args.map(a => a.value ?? a.description).join(" "));
-    if (m.method === "Log.entryAdded" && m.params.entry.level === "error")
-      errors.push("log: " + m.params.entry.text + " " + (m.params.entry.url || ""));
+    if (m.method === "Log.entryAdded" && m.params.entry.level === "error") {
+      // the one 400 the run provokes on purpose (step 6) is not an error of the page
+      const expected = expect400 && /status of 400/.test(m.params.entry.text)
+        && (m.params.entry.url || "").endsWith("/edit");
+      if (expected) expect400 = false;
+      else errors.push("log: " + m.params.entry.text + " " + (m.params.entry.url || ""));
+    }
   }
 };
 function send(method, params = {}) {
@@ -231,14 +237,10 @@ async function run(p) {
   check(await p.evaluate(`document.querySelector('header nav a[href="/playbooks"]').classList.contains('attention')`), "block 2 complete without a review: the tab is amber");
   await p.goto(B + "/playbooks");
   check(await has(`document.body.innerText`, "review due"), "list says review due");
-  // the review from before counts for block 1 only; write one for block... no: block 1 was reviewed already? count=2 → 1 full block, reviews=1 → not due. check the opposite
-  // (with 2 trades and block 2, one review settles it)
-  const due = await p.evaluate(`document.querySelector('header nav a[href="/playbooks"]').classList.contains('attention')`);
-  console.log("note: attention after 2 trades and 1 review =", due);
-
   // ---- 6. revise the rules under the same number: refused with the form back
   await p.goto(B + "/playbook/break-test/edit");
   await p.evaluate(`document.querySelector('[name=setup_rule_1]').value='Level marked on W'`);
+  expect400 = true;
   await p.submit();
   page = (await p.evaluate(`document.body.innerText`)).toLowerCase();
   check(page.includes("Give the new rules a new number".toLowerCase()), "rules changed under a held version are refused");
@@ -269,15 +271,20 @@ async function run(p) {
     "picking a trade writes it into the best trade: " + label);
   check(await p.evaluate(`document.querySelector('.pick').value`) === "",
     "the picker goes back to empty, so it saves nothing of its own");
-  await p.evaluate(`var t=document.querySelector('[name=assess_trade]'); t.value=${JSON.stringify(label)}; t.dispatchEvent(new Event('input',{bubbles:true}))`);
-  check(await has(`document.querySelector('[name=assess_result]').value`, "lose"),
+  // the day may already have a card with rows written by hand (the demo
+  // journal writes one for today), and a result typed by a person is kept:
+  // the check types into the first empty row
+  const ROW = `[...document.querySelectorAll('table.assessment tr')].find(r => r.querySelector('[name=assess_trade]') && !r.querySelector('[name=assess_trade]').value)`;
+  await p.evaluate(`var t=(${ROW}).querySelector('[name=assess_trade]'); t.value=${JSON.stringify(label)}; t.dispatchEvent(new Event('input',{bubbles:true}))`);
+  check(await has(`(${ROW.replace("!r.querySelector('[name=assess_trade]').value", "r.querySelector('[name=assess_id]').value")}).querySelector('[name=assess_result]').value`, "lose"),
     "the assessment fills the result of the picked trade");
-  check(await p.evaluate(`document.querySelector('[name=assess_id]').value`) !== "",
+  const FILLED = `[...document.querySelectorAll('table.assessment tr')].find(r => r.querySelector('[name=assess_trade]') && r.querySelector('[name=assess_trade]').value === ${JSON.stringify(label)})`;
+  check(await p.evaluate(`(${FILLED}).querySelector('[name=assess_id]').value`) !== "",
     "the row remembers which trade it names");
-  await p.evaluate(`var t=document.querySelector('[name=assess_trade]'); t.value='a trade of my own'; t.dispatchEvent(new Event('input',{bubbles:true}))`);
-  check(await p.evaluate(`document.querySelector('[name=assess_id]').value`) === "",
+  await p.evaluate(`var t=(${FILLED}).querySelector('[name=assess_trade]'); t.value='a trade of my own'; t.dispatchEvent(new Event('input',{bubbles:true}))`);
+  check(await p.evaluate(`[...document.querySelectorAll('[name=assess_trade]')].every(t => t.value !== 'a trade of my own' || t.closest('tr').querySelector('[name=assess_id]').value === '')`),
     "a text the journal does not know lets the trade go");
-  await p.evaluate(`var t=document.querySelector('[name=assess_trade]'); t.value=${JSON.stringify(label)}; t.dispatchEvent(new Event('input',{bubbles:true}))`);
+  await p.evaluate(`var t=[...document.querySelectorAll('[name=assess_trade]')].find(t => t.value === 'a trade of my own'); t.value=${JSON.stringify(label)}; t.dispatchEvent(new Event('input',{bubbles:true}))`);
   await p.evaluate(`document.querySelector('[name=grade]').value='B'`);
   await p.submit();
   check((await p.url()).startsWith("/card/" + DAY), "the card saved: " + (await p.url()));

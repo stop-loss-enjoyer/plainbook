@@ -6,11 +6,11 @@ Tie the trades a playbook was already being traded by to the playbook.
 A playbook is usually written down for a way of trading that has been going
 on for a while, and its `since` date says which trades it counts. This tool
 gives those trades the playbook: every trade of one of the playbook's styles
-opened on or after that date, which does not carry a playbook yet. The
-version written is the playbook's current one, the setup is left empty and no
-deviations are recorded: nobody ticked the rules for these trades, and the
-statistics cannot pretend otherwise. Open each such trade and fill them in
-if you remember.
+opened on or after that date, which does not carry a playbook yet. No
+version, no setup and no deviations are written: nobody ticked the rules for
+these trades, and the statistics cannot pretend otherwise. A trade takes the
+version of the playbook on the day its rules are ticked. Open each such trade
+and fill them in if you remember.
 
     python3 tools/attach_playbook.py <journal root> <playbook id>          # what would change
     python3 tools/attach_playbook.py <journal root> <playbook id> --apply  # write it
@@ -61,8 +61,9 @@ def main(argv):
         print("nothing written; add --apply to write")
         return 0
     for t in found:
+        # the playbook only: a version is held by a trade that was ticked
+        # against it (invariant 13), and the first tick writes it
         t.playbook = p.id
-        t.playbook_version = p.version
         store.save_trade(root, t)
     print(f"written: {len(found)}")
     return 0

@@ -4,6 +4,8 @@ After=default.target
 
 [Service]
 Type=simple
+# The folder that holds the source. For the downloaded file, which has no
+# such folder, take this line out and put the file's path in ExecStart.
 WorkingDirectory=%h/plainbook
 # Where the records live. Leave it out and the journal keeps them next to the
 # program, in ./journal. Handy for trying it out, worse once the code is under

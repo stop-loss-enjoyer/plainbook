@@ -486,7 +486,8 @@ class Settings(unittest.TestCase):
         self.assertEqual(store.stop_edge(self.root), 1.2)
         self.assertEqual(store.save_stop_edge(self.root, "1.1"), 1.1)
         self.assertEqual(store.stop_edge(self.root), 1.1)
-        self.assertIn("stop_edge: 1.1", open(store.settings_file(self.root)).read())
+        with open(store.settings_file(self.root), encoding="utf-8") as f:
+            self.assertIn("stop_edge: 1.1", f.read())
         # a comma and a third decimal are taken in, the range is not
         self.assertEqual(store.save_stop_edge(self.root, "1,35"), 1.4)
         for bad in ("0.9", "2.1", "", "deep"):
@@ -494,7 +495,8 @@ class Settings(unittest.TestCase):
                 store.save_stop_edge(self.root, bad)
         self.assertEqual(store.stop_edge(self.root), 1.4)
         # a file with a figure out of range reads as the default, not as an error
-        open(store.settings_file(self.root), "w").write("---\nstop_edge: 7\n---\n")
+        with open(store.settings_file(self.root), "w", encoding="utf-8") as f:
+            f.write("---\nstop_edge: 7\n---\n")
         self.assertEqual(store.stop_edge(self.root), 1.2)
 
 
@@ -707,6 +709,13 @@ class PlaybookCase(unittest.TestCase):
         text = store.playbook_to_text(p)
         self.assertIn("## Conditions", text)
         self.assertNotIn("###", text)
+
+    def test_an_id_from_a_url_is_a_plain_folder_name_or_nothing(self):
+        """Invariant 8: every id that becomes a path goes through this."""
+        for good in ("2026-08-29-01-gbpusd", "pullback", "2026-W36", "a.b"):
+            self.assertTrue(store.safe_dir_name(good), good)
+        for bad in ("", "..", ".hidden", "a/b", "a\\b", "a\0b", "../../etc", "/abs"):
+            self.assertFalse(store.safe_dir_name(bad), repr(bad))
 
     def test_a_playbook_is_saved_and_listed(self):
         with tempfile.TemporaryDirectory() as root:

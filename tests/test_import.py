@@ -5,6 +5,7 @@ import csv
 import io
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -158,6 +159,61 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class GuardCase(unittest.TestCase):
+    """The two tools the documents lean on, shown to fire and to pass."""
+    TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
+
+    def run_tool(self, name, cwd, *args):
+        done = subprocess.run([sys.executable, os.path.join(self.TOOLS, name), *args],
+                              cwd=cwd, capture_output=True, text=True)
+        return done.returncode, done.stdout
+
+    def test_check_public_names_each_kind_of_leak_and_passes_a_clean_tree(self):
+        tmp = tempfile.mkdtemp(prefix="pb-guard-")
+        try:
+            code, out = self.run_tool("check_public.py", tmp)
+            self.assertEqual(code, 0, out)
+            self.assertIn("clean:", out)
+            leaks = {"a.md": "a word in \u0420\u0443\u0441\u0441\u043a\u0438\u0439\n",
+                     # pieced together so that the guard does not fire on this file
+                     "b.py": "path = '/ho" + "me/somebody/x'\n",
+                     "c.txt": "id " + "0123456789abcdef" * 2 + "\n",
+                     "d.md": "one \u2014 two\n"}
+            for name, text in leaks.items():
+                with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                    f.write(text)
+            code, out = self.run_tool("check_public.py", tmp)
+            self.assertEqual(code, 1)
+            for word in ("cyrillic", "home path", "foreign id", "long dash"):
+                self.assertIn(f"FOUND: ", out)
+                self.assertIn(word, out, word)
+        finally:
+            shutil.rmtree(tmp)
+
+    def test_check_journal_names_a_broken_record_and_reads_a_demo_clean(self):
+        tmp = tempfile.mkdtemp(prefix="pb-check-")
+        try:
+            code, out = self.run_tool("demo_journal.py", tmp, os.path.join(tmp, "demo"))
+            self.assertEqual(code, 0, out)
+            demo = os.path.join(tmp, "demo")
+            code, out = self.run_tool("check_journal.py", tmp, demo)
+            self.assertEqual(code, 0, out)
+            self.assertIn("clean:", out)
+            self.assertTrue(any(t.is_open for t in store.all_trades(demo)))
+            folder = store.trade_dir(demo, "2026-01-05-01-eurusd")
+            os.makedirs(folder)
+            with open(os.path.join(folder, "trade.md"), "w", encoding="utf-8") as f:
+                f.write("---\nid: 2026-01-05-01-eurusd\naccount: broker\npair: EURUSD\n"
+                        "direction: long\nstyle: swing\nrisk %: 1\nentry: 05.01.2026\n---\n")
+            code, out = self.run_tool("check_journal.py", tmp, demo)
+            self.assertEqual(code, 1)
+            self.assertIn("CANNOT READ", out)
+            self.assertIn("2026-01-05-01-eurusd/trade.md", out)
+            self.assertIn("1 record left out", out)
+        finally:
+            shutil.rmtree(tmp)
+
+
 class AttachCase(unittest.TestCase):
     def test_trades_of_the_styles_since_the_date_are_tied(self):
         from plainbook.model import Playbook, Rule, Setup, Trade
@@ -186,7 +242,7 @@ class AttachCase(unittest.TestCase):
                                   capture_output=True, text=True).stdout
             self.assertIn("written: 1", done)
             tied = {t.id: (t.playbook, t.playbook_version) for t in store.all_trades(root)}
-            self.assertEqual(tied["2026-08-15-01-eurusd"], ("pull", "1.0"))
+            self.assertEqual(tied["2026-08-15-01-eurusd"], ("pull", ""))   # no tick, no version
             with open(os.path.join(store.trade_dir(root, "2026-08-15-01-eurusd"),
                                    "trade.md")) as f:
                 self.assertNotIn("deviations", f.read())

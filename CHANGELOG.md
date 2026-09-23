@@ -2,6 +2,59 @@
 
 What changed and why. Newest first.
 
+## v1.7.2, 23.09.2026
+
+Bug fixes and tidying after an audit of the whole journal: a record that does
+not read is named wherever it is looked at, a few pages that could fail
+quietly no longer can, the interface agrees with itself, and the tools that
+check the journal are checked themselves.
+
+- **A card that does not read no longer takes the Reports tab down.** One
+  daily card with a mistyped date used to leave every report and the shelf
+  with a traceback; now the card is named at the top of those pages and left
+  out of the figures, the way every other page treats such a file. The same
+  for a plan, a note, a playbook, a daily or weekly card opened by its own
+  address: the page says which file and why, with the way back, instead of
+  failing.
+- **An address with nothing under it gets a page of the journal**, with the
+  navigation and a way back, instead of two words on a white page: a trade
+  moved to the trash and reopened from the browser's history, a mistyped id.
+- **Closing a trade whose screenshot is gone from the disk works.** A picture
+  the record named and the folder no longer held stopped Close, Edit and the
+  duplicate with an error; the missing picture is let go and the rest saved.
+- **The equity curve by date keeps its order** when several exits of one day
+  carry their hour: two afternoon exits used to be pushed past midnight and
+  the curve ran backwards to the next morning's trade.
+- **A closed trade cannot be closed again.** A close form left open in a tab
+  and sent later rewrote the result and ticked the management rules afresh;
+  it is refused now, and the close address of a closed trade opens its edit
+  form.
+- **Symbols written apart or with a broker's suffix get their flags:**
+  `EUR_USD`, `XAU/USD`, `EURUSDm`.
+- **A trade tied to a playbook by `tools/attach_playbook.py` carries no
+  version** until its rules are ticked, the way the interface does it.
+- **The shared document of a trade no longer names the account.** Traders
+  name accounts by their size, and the footer promises the size stays home.
+- The word the last page said no longer rides onto the error page of the
+  next form; after a form on the Accounts tab the message stands once, as a
+  toast when it is short and as a card when it is a sentence.
+- Words of the interface, in one voice: the daily and weekly cards say PnL
+  like the rest of the journal; the table of rule costs is headed *What a
+  rule costs* on the Statistics tab and in a report as on the playbook's
+  page; the search lists a *daily card* and a *weekly card*; a week with one
+  trade reads *1 trade*; the page of a plan is headed by its dates, pair and
+  title, so two weekly plans no longer share the title *weekly*; `+ DRC` and
+  `+ WRC` say what they open when hovered; the edit and close forms are
+  titled *Edit trade*, *Close trade*, *Edit plan*, *Edit note*; a limit's
+  unit stands in brackets; the delete confirmation of an account says the
+  account moves to the trash; an empty day's card says no trade closed
+  instead of *+0 $*; the shared document says *break-even* and *winrate*.
+- **The equity curve and the reports share one calendar**, and the report
+  helpers that had grown copies of their own are folded back; the tools that
+  guard the repository and check a journal, the draft pictures of a form, the
+  daily loss limit and the documents of a period are covered by tests of their
+  own, and the browser check of the forms passes on a fresh demo journal.
+
 ## v1.7.1, 21.09.2026
 
 A trading plan leaves the journal the way a trade does: as one file, with

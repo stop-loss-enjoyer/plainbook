@@ -3,18 +3,24 @@
 """
 Reading and writing the journal: files <-> objects from model.py.
 
-Layout (the source of truth, all under git):
+Layout, with `journal/` and its two service folders under the root the
+server was given (PLAINBOOK_ROOT, or the project folder):
 
-    journal/accounts/bybit.md
-    journal/trades/2025-06-25-01-eurusd/trade.md
-    journal/trades/2025-06-25-01-eurusd/shots/*.png
-    journal/cards/2026-08-30.md
-    journal/cards/2026-W36.md
-    journal/adjustments/2026-08-29-reconciliation-bybit.md
-    journal/reports/2026-08.md
+    journal/accounts/<id>.md
+    journal/adjustments/<id>.md
+    journal/trades/<id>/trade.md, shots/*.png
+    journal/plans/<id>/plan.md, shots/*.png
+    journal/playbooks/<id>/playbook.md, versions/<label>.md, shots/*.png
+    journal/notes/<id>/note.md, shots/*.png
+    journal/cards/YYYY-MM-DD.md, YYYY-Www.md
+    journal/reports/<period>.md
+    journal/vocabulary.md, pairs.md, settings.md
+    .trash/                deleted records, restorable from the Accounts tab
+    .drafts/               pictures pasted into forms not yet submitted
 
-A trade body has three sections: "Idea" (sub-sections per timeframe, text and
-screenshots), "Exit" (screenshots) and "Conclusions" (free markdown, kept as is).
+A trade body has four sections: "Idea" (sub-sections per timeframe, text and
+screenshots), "Exit" (screenshots), "Conclusions" and "Updates" (free
+markdown, kept as is).
 """
 import os
 import re
@@ -125,7 +131,8 @@ def trade_to_text(t):
     head["pair"] = t.pair or PAIR_NOT_SET
     head["direction"] = t.direction
     head["style"] = t.style
-    head["entry tf"] = t.entry_tf
+    if t.entry_tf:                       # never an empty value in a header
+        head["entry tf"] = t.entry_tf
     head["execution"] = _list(t.execution)
     head["risk %"] = _number_to_text(t.risk)
     head["entry"] = _date_to_text(t.opened, t.opened_time)
@@ -271,7 +278,7 @@ def _text_and_images(chunk):
 # --- account and adjustment: object <-> text -------------------------------
 
 def account_to_text(a):
-    head = {"id": a.id, "name": a.name,
+    head = {"id": a.id, "name": a.name or a.id,
             "start balance": _number_to_text(a.start_balance),
             "currency": a.currency, "archived": "yes" if a.archived else "no"}
     if a.daily_loss_limit is not None:
@@ -842,8 +849,19 @@ def save_plan(root, k):
     return k
 
 
-def load_plan(root, plan_id):
-    return text_to_plan(_read(os.path.join(plan_dir(root, plan_id), PLAN_FILE)))
+def _load_one(problems, path, convert, root):
+    """One record by its id. With a problems list a missing file is None
+    and nothing more (the route answers 404), a file that does not read is
+    None with the reason in the list (the route names it); without the list
+    both raise, which is what the tests and the tools want."""
+    if problems is not None and not os.path.isfile(path):
+        return None
+    return _load(problems, path, convert, root)
+
+
+def load_plan(root, plan_id, problems=None):
+    return _load_one(problems, os.path.join(plan_dir(root, plan_id), PLAN_FILE),
+                     text_to_plan, root)
 
 
 def all_plans(root, problems=None):
@@ -870,9 +888,9 @@ def save_playbook(root, p):
     return p
 
 
-def load_playbook(root, playbook_id):
-    return text_to_playbook(_read(os.path.join(playbook_dir(root, playbook_id),
-                                               PLAYBOOK_FILE)))
+def load_playbook(root, playbook_id, problems=None):
+    return _load_one(problems, os.path.join(playbook_dir(root, playbook_id),
+                                            PLAYBOOK_FILE), text_to_playbook, root)
 
 
 def all_playbooks(root, problems=None):
@@ -934,9 +952,10 @@ def playbook_versions(root, playbook_id):
                   if name.endswith(".md"))
 
 
-def load_playbook_version(root, playbook_id, label):
-    return text_to_playbook(_read(os.path.join(playbook_dir(root, playbook_id),
-                                               VERSIONS, label + ".md")))
+def load_playbook_version(root, playbook_id, label, problems=None):
+    return _load_one(problems, os.path.join(playbook_dir(root, playbook_id),
+                                            VERSIONS, label + ".md"),
+                     text_to_playbook, root)
 
 
 def delete_playbook(root, playbook_id):
@@ -960,8 +979,9 @@ def save_note(root, n):
     return n
 
 
-def load_note(root, note_id):
-    return text_to_note(_read(os.path.join(note_dir(root, note_id), NOTE_FILE)))
+def load_note(root, note_id, problems=None):
+    return _load_one(problems, os.path.join(note_dir(root, note_id), NOTE_FILE),
+                     text_to_note, root)
 
 
 def all_notes(root, problems=None):
@@ -1064,12 +1084,12 @@ def save_card(root, k):
     return k
 
 
-def load_card(root, day):
+def load_card(root, day, problems=None):
     """The card of that day, or None if there is none yet."""
     path = card_path(root, day)
     if not os.path.isfile(path):
         return None
-    return text_to_card(_read(path))
+    return _load(problems, path, text_to_card, root)
 
 
 def all_cards(root, problems=None):
@@ -1105,12 +1125,12 @@ def save_week(root, k):
     return k
 
 
-def load_week(root, key):
+def load_week(root, key, problems=None):
     """The card of that week, or None if there is none yet."""
     path = week_path(root, key)
     if not os.path.isfile(path):
         return None
-    return text_to_week(_read(path))
+    return _load(problems, path, text_to_week, root)
 
 
 def all_weeks(root, problems=None):

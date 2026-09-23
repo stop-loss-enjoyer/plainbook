@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-The local journal server. 127.0.0.1 only, port 8778 (PLAINBOOK_PORT changes it).
+The local journal server. 127.0.0.1 only, no authentication.
 
 Run:   python3 -m plainbook.server
-Open:  http://127.0.0.1:8778
+Open:  http://localhost:8778
+
+PLAINBOOK_PORT   the port, 8778 by default
+PLAINBOOK_ROOT   the folder that holds journal/; next to the code by default,
+                 ~/Plainbook for the downloaded file and the pipx package
+PLAINBOOK_OPEN   1 opens the browser on start, 0 does not; the `plainbook`
+                 command and the downloaded file open it, `-m` does not
 """
 import copy
 import csv
@@ -134,6 +140,19 @@ def page(title, body, tab="journal", header_right="", problems=(), home="/"):
                   f'the whole journal the same way.</span><ul>{rows}</ul></div>')
     return H.page(title, body, tab, header_right, notice, said_box(),
                   attention=tabs_asking(), home=home)
+
+
+def broken_record(problems, tab, back):
+    """The page of a record whose file does not read: the file and the reason
+    on top, the way back under them. None when the list is empty, so that a
+    route can tell a missing record (404) from a broken one."""
+    if not problems:
+        return None
+    body = (f'<div class="card"><h2>This record could not be read</h2>'
+            f'<p>The file is named above with the reason. Fix it in an editor, '
+            f'or move it out of the journal, and reload the page.</p>'
+            f'<p><a href="{back}">Back</a></p></div>')
+    return page("Not read", body, tab, problems=problems)
 
 
 def tabs_asking():
@@ -416,7 +435,7 @@ def trades_table(j, trades, group="week", keep=""):
             f'<tr class="group"><td colspan="7">'
             f'<span class="label">{esc(label)}</span>'
             f'<span class="dates">{esc(dates)}</span>'
-            f'<span class="dates">{len(batch)} trades</span></td>'
+            f'<span class="dates">{plural(len(batch), "trade")}</span></td>'
             f'<td>{wr}</td>'
             f'<td class="num {sum_class(s.sum_pnl)}">'
             f'{H.money(s.sum_pnl, signed=True)}</td>'
@@ -482,6 +501,10 @@ def account_tiles(j):
             f'<div class="sub">start {amount(j, account.start_balance, a)} · '
             f'<span style="color:{colour}">{amount(j, result, a, signed=True)}</span>'
             f'{moved}</div>{limit}</div>')
+    if not parts:
+        return ('<div class="card"><p class="muted">No account yet. Create one on '
+                'the <a href="/accounts">Accounts</a> tab: a name and the balance '
+                'it has today.</p></div>')
     return '<div class="tiles narrow">' + "".join(parts) + "</div>"
 
 
@@ -594,9 +617,8 @@ def winrate_tile(name, styles, j, trades):
         return (f'<div class="tile"><div class="name">{esc(name)}</div>'
                 f'<div class="value muted">-</div>'
                 f'<div class="sub muted">no trades</div></div>')
-    sub = (f'<span class="breakdown"><span class="win">{s.wins}</span> / '
-           f'<span class="lose">{s.losses}</span> / '
-           f'<span class="be">{s.be}</span></span>')
+    sub = trades_breakdown(j, [t for t in trades
+                               if styles is None or t.style in styles])
     value = f"{s.wr:.1f}% {expectancy(s)}" if s.decided else "-"
     return (f'<div class="tile"><div class="name">{esc(name)}</div>'
             f'<div class="value">{value}</div>'
@@ -662,8 +684,10 @@ def home_page(q):
     # The header is for what is written before the market, not after it.
     right = ('<a class="btn primary" href="/new">+ Trade</a>'
              '<a class="btn" href="/plan/new">+ Plan</a>'
-             f'<a class="btn" href="/card/{today}">+ DRC</a>'
-             f'<a class="btn" href="/week/{stats.week(datetime.now())}">+ WRC</a>')
+             f'<a class="btn" href="/card/{today}" title="the daily report card: '
+             f'the day reviewed">+ DRC</a>'
+             f'<a class="btn" href="/week/{stats.week(datetime.now())}" '
+             f'title="the weekly report card: the week reviewed">+ WRC</a>')
     # the same selection as a file: a spreadsheet gets the filtered list
     export = "/export.csv" + ("?" + urllib.parse.urlencode(
         {k: v for k, v in q.items() if k != "group"}, doseq=True)
@@ -762,9 +786,8 @@ def back_to_note(note_id):
     """The button back to the note a trade is an example in."""
     if not note_id or not store.safe_dir_name(note_id):
         return ""
-    try:
-        n = store.load_note(ROOT, note_id)
-    except (OSError, RecordError):
+    n = store.load_note(ROOT, note_id, [])
+    if n is None:
         return ""
     return f'<a class="btn" href="/note/{U(n.id)}">← {esc(n.title)}</a>'
 
@@ -1713,7 +1736,7 @@ def stats_rules_card(j, d):
     and the table says which playbook when more than one is in the cut."""
     if not d.ticked:
         return ""
-    return f'<div class="card"><h2>Rules</h2>{rules_table(j, d)}</div>'
+    return f'<div class="card"><h2>What a rule costs</h2>{rules_table(j, d)}</div>'
 
 
 def stats_link(q):
@@ -1882,7 +1905,8 @@ def stats_page(q):
     ends_now = not grain_cut and not (q.get("to") or [""])[0]
     grain = period_grain(q, trades)
     link = stats_link(q)
-    d = reports.discipline(ROOT, j, trades)
+    problems = []
+    d = reports.discipline(ROOT, j, trades, problems)
     slices = {heading: stats.by_values(j, trades, key)
               for heading, key in reports.SLICES}
     books = by_playbook_card(j, trades)
@@ -1930,7 +1954,7 @@ def stats_page(q):
                                   cut_words(j, q), stats_way(q),
                                   "Trades of this cut", CUT_TRADES_WHY)
                if active_filters(q) else ""))
-    return page("Statistics", body, "stats")
+    return page("Statistics", body, "stats", problems=problems)
 
 
 def by_playbook_card(j, trades):
@@ -2039,16 +2063,16 @@ def search_page(q):
         texts = [getattr(c, name) for name, _, _ in CARD_SECTIONS] \
             + [row.trade for row in c.assessment]
         if hit(texts):
-            found.append(("card", f"/card/{U(c.id)}",
+            found.append(("daily card", f"/card/{U(c.id)}",
                           f"{c.day:%d.%m.%Y}" + (f" · grade {c.grade}" if c.grade else ""),
                           _snippet(texts, needle)))
     for c in store.all_weeks(ROOT, []):
         texts = [getattr(c, name) for name, _, _ in WEEK_SECTIONS] \
             + [row.trade for row in c.assessment]
         if hit(texts):
-            found.append(("week", f"/week/{U(c.id)}",
+            found.append(("weekly card", f"/week/{U(c.id)}",
                           f"week {c.number}, {week_dates(c)}"
-                          + (f" - grade {c.grade}" if c.grade else ""),
+                          + (f" · grade {c.grade}" if c.grade else ""),
                           _snippet(texts, needle)))
     rows = "".join(
         f'<tr><td class="muted">{kind}</td>'
@@ -2189,16 +2213,18 @@ def dropzone(name, hint, shots=()):
             f'<div class="hint">{esc(hint)}</div></div>')
 
 
-def idea_form_block(n, tf="", text="", existing=(), base=None):
+def idea_form_block(n, tf="", text="", existing=(), base=None, label="idea text"):
     return ('<div class="form-block card">'
-            + block_inside(n, tf, text, existing, base) + "</div>")
+            + block_inside(n, tf, text, existing, base, label) + "</div>")
 
 
-def block_inside(n, tf="", text="", existing=(), base=None):
+def block_inside(n, tf="", text="", existing=(), base=None, label="idea text"):
+    """A block of the trade form, and of the plan form, where the same block
+    holds the analysis of one timeframe and is labelled so."""
     old = [shot_in_zone(base, s, f"have_idea-{n}") for s in existing]
     return f"""<div class="fields"><div class="field"><label>timeframe</label>
 <input type="text" name="idea_tf_{n}" value="{esc(tf)}" placeholder="H4" size="8"></div></div>
-<label style="margin-top:8px">idea text</label>
+<label style="margin-top:8px">{label}</label>
 <textarea name="idea_text_{n}">{esc(text)}</textarea>
 {dropzone(f"idea-{n}", "click here and press Ctrl+V to paste a screenshot", old)}"""
 
@@ -2848,7 +2874,9 @@ def apply_shots(record, zones):
         prefix = (ZONE_PREFIX.get(zone)
                   or f"idea-{int(zone.split('-')[1]):02d}")
         names = []
-        for i, src in enumerate(sources, 1):
+        # a picture the record names and the disk no longer has is let go
+        # here, not raised: the form that sent the rest must still save
+        for i, src in enumerate((s for s in sources if os.path.isfile(s)), 1):
             name = f"{prefix}-{i:02d}{os.path.splitext(src)[1] or '.png'}"
             shutil.copyfile(src, os.path.join(fresh, name))
             names.append(store.record_path(name))
@@ -3301,6 +3329,10 @@ def move_stop(t, undo=False, now=None):
 
 
 def close_trade(t, data):
+    if not t.is_open:
+        # a close form left open in a tab and sent again would tick the
+        # management rules afresh (invariant 13); a closed trade is edited
+        raise RecordError(f"{t.id}: the trade is closed already, edit it instead")
     token = one(data, "token")
     apply_outcome(t, data)
     apply_management(t, data, editing=False)
@@ -3381,11 +3413,6 @@ def plan_result(j, trades):
     return " · ".join(bits)
 
 
-def plan_followed(j, k, trades):
-    """The line the document of a plan says, so the page says the same."""
-    return share.plan_followed(j, k, trades)
-
-
 def plan_state(k, today):
     """The pill of a plan in the list: voided, current, or ahead when its
     first day has not come. A plan that has run its course wears nothing."""
@@ -3444,10 +3471,10 @@ def plans_page():
 def plan_page(plan_id):
     if not store.safe_dir_name(plan_id):
         return None
-    try:
-        k = store.load_plan(ROOT, plan_id)
-    except (OSError, RecordError):
-        return None
+    problems = []
+    k = store.load_plan(ROOT, plan_id, problems)
+    if k is None:
+        return broken_record(problems, "plans", "/plans")
     j = journal()
     base = plan_shots_base(k.id)
     trades = plan_trades(j, k.id)
@@ -3460,7 +3487,7 @@ def plan_page(plan_id):
     if k.voided:
         fields.append(("voided", f"{k.voided:%d.%m.%Y}, the reason is under "
                        "Updates"))
-    followed = plan_followed(j, k, trades)
+    followed = share.plan_followed(j, k, trades)
     if followed:
         fields.append(("plan against fact", followed))
     table = "".join(f'<tr><td class="muted">{esc(name)}</td><td>{esc(value)}</td></tr>'
@@ -3534,7 +3561,7 @@ def plan_page(plan_id):
     top = ("is-void" if k.voided else
            "is-open" if k.covers(datetime.now()) else "")
     body = (f'<div class="card{" " + top if top else ""}">'
-            f'<h2>{esc(k.title or k.label)}'
+            f'<h2>{esc(k.label)}'
             f'{" <span class=badge>voided</span>" if k.voided else ""}</h2>'
             f'<table class="props">{table}</table></div>'
             + (f'<div class="card"><h2>Analysis</h2>{analysis}</div>'
@@ -3551,7 +3578,7 @@ def plan_page(plan_id):
             + f'<script>{FORM_SCRIPT}</script>'
             + f'<script>document.body.dataset.token = {json.dumps(token)};'
               f'init_zones();</script>')
-    return page(k.title or k.id, body, "plans", buttons)
+    return page(k.label, body, "plans", buttons)
 
 
 def plan_form(k=None, token=""):
@@ -3567,10 +3594,10 @@ def plan_form(k=None, token=""):
     if editing and k.analysis:
         blocks = ""
         for i, b in enumerate(k.analysis, 1):
-            blocks += idea_form_block(i, b.tf, b.text, b.images, base)
+            blocks += idea_form_block(i, b.tf, b.text, b.images, base, "analysis")
         count = len(k.analysis)
     else:
-        blocks = idea_form_block(1)
+        blocks = idea_form_block(1, label="analysis")
         count = 1
     action = f"/plan/{U(k.id)}/edit" if editing else "/plan/new"
     review = ""
@@ -3615,7 +3642,7 @@ under.</p></div>
 <p class="caption">Until is left empty for a plan that lives one day.</p>
 </div>
 <div id="blocks">{blocks}</div>
-<template id="block-template">{block_inside("__N__")}</template>
+<template id="block-template">{block_inside("__N__", label="analysis")}</template>
 <p><button type="button" class="btn" onclick="add_block()">+ analysis block</button></p>
 <div class="card"><h2>Plan</h2>
 <textarea name="plan_text" placeholder="what you will do, and what you will not">{esc(conclusions_text(k.plan)) if editing else ""}</textarea>
@@ -3760,14 +3787,6 @@ def restore_plan(k):
 # text and screenshots, and the trades that show it are tied to it from its
 # own page, so that a note is read with its examples a click away.
 
-def note_title(note_id):
-    """The title of a note for a link. A note deleted later leaves its id."""
-    try:
-        return store.load_note(ROOT, note_id).title
-    except (OSError, ValueError):
-        return note_id
-
-
 def example_label(t):
     """A trade as the list of a note offers it: the day, the pair, the side,
     the style and how it ended."""
@@ -3833,10 +3852,10 @@ def notes_page():
 def note_page(note_id):
     if not store.safe_dir_name(note_id):
         return None
-    try:
-        n = store.load_note(ROOT, note_id)
-    except (OSError, RecordError):
-        return None
+    problems = []
+    n = store.load_note(ROOT, note_id, problems)
+    if n is None:
+        return broken_record(problems, "notes", "/notes")
     j = journal()
     base = note_shots_base(n.id)
     examples = note_examples(j, n)
@@ -4317,10 +4336,10 @@ def rule_costs_card(j, p, trades):
 def playbook_page(playbook_id):
     if not store.safe_dir_name(playbook_id):
         return None
-    try:
-        p = store.load_playbook(ROOT, playbook_id).check()
-    except (OSError, RecordError):
-        return None
+    problems = []
+    p = store.load_playbook(ROOT, playbook_id, problems)
+    if p is None:
+        return broken_record(problems, "playbooks", "/playbooks")
     j = journal()
     trades = playbook_trades(j, p.id)
     intro = paragraphs(p.intro)
@@ -4395,10 +4414,10 @@ def playbook_version_page(playbook_id, label):
     """One frozen version, read only."""
     if not (store.safe_dir_name(playbook_id) and store.safe_dir_name(label)):
         return None
-    try:
-        p = store.load_playbook_version(ROOT, playbook_id, label).check()
-    except (OSError, RecordError):
-        return None
+    problems = []
+    p = store.load_playbook_version(ROOT, playbook_id, label, problems)
+    if p is None:
+        return broken_record(problems, "playbooks", f"/playbook/{U(playbook_id)}")
     head = (f'<div class="card"><div class="card-head">'
             f'<h1 class="pb-name">{esc(playbook_label(p))}</h1>'
             f'<span class="chip retired">version {esc(p.version or label)}, kept</span>'
@@ -4413,12 +4432,6 @@ def playbook_version_page(playbook_id, label):
 # --- the playbook form -------------------------------------------------------
 # Rules are typed a line each into one field per setup; that is faster than a
 # field per rule, and it is the shape the file has anyway.
-
-def lines_of(text):
-    """A field of lines -> the lines in it, the empty ones left out."""
-    return [line.strip() for line in text.replace("\r", "").split("\n")
-            if line.strip()]
-
 
 def rule_pairs(data, name):
     """The rule rows of a field -> [(few words, whole rule)]. A box or a dash
@@ -4478,7 +4491,7 @@ def limit_row(what="", value=""):
     other = bool(what) and what not in kinds
     options = "".join(
         f'<option value="{esc(key)}"{" selected" if key == what else ""}>{esc(label)}'
-        f'{", " + esc(unit) if unit else ""}</option>' for key, label, unit in LIMITS)
+        f'{" (" + esc(unit) + ")" if unit else ""}</option>' for key, label, unit in LIMITS)
     options += f'<option value="other"{" selected" if other else ""}>other</option>'
     return (f'<div class="limit-row">'
             f'<select name="limit_kind" onchange="pick_limit_kind(this)">{options}</select>'
@@ -5061,6 +5074,11 @@ def drop_computed(j, rows, period=None):
             row.result = ""
 
 
+def plural(n, word):
+    """`1 trade`, `2 trades`: a count that agrees with its noun."""
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
 def trades_breakdown(j, closed, running=()):
     """The trades of a period as figures and colour, the way the winrate tile
     on the front page says its three: won, lost, flat, and the ones still in
@@ -5102,8 +5120,10 @@ def cards_page():
         return counted or ("-" if k.trades is None else str(k.trades))
 
     today = datetime.now().strftime("%Y-%m-%d")
-    right = (f'<a class="btn primary" href="/card/{today}">+ DRC</a>'
-             f'<a class="btn" href="/week/{stats.week(datetime.now())}">+ WRC</a>')
+    right = (f'<a class="btn primary" href="/card/{today}" title="the daily '
+             f'report card: the day reviewed">+ DRC</a>'
+             f'<a class="btn" href="/week/{stats.week(datetime.now())}" '
+             f'title="the weekly report card: the week reviewed">+ WRC</a>')
     sign = H.sign(journal().currency())
     if cards:
         rows = "".join(
@@ -5117,12 +5137,12 @@ def cards_page():
                               (esc(first_line(k.overview or k.focus)), "muted")])
             + "</tr>" for k in cards)
         daily = (f'<table><thead><tr><th>date</th><th>process</th>'
-                 f'<th class="num">P&amp;L {sign}</th><th class="num">trades</th>'
+                 f'<th class="num">PnL {sign}</th><th class="num">trades</th>'
                  f'<th>opportunity</th>'
                  f'<th>overview</th></tr></thead><tbody>{rows}</tbody></table>')
     else:
-        daily = ('<p class="muted">No daily cards yet. <b>+ DRC</b> opens '
-                 'today&rsquo;s.</p>')
+        daily = ('<p class="muted">No daily cards yet. <b>+ DRC</b>, the daily '
+                 'report card, opens today&rsquo;s; <b>+ WRC</b> the week&rsquo;s.</p>')
     if weeks:
         rows = "".join(
             "<tr>" + "".join(link_cell(f"/week/{U(k.id)}", inner, cls) for inner, cls in
@@ -5136,7 +5156,7 @@ def cards_page():
                               (esc(first_line(k.lesson or k.focus)), "muted")])
             + "</tr>" for k in weeks)
         weekly = (f'<table><thead><tr><th>week</th><th>process</th>'
-                  f'<th class="num">P&amp;L {sign}</th><th class="num">trades</th>'
+                  f'<th class="num">PnL {sign}</th><th class="num">trades</th>'
                   f'<th>opportunity</th><th>key lesson</th>'
                   f'</tr></thead><tbody>{rows}</tbody></table>')
     else:
@@ -5154,7 +5174,10 @@ def first_line(text, limit=90):
 
 def card_page(day):
     j = journal()
-    k = store.load_card(ROOT, day)
+    problems = []
+    k = store.load_card(ROOT, day, problems)
+    if problems:
+        return broken_record(problems, "cards", "/cards")
     closed = day_trades(j, day)
     period = day_period(day)
     running = running_trades(j, period[1])
@@ -5190,15 +5213,16 @@ def card_page(day):
 <div class="field"><label>process grade</label>
 <input type="text" name="grade" list="grades" value="{esc(k.grade)}"
  placeholder="A" style="width:110px"><datalist id="grades">{options}</datalist></div>
-<div class="field"><label>P&amp;L, {H.sign(j.currency())}</label>
+<div class="field"><label>PnL, {H.sign(j.currency())}</label>
 <input type="number" name="pnl" step="0.01" style="width:130px"
  value="{"" if k.pnl is None else f"{k.pnl:g}"}"></div>
 <div class="field"><label>opportunity quality</label>
 <input type="text" name="quality" list="grades" value="{esc(k.quality)}"
  placeholder="B" style="width:150px"></div>
 </div>
-<p class="caption">P&amp;L for the day by closed trades:
-{amount(j, day_pnl(j, day), signed=True)}. The field is yours to override.</p>
+<p class="caption">{(f"{plural(len(closed), 'trade')} closed on this day for "
+                    f"{amount(j, day_pnl(j, day), signed=True)}") if closed
+                   else "No trade closed on this day"}. The field is yours to override.</p>
 </div>
 <div class="card">{upper}</div>
 <div class="card twin"><div>{section("best")}</div>
@@ -5269,7 +5293,10 @@ def week_period(key):
 
 def week_page(key):
     j = journal()
-    k = store.load_week(ROOT, key)
+    problems = []
+    k = store.load_week(ROOT, key, problems)
+    if problems:
+        return broken_record(problems, "cards", "/cards")
     closed = week_trades(j, key)
     period = week_period(key)
     running = running_trades(j, period[1])
@@ -5318,7 +5345,7 @@ def week_page(key):
 <div class="field"><label>process grade</label>
 <input type="text" name="grade" list="grades" value="{esc(k.grade)}"
  placeholder="A" style="width:110px"><datalist id="grades">{options}</datalist></div>
-<div class="field"><label>P&amp;L, {H.sign(j.currency())}</label>
+<div class="field"><label>PnL, {H.sign(j.currency())}</label>
 <input type="number" name="pnl" step="0.01" style="width:130px"
  value="{"" if k.pnl is None else f"{k.pnl:g}"}"></div>
 <div class="field"><label>trades</label>
@@ -5692,7 +5719,7 @@ def rules_card(j, r):
                  f'<p class="caption">{past_stop_why(j.stop_edge)} Together they cost '
                  f'{r_text(r.past_stop_cost)} beyond the stop. Rules ticked as '
                  f'not met stand in the table above.</p>')
-    return f'<div class="card"><h2>Rules</h2>{body}</div>'
+    return f'<div class="card"><h2>What a rule costs</h2>{body}</div>'
 
 
 def process_card(r):
@@ -5813,7 +5840,8 @@ def report_page(period):
     if body is None:
         return None
     j = journal()
-    r = reports.compose(ROOT, j, period)
+    problems = []
+    r = reports.compose(ROOT, j, period, problems)
     ready = set(reports.existing(ROOT))
     text = reports.previous_conclusions(ROOT, period)
     link = report_link(period)
@@ -5842,7 +5870,7 @@ def report_page(period):
                 # the tape above says the shape of it, this says which trades
                 + period_trades_card(j, r.trades, r.name,
                                      lambda t: trade_way(r, t)))
-    return page(r.name, story + appendix, "reports", report_nav(r, ready))
+    return page(r.name, story + appendix, "reports", report_nav(r, ready), problems)
 
 
 # --- the shelf of reports ---------------------------------------------------
@@ -5907,7 +5935,11 @@ def reports_page():
         return page("Reports", body, "reports")
     quarters = set(reports.periods(j, "quarter")) | {p for p in ready if reports.kind_of(p) == "quarter"}
     quarters |= {stats.quarter(reports.parse_period(m)[0]) for m in months}
-    composed = {p: reports.compose(ROOT, j, p) for p in months | quarters}
+    # every period reads the same cards folder: a card that does not read is
+    # named once, not once per period
+    problems = []
+    composed = {p: reports.compose(ROOT, j, p, problems) for p in months | quarters}
+    problems = sorted(set(problems))
     this_month, this_quarter = reports.period_of(now, "month"), reports.period_of(now, "quarter")
     # the one Build that is primary: the newest finished period with trades
     # and no report, which is the report that is due. A quarter ends with its
@@ -5964,7 +5996,7 @@ def reports_page():
             f'into a file under <code>journal/reports</code> with a place for your '
             f'conclusions, marked with a dot here once written; rebuilding never '
             f'touches them.</p></div>')
-    return page("Reports", body, "reports")
+    return page("Reports", body, "reports", problems=problems)
 
 
 # --- accounts and pairs ----------------------------------------------------
@@ -5983,12 +6015,13 @@ def accounts_page(message=""):
         archive = ("Unarchive", "Archived") if account.archived else ("Archive", "Active")
         delete = (
             f'<form method="post" action="/account/delete" style="display:inline" '
-            f'onsubmit="return confirm(\'Delete account {esc(account.name or a)}?\')">'
+            f'onsubmit="return confirm(\'Delete account {esc(account.name or a)}? '
+            f'It moves to .trash.\')">'
             f'<input type="hidden" name="id" value="{esc(a)}">'
             f'<button class="btn danger">Delete</button></form>'
             if used == 0 else
-            f'<span class="caption">has {trades} trades / {adjustments} '
-            f'adjustments, archive instead</span>')
+            f'<span class="caption">has {plural(trades, "trade")} / '
+            f'{plural(adjustments, "adjustment")}, archive instead</span>')
         out = j.cashed_out(a)
         limit = account.daily_loss_limit
         rows.append(
@@ -6599,10 +6632,10 @@ def share_trade(trade_id, q):
 def share_plan(plan_id, q):
     """One plan whole: what was expected, what was done, and the trades
     taken under it, the way it is read back with another trader."""
-    try:
-        k = store.load_plan(ROOT, plan_id)
-    except (OSError, RecordError):
-        return None
+    problems = []
+    k = store.load_plan(ROOT, plan_id, problems)
+    if k is None:
+        return broken_record(problems, "plans", "/plans")
     j = journal()
     trades = plan_trades(j, k.id)
     carry, _ = share_wanted(q)
@@ -6693,6 +6726,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass                                   # quiet: a server log is not needed
 
     # --- responses ---
+    def _gone(self, what, tab="journal", back="/", problems=(), status=404):
+        """A page for an address with nothing under it, instead of a bare
+        phrase. With a problems list the record is there and does not read:
+        the page names the file and the reason."""
+        broken = broken_record(list(problems), tab, back)
+        if broken:
+            # looked at, the record is there and the page says why it is not
+            # shown; a form posted at it is refused
+            return self._send(broken, 200 if status == 404 else status)
+        body = (f'<div class="card"><h2>{esc(what[0].upper() + what[1:])}</h2>'
+                f'<p>Nothing is here under that address: the record may have '
+                f'been moved to the trash, or the address was mistyped.</p>'
+                f'<p><a href="{back}">Back</a></p></div>')
+        return self._send(page("Not found", body, tab), status)
+
     def _send(self, text, code=200, kind="text/html; charset=utf-8", headers=()):
         data = text.encode("utf-8") if isinstance(text, str) else text
         self.send_response(code)
@@ -6794,8 +6842,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except RecordError as e:
                 return self._send(str(e), 404, "text/plain; charset=utf-8")
             return self._send(card_page(day))
-        if path == "/weeks":
-            return self._go("/cards")       # the weekly cards live on that tab
         if len(parts) == 2 and parts[0] == "week":
             try:
                 key = week_from_url(parts[1])
@@ -6811,14 +6857,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                    "playbooks"))
         if len(parts) == 2 and parts[0] == "playbook":
             shown = playbook_page(parts[1])
-            return self._send(shown or "no such playbook", 200 if shown else 404)
+            return self._send(shown) if shown else self._gone("no such playbook")
         if len(parts) == 3 and parts[0] == "playbook" and parts[2] == "edit":
             if not store.safe_dir_name(parts[1]):
-                return self._send("bad playbook id", 400)
-            try:
-                p = store.load_playbook(ROOT, parts[1])
-            except OSError:
-                return self._send("no such playbook", 404)
+                return self._gone("bad playbook id", status=400)
+            problems = []
+            p = store.load_playbook(ROOT, parts[1], problems)
+            if p is None:
+                return self._gone("no such playbook", "playbooks", "/playbooks", problems)
             return self._send(page("Edit playbook", playbook_form(p, new_token()),
                                    "playbooks"))
         if len(parts) == 3 and parts[0] == "playbook-shot":
@@ -6828,7 +6874,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                            store.SHOTS, os.path.basename(parts[2])))
         if len(parts) == 4 and parts[0] == "playbook" and parts[2] == "version":
             shown = playbook_version_page(parts[1], parts[3])
-            return self._send(shown or "no such version", 200 if shown else 404)
+            return self._send(shown) if shown else self._gone("no such version")
         if path == "/plans":
             return self._send(plans_page())
         if path == "/plan/new":
@@ -6836,16 +6882,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                      "plans"))
         if len(parts) == 2 and parts[0] == "plan":
             shown = plan_page(parts[1])
-            return self._send(shown or "no such plan", 200 if shown else 404)
+            return self._send(shown) if shown else self._gone("no such plan")
         if len(parts) == 3 and parts[0] == "plan" and parts[2] == "edit":
             if not store.safe_dir_name(parts[1]):
-                return self._send("bad plan id", 400)
-            try:
-                k = store.load_plan(ROOT, parts[1])
-            except OSError:
-                return self._send("no such plan", 404)
-            return self._send(page(k.title or k.id,
-                                     plan_form(k, new_token()), "plans"))
+                return self._gone("bad plan id", status=400)
+            problems = []
+            k = store.load_plan(ROOT, parts[1], problems)
+            if k is None:
+                return self._gone("no such plan", "plans", "/plans", problems)
+            return self._send(page("Edit plan", plan_form(k, new_token()), "plans"))
         if len(parts) == 3 and parts[0] == "plan-shot":
             if not store.safe_dir_name(parts[1]):
                 return self._send("bad plan id", 400, "text/plain; charset=utf-8")
@@ -6857,7 +6902,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                               "text/plain; charset=utf-8")
         if len(parts) == 2 and parts[0] == "trade":
             shown = trade_page(parts[1], q)
-            return self._send(shown or "no such trade", 200 if shown else 404)
+            return self._send(shown) if shown else self._gone("no such trade")
         if path == "/notes":
             return self._send(notes_page())
         if path == "/note/new":
@@ -6865,15 +6910,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                    "notes"))
         if len(parts) == 2 and parts[0] == "note":
             shown = note_page(parts[1])
-            return self._send(shown or "no such note", 200 if shown else 404)
+            return self._send(shown) if shown else self._gone("no such note")
         if len(parts) == 3 and parts[0] == "note" and parts[2] == "edit":
             if not store.safe_dir_name(parts[1]):
-                return self._send("bad note id", 400)
-            try:
-                n = store.load_note(ROOT, parts[1])
-            except OSError:
-                return self._send("no such note", 404)
-            return self._send(page(n.title, note_form(n, new_token()), "notes"))
+                return self._gone("bad note id", status=400)
+            problems = []
+            n = store.load_note(ROOT, parts[1], problems)
+            if n is None:
+                return self._gone("no such note", "notes", "/notes", problems)
+            return self._send(page("Edit note", note_form(n, new_token()), "notes"))
         if len(parts) == 3 and parts[0] == "note-shot":
             if not store.safe_dir_name(parts[1]):
                 return self._send("bad note id", 400, "text/plain; charset=utf-8")
@@ -6881,19 +6926,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                            store.SHOTS, os.path.basename(parts[2])))
         if len(parts) == 2 and parts[0] == "report":
             shown = report_page(parts[1])
-            return self._send(shown or "no such report", 200 if shown else 404)
+            return self._send(shown) if shown else self._gone("no such report")
         if path == "/new":
             return self._send(page("New trade", trade_form(None, new_token()),
                                      "journal"))
         if len(parts) == 2 and parts[0] in ("edit", "close"):
             t = next((x for x in journal().trades if x.id == parts[1]), None)
             if t is None:
-                return self._send("no such trade", 404)
+                return self._gone("no such trade")
             token = new_token()
             keep = selection(q) if via_journal(q) else ""
+            if parts[0] == "close" and not t.is_open:
+                return self._go(f"/edit/{U(t.id)}{keep}")
             body = (trade_form(t, token, keep) if parts[0] == "edit"
                     else close_form(t, token, keep))
-            return self._send(page(t.id, body, "journal", home=home_href(q)))
+            return self._send(page("Edit trade" if parts[0] == "edit" else "Close trade",
+                                   body, "journal", home=home_href(q)))
         if len(parts) == 3 and parts[0] == "shot":
             if not store.safe_dir_name(parts[1]):
                 return self._send("bad trade id", 400, "text/plain; charset=utf-8")
@@ -6905,9 +6953,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except ValueError:
                 return self._send("bad token", 400)
             return self._file(os.path.join(folder, os.path.basename(parts[2])))
-        return self._send("no such page", 404)
+        return self._gone("no such page")
 
     def do_POST(self):
+        # the word of the last GET on this connection must not ride on the
+        # error page of this form
+        SAID.text = SAID.url = ""
         if not self._same_origin():
             return self._send("foreign origin", 403)
         parsed = urllib.parse.urlparse(self.path)
@@ -6940,7 +6991,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if len(parts) == 2 and parts[0] == "edit":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:
-                    return self._send("no such trade", 404)
+                    return self._gone("no such trade")
                 copies = edit_trade(t, data)
                 said = ("Trade saved" if not copies else
                         f"Trade saved, a copy on {copies[0].account}" if len(copies) == 1
@@ -6951,15 +7002,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._go(f"/note/{U(n.id)}", "Note written")
             if len(parts) == 3 and parts[0] == "note":
                 if not store.safe_dir_name(parts[1]):
-                    return self._send("bad note id", 400)
+                    return self._gone("bad note id", status=400)
                 if parts[2] == "delete":
                     if store.delete_note(ROOT, parts[1]) is None:
-                        return self._send("no such note", 404)
+                        return self._gone("no such note")
                     return self._go("/notes", "Note moved to the trash")
-                try:
-                    n = store.load_note(ROOT, parts[1])
-                except OSError:
-                    return self._send("no such note", 404)
+                problems = []
+                n = store.load_note(ROOT, parts[1], problems)
+                if n is None:
+                    return self._gone("no such note", "notes", "/notes", problems,
+                                      status=400)
                 if parts[2] == "edit":
                     edit_note(n, data)
                     said = "Note saved"
@@ -6968,24 +7020,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 elif parts[2] == "detach":
                     said = detach_example(n, data)
                 else:
-                    return self._send("no such page", 404)
+                    return self._gone("no such page")
                 return self._go(f"/note/{U(n.id)}", said)
             if path == "/playbook/new":
                 p = create_playbook(data)
                 return self._go(f"/playbook/{U(p.id)}", "Playbook written")
             if len(parts) == 3 and parts[0] == "playbook":
                 if not store.safe_dir_name(parts[1]):
-                    return self._send("bad playbook id", 400)
+                    return self._gone("bad playbook id", status=400)
                 if parts[2] == "delete":
                     if store.delete_playbook(ROOT, parts[1]) is None:
-                        return self._send("no such playbook", 404)
+                        return self._gone("no such playbook")
                     return self._go("/playbooks", "Playbook moved to the trash")
                 if parts[2] not in ("edit", "review"):
-                    return self._send("no such page", 404)
-                try:
-                    before = store.load_playbook(ROOT, parts[1])
-                except OSError:
-                    return self._send("no such playbook", 404)
+                    return self._gone("no such page")
+                problems = []
+                before = store.load_playbook(ROOT, parts[1], problems)
+                if before is None:
+                    return self._gone("no such playbook", "playbooks", "/playbooks", problems,
+                                      status=400)
                 if parts[2] == "review":
                     add_review(before, data)
                     return self._go(f"/playbook/{U(before.id)}", "Review added")
@@ -7013,15 +7066,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 not back.startswith("//") else "/stats", said)
             if len(parts) == 3 and parts[0] == "plan":
                 if not store.safe_dir_name(parts[1]):
-                    return self._send("bad plan id", 400)
+                    return self._gone("bad plan id", status=400)
                 if parts[2] == "delete":
                     if store.delete_plan(ROOT, parts[1]) is None:
-                        return self._send("no such plan", 404)
+                        return self._gone("no such plan")
                     return self._go("/plans", "Plan moved to the trash")
-                try:
-                    k = store.load_plan(ROOT, parts[1])
-                except OSError:
-                    return self._send("no such plan", 404)
+                problems = []
+                k = store.load_plan(ROOT, parts[1], problems)
+                if k is None:
+                    return self._gone("no such plan", "plans", "/plans", problems,
+                                      status=400)
                 if parts[2] == "edit":
                     edit_plan(k, data)
                     said = "Plan saved"
@@ -7035,48 +7089,48 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     restore_plan(k)
                     said = "Plan restored"
                 else:
-                    return self._send("no such page", 404)
+                    return self._gone("no such page")
                 return self._go(f"/plan/{U(k.id)}", said)
             if path == "/card/save":
                 k = save_card(data)
-                return self._go(f"/card/{U(k.id)}", "DRC saved")
+                return self._go(f"/card/{U(k.id)}", "Daily card saved")
             if len(parts) == 3 and parts[0] == "card" and parts[2] == "delete":
                 store.delete_card(ROOT, day_from_url(parts[1]))
-                return self._go("/cards", "DRC moved to the trash")
+                return self._go("/cards", "Daily card moved to the trash")
             if path == "/week/save":
                 k = save_week(data)
-                return self._go(f"/week/{U(k.id)}", "WRC saved")
+                return self._go(f"/week/{U(k.id)}", "Weekly card saved")
             if len(parts) == 3 and parts[0] == "week" and parts[2] == "delete":
                 store.delete_week(ROOT, week_from_url(parts[1]))
-                return self._go("/cards", "WRC moved to the trash")
+                return self._go("/cards", "Weekly card moved to the trash")
             if len(parts) == 3 and parts[0] == "trade" and parts[2] == "delete":
                 if next((x for x in journal(True).trades if x.id == parts[1]),
                         None) is None:
-                    return self._send("no such trade", 404)
+                    return self._gone("no such trade")
                 store.delete_trade(ROOT, parts[1])
                 drop_cache()
                 return self._go(home_href(q), "Trade moved to the trash")
             if len(parts) == 3 and parts[0] == "trade" and parts[2] == "update":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:
-                    return self._send("no such trade", 404)
+                    return self._gone("no such trade")
                 add_trade_update(t, data)
                 return self._go(f"/trade/{U(t.id)}{keep}", "Update added")
             if len(parts) == 3 and parts[0] == "trade" and parts[2] == "breakeven":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:
-                    return self._send("no such trade", 404)
+                    return self._gone("no such trade")
                 undo = one(data, "undo") == "1"
                 move_stop(t, undo)
                 # the button on the front page lands back on the front page,
                 # the one on the trade stays on the trade
                 back = "/" if one(data, "back") == "/" else f"/trade/{U(t.id)}{keep}"
-                return self._go(back, "Risk counts again" if undo
+                return self._go(back, "Risk put back" if undo
                                 else f"Stop at breakeven, {t.risk:g}% freed")
             if len(parts) == 2 and parts[0] == "close":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:
-                    return self._send("no such trade", 404)
+                    return self._gone("no such trade")
                 close_trade(t, data)
                 return self._go(f"/trade/{U(t.id)}{keep}", "Trade closed")
             for route, action in (("/account/new", create_account),
@@ -7098,18 +7152,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         message = action(data)
                     except (RecordError, ValueError) as e:
                         message = str(e)
-                    return self._go("/accounts?m=" + U(message), message)
+                    # a short word rides as the toast; a sentence the toast
+                    # would cut stands in a card at the top of the page
+                    short = len(message) <= 60
+                    return self._go("/accounts" if short else "/accounts?m=" + U(message),
+                                    message.rstrip(".") if short else "")
             if path == "/report/build":
                 what = one(data, "what", "month")
                 period = one(data, f"period_{what}")
                 if not period:
                     return self._go("/reports")
-                reports.build(ROOT, journal(True), period)
+                reports.build(ROOT, journal(True), period, problems=[])
                 return self._go(f"/report/{U(period)}", "Report built")
             if len(parts) == 2 and parts[0] == "report":
                 conclusions = one(data, "conclusions")
                 had = bool(reports.previous_conclusions(ROOT, parts[1]))
-                reports.build(ROOT, journal(True), parts[1], conclusions=conclusions)
+                reports.build(ROOT, journal(True), parts[1], conclusions=conclusions,
+                              problems=[])
                 return self._go(f"/report/{U(parts[1])}",
                                 "Conclusions saved" if conclusions
                                 else "Conclusions cleared" if had else "Report rebuilt")
@@ -7118,7 +7177,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                      f'<h2>Not saved</h2><p>{esc(e)}</p>'
                                      f'<p><a href="/">Back to journal</a></p></div>'),
                               400)
-        return self._send("no such page", 404)
+        return self._gone("no such page")
 
 
 class Server(http.server.ThreadingHTTPServer):

@@ -11,7 +11,7 @@ import html as _html
 import json
 import math
 from urllib.parse import quote as _quote
-from datetime import timedelta
+from datetime import timedelta, time
 
 from . import __version__, flags
 
@@ -778,23 +778,30 @@ def smooth_path(points):
 def spread_days(points):
     """Points that share a date get their own place inside that day.
 
-    A journal records the date of a close, not the hour, so two trades closed
-    on the same day land on the same x and the line between them is a vertical
-    wall that no curve can be bent through. They are laid out evenly across
-    their day instead, in the order they were closed. The balances are
-    untouched and the day is unchanged; only the hour, which was never
-    recorded, is made up, and a day is a few pixels wide.
-    """
+    Two exits written without an hour land on the same x, and the line
+    between them is a vertical wall that no curve can be bent through. They
+    are laid out evenly across their day instead, in the order they were
+    closed: the balances are untouched and the day is unchanged, only the
+    hour, which was never recorded, is made up, and a day is a few pixels
+    wide. An exit that carries its hour keeps it, and one that shares its
+    very moment with the exit before it is moved a minute on, so that the
+    x of the curve never runs backwards."""
     out, i = [], 0
     while i < len(points):
         j = i
         while j + 1 < len(points) and points[j + 1][0].date() == points[i][0].date():
             j += 1
-        run = j - i + 1
-        for k in range(run):
-            day, value = points[i + k]
-            out.append((day + timedelta(days=(k + 1) / (run + 1)) if run > 1
-                        else day, value))
+        run = points[i:j + 1]
+        if len(run) > 1 and all(d.time() == time(0) for d, _ in run):
+            out += [(d + timedelta(days=(k + 1) / (len(run) + 1)), v)
+                    for k, (d, v) in enumerate(run)]
+        else:
+            last = None
+            for d, v in run:
+                if last is not None and d <= last:
+                    d = last + timedelta(minutes=1)
+                out.append((d, v))
+                last = d
         i = j + 1
     return out
 
@@ -1268,7 +1275,8 @@ def donut_svg(segments, size=188, thickness=30, middle="", under=""):
             f'stroke="{colour}" stroke-width="{thickness}" '
             f'stroke-dasharray="{drawn:.2f} {circumference - drawn:.2f}" '
             f'stroke-dashoffset="{-offset:.2f}">'
-            f'<title>{esc(label)}: {n} trades, {100.0 * n / total:.0f}%</title>'
+            f'<title>{esc(label)}: {n} trade{"" if n == 1 else "s"}, '
+            f'{100.0 * n / total:.0f}%</title>'
             f'</circle>')
         offset += length
     # the figures in the middle follow the ring: 30px in a ring of 188

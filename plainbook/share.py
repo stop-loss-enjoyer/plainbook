@@ -145,7 +145,7 @@ def size_text(n):
 
 # --- the pieces of a document ----------------------------------------------
 
-def r_text(x):
+def r_or_dash(x):
     return "-" if x is None else f"{x:+.2f}"
 
 
@@ -184,7 +184,7 @@ def bold(text):
     return _BOLD.sub(r"<strong>\1</strong>", esc(text)).replace("\n", "<br>")
 
 
-def with_shots(text, shots):
+def doc_with_shots(text, shots):
     """Text that has pictures standing inside it, drawn where they stand."""
     def draw(m):
         return shots.img(m.group(1)) or ""
@@ -192,7 +192,7 @@ def with_shots(text, shots):
                      re.sub(r"!\[\]\(([^)]+)\)", draw, esc(text))).replace("\n", "<br>")
 
 
-def tile(name, value, sub="", cls=""):
+def doc_tile(name, value, sub="", cls=""):
     under = f'<div class="sub">{sub}</div>' if sub else ""
     return (f'<div class="tile"><div class="name">{esc(name)}</div>'
             f'<div class="value {cls}">{value}</div>{under}</div>')
@@ -209,14 +209,14 @@ def summary_tiles(s):
     wr = f"{s.wr:.1f}%" if s.decided else "-"
     payoff = f"{s.payoff:.2f}" if s.payoff is not None else "-"
     return (f'<div class="tiles">'
-            + tile("trades", str(s.trades),
-                   f"{s.wins} won · {s.losses} lost · {s.be} at zero")
-            + tile("win rate", wr, "wins against wins and losses")
-            + tile("EV", r_text(s.average_r), "per closed trade, R",
+            + doc_tile("trades", str(s.trades),
+                   f"{s.wins} won · {s.losses} lost · {s.be} break-even")
+            + doc_tile("winrate", wr, "wins against wins and losses")
+            + doc_tile("EV", r_or_dash(s.average_r), "per closed trade, R",
                    r_class(s.average_r))
-            + tile("Σ R", r_text(s.sum_r), "the selection in risk units",
+            + doc_tile("Σ R", r_or_dash(s.sum_r), "the selection in risk units",
                    r_class(s.sum_r))
-            + tile("payoff", payoff, "R won for every R lost")
+            + doc_tile("payoff", payoff, "R won for every R lost")
             + "</div>")
 
 
@@ -225,7 +225,7 @@ def anchor(t):
     return "t-" + re.sub(r"[^A-Za-z0-9_-]", "-", t.id)
 
 
-def trades_table(j, trades, linked=False):
+def doc_trades_table(j, trades, linked=False):
     """The selection as a list: one line a trade, R the last word on it.
     When the trades stand in full further down the file, a line is the way
     to its trade: the pair is the link, and the whole line answers a click."""
@@ -242,7 +242,7 @@ def trades_table(j, trades, linked=False):
                  f'<td>{name}</td><td>{esc(t.direction)}</td>'
                  f'<td>{esc(t.style)}</td>'
                  f'<td>{esc(t.result or "open")}</td>'
-                 f'<td class="num {r_class(r)}">{r_text(r)}</td></tr>')
+                 f'<td class="num {r_class(r)}">{r_or_dash(r)}</td></tr>')
     return (f'<table class="list"><thead><tr><th>entry</th><th>exit</th>'
             f'<th>pair</th><th>side</th><th>style</th><th>result</th>'
             f'<th class="num">R</th></tr></thead><tbody>{rows}</tbody></table>'
@@ -257,7 +257,7 @@ GO_SCRIPT = ('<script>document.querySelectorAll("tr.go").forEach(function(r){'
              'location.hash=r.dataset.to})})</script>')
 
 
-def rules_list(rules, broken, word, reasons=None):
+def doc_rules_list(rules, broken, word, reasons=None):
     """The rules with a tick or a cross each, and the reason under a cross."""
     broken = set(broken or ())
     reasons = reasons or {}
@@ -289,10 +289,10 @@ def checklist_card(t, book):
         parts.append('<p class="muted">The rules were not ticked for this '
                      'trade.</p>')
     elif entry:
-        parts.append(rules_list(entry, t.deviations, "met", t.reasons))
+        parts.append(doc_rules_list(entry, t.deviations, "met", t.reasons))
     if book.management and t.exit_deviations is not None:
         parts.append("<h3>Management</h3>"
-                     + rules_list(book.management, t.exit_deviations, "held",
+                     + doc_rules_list(book.management, t.exit_deviations, "held",
                                   t.reasons))
     return f'<div class="card"><h2>Checklist</h2>{"".join(parts)}</div>'
 
@@ -315,10 +315,9 @@ def trade_facts(root, j, t):
     Risk stands in percent, which is what it is written as; what that percent
     was in money is the size of the account, and the account is not the
     subject here."""
+    # the account is not named either: traders name accounts by their size
     r = j.r(t.id)
-    account = j.accounts[t.account].name if t.account in j.accounts else t.account
-    rows = [("account", esc(account)),
-            ("pair", pair(t.pair)),
+    rows = [("pair", pair(t.pair)),
             ("direction", esc(t.direction)),
             ("style", esc(t.style)),
             ("entry TF", esc(t.entry_tf)),
@@ -327,7 +326,7 @@ def trade_facts(root, j, t):
             ("entry", esc(day_text(t.opened, t.opened_time))),
             ("exit", esc(day_text(t.closed, t.closed_time))),
             ("result", esc(t.result or "position open")),
-            ("R", f'<b class="{r_class(r)}">{r_text(r)}</b>')]
+            ("R", f'<b class="{r_class(r)}">{r_or_dash(r)}</b>')]
     plan = plan_named(root, t)
     if plan:
         rows.append(("plan", esc(plan)))
@@ -388,12 +387,12 @@ def trade_card(root, j, t, book=None, carry=True, heading=None, near=None,
             + checklist_card(t, book)
             + (f'<div class="card"><h2>Idea</h2>{idea}</div>' if idea else "")
             + (f'<div class="card"><h2>Updates</h2>'
-               f'<div class="text shots">{with_shots(t.updates, shots)}</div>'
+               f'<div class="text shots">{doc_with_shots(t.updates, shots)}</div>'
                f'</div>' if t.updates.strip() else "")
             + (f'<div class="card"><h2>Exit moment</h2>'
                f'<div class="shots">{exits}</div></div>' if exits else "")
             + (f'<div class="card"><h2>Conclusions</h2>'
-               f'<div class="text shots">{with_shots(t.conclusions, shots)}</div>'
+               f'<div class="text shots">{doc_with_shots(t.conclusions, shots)}</div>'
                f'</div>' if t.conclusions.strip() else "")
             + ways + "</section>")
 
@@ -434,7 +433,7 @@ def plan_outcome(j, trades):
     if s.trades:
         if s.decided:
             bits.append(f"WR {s.wr:.0f}%")
-        bits.append(f"{r_text(s.sum_r)} R")
+        bits.append(f"{r_or_dash(s.sum_r)} R")
     return " · ".join(bits)
 
 
@@ -502,12 +501,12 @@ def plan_card(root, j, k, trades, carry=True):
         if not text.strip():
             return ""
         return (f'<div class="card"><h2>{heading}</h2>'
-                f'<div class="text shots">{with_shots(text, shots)}</div></div>')
+                f'<div class="text shots">{doc_with_shots(text, shots)}</div></div>')
 
     tied = ""
     if trades:
         tied = (f'<div class="card"><h2>Trades of this plan</h2>'
-                f'{trades_table(j, trades)}'
+                f'{doc_trades_table(j, trades)}'
                 f'<p class="caption">{esc(plan_outcome(j, trades))}</p></div>')
     return (f'<section class="plan"><div class="card">'
             f'<p class="meta">{esc(k.id)}</p>'
@@ -520,7 +519,7 @@ def plan_card(root, j, k, trades, carry=True):
             + tied + "</section>")
 
 
-def slice_card(j, heading, rows):
+def doc_slice_card(j, heading, rows):
     """A breakdown of the selection, in R. The column of money the journal
     prints here has no place in a document."""
     if not rows:
@@ -531,8 +530,8 @@ def slice_card(j, heading, rows):
         wr = f"{s.wr:.1f}%" if s.decided else "-"
         body += (f'<tr><td>{shown}</td><td class="num">{s.trades}</td>'
                  f'<td class="num">{wr}</td>'
-                 f'<td class="num {r_class(s.sum_r)}">{r_text(s.sum_r)}</td>'
-                 f'<td class="num">{r_text(s.average_r)}</td></tr>')
+                 f'<td class="num {r_class(s.sum_r)}">{r_or_dash(s.sum_r)}</td>'
+                 f'<td class="num">{r_or_dash(s.average_r)}</td></tr>')
     return (f'<div class="card"><h2>{esc(heading)}</h2>'
             f'<table><thead><tr><th></th><th class="num">trades</th>'
             f'<th class="num">WR</th><th class="num">Σ R</th>'
@@ -545,10 +544,10 @@ def slices(j, trades):
     cuts = [("By pair", lambda t: [t.pair]),
             ("By style", lambda t: [t.style]),
             ("By direction", lambda t: [t.direction]),
-            ("By entry TF", lambda t: [t.entry_tf or "-"])]
+            ("By entry TF", lambda t: [t.entry_tf or "not set"])]
     cards = ""
     for heading, key in cuts:
-        cards += slice_card(j, heading, stats.by_values(j, trades, key))
+        cards += doc_slice_card(j, heading, stats.by_values(j, trades, key))
     return f'<div class="twin">{cards}</div>' if cards else ""
 
 
@@ -624,7 +623,7 @@ def selection_document(root, j, trades, title, lead, book_of=None,
     s = stats.summary(j, closed)
     body = ('<div class="report">' + summary_tiles(s)
             + f'<div class="card" id="trades"><h2>The trades</h2>'
-            f'{trades_table(j, trades, linked=shots)}'
+            f'{doc_trades_table(j, trades, linked=shots)}'
             f'<p class="caption">{len(trades)} trade'
             f'{"" if len(trades) == 1 else "s"}, ordered by the exit.'
             f'{HOW_TO_OPEN if shots else ""}</p></div>'
@@ -649,7 +648,7 @@ def report_document(root, j, r, text="", book_of=None, shots=False,
                f'<div class="text">{prose(text)}</div></div>' if text.strip() else "")
             + slices(j, closed)
             + f'<div class="card" id="trades"><h2>The trades</h2>'
-            f'{trades_table(j, r.trades, linked=shots)}'
+            f'{doc_trades_table(j, r.trades, linked=shots)}'
             f'<p class="caption">Every trade that closed inside the period, '
             f'ordered by the exit.{HOW_TO_OPEN if shots else ""}</p></div>'
             "</div>")

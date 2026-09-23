@@ -4,7 +4,7 @@
 Does every record in the journal read? Run before a commit of the records, or
 whenever the interface says a file could not be read:
 
-    python3 tools/check_journal.py            # the journal in ./journal
+    python3 tools/check_journal.py            # the journal in PLAINBOOK_ROOT, or ./journal
     python3 tools/check_journal.py ~/plainbook-data
 
 Every trade, plan, playbook, note, card, week, account and adjustment is loaded the

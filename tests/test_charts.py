@@ -75,6 +75,21 @@ class SpreadCase(unittest.TestCase):
         self.assertTrue(all(d.date() == day.date() for d in xs[1:4]))
         self.assertTrue(xs[0] < xs[1] < xs[2] < xs[3] < xs[4])
 
+    def test_exits_with_an_hour_keep_it_and_never_run_backwards(self):
+        """Two exits of one afternoon used to be pushed past midnight, behind
+        the next morning's exit, and the curve ran backwards between them."""
+        pts = [(datetime(2026, 9, 18, 14, 30), 1), (datetime(2026, 9, 18, 16, 0), 2),
+               (datetime(2026, 9, 19, 7, 0), 3)]
+        self.assertEqual(spread_days(pts), pts)
+        # the same moment twice is told apart by a minute, in order
+        same = [(datetime(2026, 9, 18, 14, 30), 1), (datetime(2026, 9, 18, 14, 30), 2),
+                (datetime(2026, 9, 18, 16, 0), 3)]
+        out = spread_days(same)
+        xs = [d for d, _ in out]
+        self.assertEqual(len(set(xs)), 3)
+        self.assertTrue(xs[0] < xs[1] < xs[2])
+        self.assertTrue(all(d.date() == datetime(2026, 9, 18).date() for d in xs))
+
     def test_a_lone_close_keeps_midnight(self):
         """Nothing is nudged when there is nothing to untangle."""
         pts = [(datetime(2026, 7, 1), 10), (datetime(2026, 7, 2), 11)]

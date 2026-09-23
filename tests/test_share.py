@@ -126,6 +126,31 @@ class ShareCase(unittest.TestCase):
                           f"{figure:.2f}"):
                 self.assertNotIn(shape, text, shape)
 
+    def test_no_money_leaves_in_the_documents_of_a_period_or_a_selection(self):
+        """The same guard over the two documents that are built from the
+        figures of a period, where the money of a month is closest at hand."""
+        from plainbook import reports
+        r = reports.compose(self.root, self.j, "2026-08")
+        texts = [without_pictures(share.report_document(self.root, self.j, r, shots=False)),
+                 without_pictures(share.selection_document(
+                     self.root, self.j, self.j.trades, "August", "the month", shots=False))]
+        for text in texts:
+            self.assertIn("EURUSD", text)
+            for figure in (PNL, START_BALANCE, self.j.balance("broker"),
+                           self.j.computed[self.t.id].risk_money,
+                           self.j.computed[self.t.id].balance_at_entry):
+                for shape in (f"{figure:,.0f}".replace(",", " "),
+                              f"{figure:,.0f}".replace(",", ""),
+                              f"{figure:.2f}"):
+                    self.assertNotIn(shape, text, shape)
+
+    def test_the_account_is_not_named(self):
+        """Traders name accounts by their size; the footer promises the size
+        stays home, so the name stays home with it."""
+        text = without_pictures(self.document())
+        self.assertNotIn("Broker", text)
+        self.assertNotIn(">account<", text)
+
     def test_the_rules_are_ticked_the_way_the_page_ticks_them(self):
         text = without_pictures(self.document())
         self.assertIn("The level was swept", text)

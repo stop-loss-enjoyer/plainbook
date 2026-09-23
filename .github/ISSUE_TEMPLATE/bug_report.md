@@ -13,8 +13,8 @@ labels: bug
 2.
 
 **Versions**
-- Plainbook: (`git describe --tags`)
-- Python: (`python3 --version`)
+- Plainbook: (the number next to the name on every page)
+- Python: (`python3 --version`, if you run from the source)
 - OS and browser:
 
 **The log, if the server fell over**

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Journal records: trade, account, adjustment, daily and weekly card.
+Journal records: trade, account, adjustment, daily and weekly card, plan,
+playbook, note.
 
 Storage is one markdown file per record (see mdfile.py). Header keys are the
 same words the interface shows, so a file reads like the screen it came from.
@@ -239,8 +240,10 @@ PLAYBOOK_STATUSES = ("active", "experiment", "retired")
 
 # The limits a playbook can set as figures: (key in the file, label in the
 # interface, unit). The form offers a field for each, so that nobody has to
-# know the key, and the journal will count them against the trades. A limit
-# of another kind is written as text and shown as written.
+# know the key. The trade form counts the first five against the trades
+# (stats.frame and the form script); the longest hold and the least RR are
+# shown as written, for the trader to keep. A limit of another kind is
+# written as text and shown as written.
 LIMITS = [
     ("risk", "risk per trade", "%"),
     ("max per week", "trades per week, at most", ""),
@@ -396,11 +399,6 @@ class Card:
     def id(self):
         return f"{self.day:%Y-%m-%d}" if self.day else ""
 
-    @property
-    def is_empty(self):
-        return not any(getattr(self, name).strip()
-                       for name, _, _ in CARD_SECTIONS) and not self.assessment
-
     def check(self):
         if self.day is None:
             raise RecordError("card without a date")
@@ -465,11 +463,6 @@ class Week:
     @property
     def number(self):
         return int(self.week[6:])
-
-    @property
-    def is_empty(self):
-        return not any(getattr(self, name).strip()
-                       for name, _, _ in WEEK_SECTIONS) and not self.assessment
 
     def check(self):
         if not _WEEK_ID.match(self.week or ""):
