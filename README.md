@@ -1,13 +1,10 @@
 # Plainbook
 
-**A free trading journal that lives on your machine, for forex, futures,
-stocks, crypto and prop firm traders.** Your trades are markdown files and
-screenshots in a folder you own: no account, no cloud, no subscription. Log
-every trade with its idea and its charts, measure it in R with its MFE and
-MAE, hold a prop account against the rules of its firm (daily loss limit,
-max drawdown, profit target, trading days), and read your edge in the
-statistics and in monthly and quarterly reports. It runs on Windows, macOS
-and Linux, and it is built to be kept by a coding agent.
+**A plain-text trading journal that lives on your machine.** Free, local,
+private, and built to be kept by a coding agent. Your trades are markdown
+files and screenshots in a folder you own; there is no account, no cloud and
+no subscription. The whole source is in this repository, and it runs on
+Windows, macOS and Linux, for forex, futures, stocks and crypto alike.
 
 [![tests](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml)
 [![release](https://img.shields.io/github/v/release/stop-loss-enjoyer/plainbook?label=release)](https://github.com/stop-loss-enjoyer/plainbook/releases/latest)
@@ -538,21 +535,12 @@ that is sold; if that is what open source means to you, this is not it.
 
 **Is it a replacement for TradeZella, Edgewonk or TraderSync?** For keeping
 and reading a journal, yes: trades with screenshots, playbooks with their
-checklist, plans, notes, daily and weekly cards, R-multiple statistics, MFE
-and MAE, prop firm rules, monthly and quarterly reports. What it lacks is
-what those have by being online: broker sync and, for most of them, a
-mobile app.
+checklist, plans, notes, daily and weekly cards, statistics, monthly and
+quarterly reports. What it lacks is what those have by being online: broker
+sync and, for most of them, a mobile app.
 
-**Does it track prop firm rules, for FTMO or another firm?** Yes, for any
-firm: a prop account holds the daily loss limit, the max loss (static or
-trailing), the profit target, the minimum trading days and the hour and
-time zone of the firm's day, typed from your firm's own rules. The journal
-says where the account stands against each.
-
-**Does it track MFE and MAE?** Yes, when you write the prices: with the entry
-and the stop on a trade, the best and the worst price it reached read as MFE
-and MAE in R, and the Statistics tab averages them with the RR planned and
-what the winners gave back.
+**Does it suit a prop firm account?** Yes: a prop account holds the rules
+of its firm, and the journal says where the account stands against them.
 
 **Does it need the internet?** No. It runs on your machine, reads and writes
 a folder, and makes no network request at all. The server binds `127.0.0.1`,
