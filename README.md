@@ -12,6 +12,8 @@ Windows, macOS and Linux, for forex, futures, stocks and crypto alike.
 [![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](#built-to-be-kept-by-an-agent)
 
+https://github.com/user-attachments/assets/1741872f-fbd9-4e3f-bbc7-43267b224634
+
 ![Plainbook trading journal: account balances, open positions, the winrate and EV of each style, and the list of trades by week](docs/journal.png)
 
 <p align="center"><i>Every screenshot on this page is made on an invented journal.</i></p>
