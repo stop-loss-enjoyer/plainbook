@@ -109,7 +109,7 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/new")
         # the balance of every account rides on the form, so the line under
         # the field can say what a percent is in money and a sum in percent
-        self.assertIn('data-balances="{&quot;broker&quot;: 10000', html)
+        self.assertIn('data-balances="{&quot;broker&quot;: {&quot;start&quot;: 10000', html)
         self.assertIn('data-signs="{&quot;broker&quot;: &quot;$&quot;}"', html)
         self.assertIn('<div class="caption risk-hint"></div>', html)
         self.assertIn("function risk_percent", html)
@@ -140,11 +140,11 @@ class ServerCase(unittest.TestCase):
         _, html = self.get(urllib.parse.urlparse(where).path)
         self.assertIn("1.5% = 150 $", html)
         # edited, the money is measured against the balance the trade was
-        # opened on, the figure the form carries for its own account
+        # opened on; the form carries the history the hint works it out from
         q = urllib.parse.quote(t.id)
         base = self.S.journal(True).computed[t.id].balance_at_entry
         _, html = self.get(f"/edit/{q}")
-        self.assertIn(f'&quot;broker&quot;: {base}', html)
+        self.assertIn('&quot;broker&quot;: {&quot;start&quot;: 10000', html)
         self.post(f"/edit/{q}", {
             "token": self.form_token(html), "blocks": "1", "account": "broker",
             "pair": "NZDUSD", "direction": "long", "style": "swing",
@@ -153,6 +153,25 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(store.load_trade(self.root, t.id).risk,
                          self.S.money_to_percent(300, base))
         self.post(f"/trade/{q}/delete", {})
+
+    def test_01d_numbers_are_read_the_way_a_broker_prints_them(self):
+        for text, x in [("1 234,56", 1234.56), ("1\u202f234.56", 1234.56),
+                        ("1,234.56", 1234.56), ("\u2212250", -250.0),
+                        ("-12,5", -12.5), ("+300", 300.0), ("$150", 150.0)]:
+            self.assertEqual(self.S.figure(text), x, text)
+        for text in ("nan", "inf", "-inf", "", "abc", "1.2.3"):
+            with self.assertRaises(self.S.RecordError, msg=text):
+                self.S.figure(text, "PnL")
+        # a PnL of nan is refused with a page, not stored
+        q = urllib.parse.quote(self.open_trade(pair="GBPUSD"))
+        for pnl in ("nan", "inf"):
+            self.refused(f"/close/{q}", {"result": "Win", "pnl": pnl,
+                                         "exit": "2026-08-30"})
+        self.assertTrue(store.load_trade(self.root, urllib.parse.unquote(q)).is_open)
+        self.post(f"/trade/{q}/delete", {})
+        # nor read back from a file edited by hand
+        with self.assertRaises(ValueError):
+            store._number("nan")
 
     def test_02_archived_account_is_not_offered(self):
         _, html = self.get("/new")
@@ -195,11 +214,23 @@ class ServerCase(unittest.TestCase):
     def test_05_trade_page_and_its_screenshot(self):
         code, html = self.get(f"/trade/{urllib.parse.quote(ServerCase.trade_id)}")
         self.assertEqual(code, 200)
+        # open, the passport says how long it has run and has no result yet
+        passport = re.search(r'<div class="passport">.*?</svg></div>', html, re.S).group(0)
+        self.assertIn("In the market so far", passport)
+        self.assertNotIn("Result against the risk", passport)
         self.assertIn("breakout, waiting for a retest", html)
         path = re.search(r'src="(/shot/[^"]+)"', html).group(1)
         code, data = self.get(path, as_text=False)
         self.assertEqual(code, 200)
         self.assertTrue(data.startswith(b"\x89PNG"))
+        # looked at again, an unchanged picture answers without its bytes
+        with urllib.request.urlopen(self.url(path)) as r:
+            tag = r.headers["ETag"]
+        req = urllib.request.Request(self.url(path), headers={"If-None-Match": tag})
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(req)
+        self.assertEqual(caught.exception.code, 304)
+        caught.exception.close()
 
     def test_06_close_the_trade(self):
         q = urllib.parse.quote(ServerCase.trade_id)
@@ -220,6 +251,12 @@ class ServerCase(unittest.TestCase):
     def test_07_r_is_measured_against_the_balance_at_entry(self):
         _, html = self.get(f"/trade/{urllib.parse.quote(ServerCase.trade_id)}")
         self.assertIn("+2.50", html)               # 250 $ against 100 $ of risk
+        # closed, the passport sets the result against the risk and names
+        # its place among the closed trades of the account
+        self.assertIn('<svg class="result"', html)
+        self.assertIn("+2.50 R</text>", html)
+        self.assertRegex(html, r"Result against the risk <span class=\"muted\">\d+ of \d+ on broker by R")
+        self.assertIn('<svg class="hold"', html)
 
     def test_08_editing_changes_fields_and_cleans_shots(self):
         q = urllib.parse.quote(ServerCase.trade_id)
@@ -271,13 +308,23 @@ class ServerCase(unittest.TestCase):
         self.post("/report/build", {"what": "month", "period_month": "2026-08"})
         _, html = self.get("/report/2026-08")
         self.assertIn("what the month taught me", html)   # a rebuild kept them
+        # the month day by day: the day of the exit says what it made
+        self.assertIn('<svg class="days"', html)
+        self.assertIn('data-tip="Mon 31.08.2026', html)
+        # the shelf draws the path of each period, and the year under it
+        _, html = self.get("/reports")
+        self.assertIn('<svg class="spark"', html)
+        self.assertIn("<h2>2026 day by day</h2>", html)
+        self.assertIn('<svg class="year"', html)
 
     def test_11_statistics_renders(self):
         code, html = self.get("/stats")
         self.assertEqual(code, 200)
-        self.assertIn('class="ring"', html)                 # the rings are drawn
+        self.assertIn('class="rline"', html)                # the R distribution is drawn
         self.assertIn('class="tape"', html)                # and the tape of the trades
-        self.assertIn("<h2>R distribution</h2>", html)
+        # the weekday of entry, a tile a day that says its figures
+        self.assertIn("<h2>By weekday</h2>", html)
+        self.assertIn('data-tip="Sat, by the entry', html)   # 29.08.2026 is a Saturday
 
     def test_12_open_trade_counter(self):
         code, body = self.get("/open-count")
@@ -293,6 +340,20 @@ class ServerCase(unittest.TestCase):
         except urllib.error.HTTPError as e:
             self.assertEqual(e.code, 403)
             e.close()
+
+    def test_13_a_foreign_host_is_refused(self):
+        # a page of another site whose name was pointed at 127.0.0.1
+        for path in ("/export.csv", "/"):
+            req = urllib.request.Request(self.url(path),
+                                         headers={"Host": f"evil.example:{self.port}"})
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                urllib.request.urlopen(req)
+            self.assertEqual(caught.exception.code, 403)
+            caught.exception.close()
+        req = urllib.request.Request(self.url("/"),
+                                     headers={"Host": f"localhost:{self.port}"})
+        with urllib.request.urlopen(req) as r:
+            self.assertEqual(r.status, 200)
 
     def test_14_accounts_are_created_archived_and_deleted(self):
         code, where = self.post("/account/new", {
@@ -603,8 +664,9 @@ class ServerCase(unittest.TestCase):
             shutil.rmtree(store.trade_dir(self.root, "2026-08-02-01-audusd"))
             self.S.drop_cache()
 
-    def test_30_the_r_rings_split_wins_from_losses(self):
-        """A win and a loss land in their own ring, with their R in the middle."""
+    def test_30_the_r_distribution_splits_wins_from_losses(self):
+        """A win and a loss land in their own table, each a dot on the line
+        that opens its trade."""
         for result, pnl in (("Win", "300"), ("Lose", "-100")):
             _, html = self.get("/new")
             token = self.form_token(html)
@@ -621,6 +683,9 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(code, 200)
         rings = re.search(r'<h2>R distribution</h2>.*?</div></div>\s*'
                           r'<p class="caption">', html, re.S).group(0)
+        self.assertIn('<svg class="rline"', rings)
+        self.assertIn(f'<a href="/trade/{urllib.parse.quote(tid)}"><circle', rings)
+        self.assertIn('data-tip="EURUSD long, closed 21.08.2026', rings)
         self.assertIn("Losses", rings)
         self.assertIn("Wins", rings)
         self.assertIn("closed", rings)
@@ -1811,6 +1876,45 @@ class ServerCase(unittest.TestCase):
                                   "exit": "2026-08-29T00:00"})
         self.assertFalse(store.load_trade(self.root, trade_id).is_open)
 
+    def test_52a_midnight_is_an_hour_unless_the_box_says_otherwise(self):
+        """With the box in the form, 00:00 is midnight; ticked, the hour is
+        not known. A form without the box reads 00:00 as a date alone."""
+        known = self.open_trade(entry="2026-08-25T00:00", entry_asked="1")
+        self.assertTrue(store.load_trade(self.root, known).opened_time)
+        unknown = self.open_trade(entry="2026-08-25T00:00", entry_asked="1",
+                                  entry_unknown="1", pair="GBPUSD")
+        self.assertFalse(store.load_trade(self.root, unknown).opened_time)
+        _, html = self.get(f"/edit/{urllib.parse.quote(unknown)}")
+        self.assertIn('name="entry_unknown" value="1" checked', html)
+        for t in (known, unknown):
+            self.post(f"/trade/{urllib.parse.quote(t)}/delete", {})
+
+    def test_52b_the_prices_of_a_trade_are_typed_and_read_in_r(self):
+        t = self.open_trade(pair="XAUUSD", direction="long", entry_price="2 450,5",
+                            stop_price="2440.5", target_price="2480.5")
+        trade = store.load_trade(self.root, t)
+        self.assertEqual((trade.entry_price, trade.stop_price, trade.target_price),
+                         (2450.5, 2440.5, 2480.5))
+        q = urllib.parse.quote(t)
+        _, html = self.get(f"/close/{q}")
+        self.assertIn('name="entry_price_shown" value="2450.5"', html)
+        self.post(f"/close/{q}", {"token": self.form_token(html), "result": "Win",
+                                  "pnl": "200", "exit": "2026-08-30T10:00",
+                                  "exit_price": "2470.5", "best_price": "2485.5",
+                                  "worst_price": "2446.5"})
+        _, html = self.get(f"/trade/{q}")
+        self.assertIn("RR planned 3.00 · exit +2.00 R · best +3.50 R · worst -0.40 R", html)
+        self.assertIn('>target</text>', html)                  # the mark on the passport
+        _, html = self.get("/stats")
+        self.assertIn("<h2>Prices</h2>", html)
+        # a stop over the entry of a long is refused, the trade left as it was
+        _, html = self.get("/new")
+        self.refused("/new", {"token": self.form_token(html), "blocks": "1",
+                              "account": "broker", "pair": "EURUSD", "direction": "long",
+                              "style": "swing", "risk": "1", "entry": "2026-08-29T10:00",
+                              "entry_price": "1.1", "stop_price": "1.2"})
+        self.post(f"/trade/{q}/delete", {})
+
     def test_53_a_card_is_not_moved_onto_another(self):
         self.post("/card/save", {"date": "2026-07-01", "previous": "2026-07-01",
                                  "focus": "the first"})
@@ -1847,16 +1951,42 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(store.all_accounts(self.root)["broker"].daily_loss_limit, 50)
         now = datetime.now().strftime("%Y-%m-%dT%H:%M")
         trade_id = self.open_trade(entry=now, risk="1")     # 1% of ~10 000 at risk
-        _, html = self.get("/")
-        tile = re.search(r'<div class="tile([^"]*)"><div class="name">'
-                         r'<a href="/stats\?account=broker"[^>]*>Broker', html)
-        self.assertIn("over", tile.group(1))
+        # the front page keeps the balance alone; the rules stand on Accounts
+        self.assertNotIn("daily loss limit reached", self.get("/")[1])
+        _, html = self.get("/accounts")
+        self.assertIn('class="rules-state lose"', html)
         self.assertIn("daily loss limit reached", html)
         self.assertIn("limit 50 $", html)
         self.post("/account/limit", {"id": "broker", "limit": ""})
         self.assertIsNone(store.all_accounts(self.root)["broker"].daily_loss_limit)
-        self.assertNotIn("daily loss limit reached", self.get("/")[1])
+        self.assertNotIn("daily loss limit reached", self.get("/accounts")[1])
         self.post(f"/trade/{urllib.parse.quote(trade_id)}/delete", {})
+
+    def test_56a_a_prop_account_is_held_against_its_rules(self):
+        """A prop account opens on its rules; a percent is of the start
+        balance; the tile of the front page says where it stands."""
+        code, where = self.post("/account/new", {"id": "prop-5k", "name": "Prop 5k",
+                                                 "start": "5000", "currency": "USD",
+                                                 "kind": "prop", "firm": "SomeFirm"})
+        self.assertEqual(urllib.parse.urlparse(where).path, "/account/prop-5k/rules")
+        code, html = self.get("/account/prop-5k/rules")
+        self.assertEqual(code, 200)
+        self.post("/account/prop-5k/rules", {
+            "kind": "prop", "firm": "SomeFirm", "daily": "5%", "max": "500",
+            "mode": "trailing", "target": "8%", "days": "3", "day_start": "00:00",
+            "zone": "Europe/Prague"})
+        a = store.all_accounts(self.root)["prop-5k"]
+        self.assertEqual((a.daily_loss_limit, a.max_loss, a.profit_target, a.min_days),
+                         (250, 500, 400, 3))
+        self.assertEqual(a.max_loss_mode, "trailing")
+        self.assertNotIn("floor 4 500 $", self.get("/")[1])
+        _, html = self.get("/accounts")
+        self.assertIn("floor 4 500 $ (trailing)", html)
+        self.assertIn("trading days 0 of 3", html)
+        self.assertIn("prop · SomeFirm", html)
+        # a clock this computer does not know is refused with the form's page
+        self.refused("/account/prop-5k/rules", {"kind": "prop", "zone": "Mars/Base"})
+        self.post("/account/archive", {"id": "prop-5k"})
 
     def test_57_a_deleted_trade_is_restored_from_the_trash(self):
         trade_id = self.open_trade(idea_text_1="to be deleted and brought back")
@@ -3092,16 +3222,16 @@ class ServerCase(unittest.TestCase):
         j = self.S.journal(True)
         used = max(0.0, -j.closed_on("broker", datetime.now())) + j.open_risk("broker")
         self.post("/account/limit", {"id": "broker", "limit": f"{used - 50:.2f}"})
+        self.assertIn("daily loss limit reached", self.get("/accounts")[1])
         _, html = self.get("/")
-        self.assertIn("daily loss limit reached", html)
         self.assertIn(f'action="/trade/{q}/breakeven"', html)
         self.assertNotIn('class="chip breakeven"', html)
 
         _, where = self.post(f"/trade/{q}/breakeven", {"back": "/"})
         self.assertEqual(urllib.parse.urlparse(where).path, "/")
         self.assertIsNotNone(store.load_trade(self.root, first).breakeven)
+        self.assertNotIn("daily loss limit reached", self.get("/accounts")[1])
         _, html = self.get("/")
-        self.assertNotIn("daily loss limit reached", html)
         self.assertIn("1 at breakeven", html)
         # other tests leave positions of their own open, so only the tail
         self.assertRegex(html, r"Open positions: \d+, 1 at breakeven")
@@ -3122,7 +3252,7 @@ class ServerCase(unittest.TestCase):
         _, where = self.post(f"/trade/{q}/breakeven", {"undo": "1"})
         self.assertEqual(self.landed(where), first)
         self.assertIsNone(store.load_trade(self.root, first).breakeven)
-        self.assertIn("daily loss limit reached", self.get("/")[1])
+        self.assertIn("daily loss limit reached", self.get("/accounts")[1])
 
         # a closed trade has nothing to free
         _, form = self.get(f"/close/{urllib.parse.quote(second)}")

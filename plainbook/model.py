@@ -65,6 +65,12 @@ TRADE_KEYS = [
     ("deviations", "deviations"),
     ("exit_deviations", "exit deviations"),
     ("reasons", "reasons"),
+    ("entry_price", "entry price"),
+    ("stop_price", "stop price"),
+    ("target_price", "target price"),
+    ("exit_price", "exit price"),
+    ("best_price", "best price"),
+    ("worst_price", "worst price"),
     ("notion_id", "notion id"),
 ]
 
@@ -97,6 +103,15 @@ class Trade:
     exit_deviations: list = None                    # the same for the management
                                                     # rules, ticked when it is closed
     reasons: dict = field(default_factory=dict)     # {rule number: why it was not met}
+    # The prices, all optional: the entry, the stop and the target as planned,
+    # the exit, and the best and the worst price the market reached while
+    # the trade was open. What they mean in R is worked out (stats.prices).
+    entry_price: float = None
+    stop_price: float = None
+    target_price: float = None
+    exit_price: float = None
+    best_price: float = None
+    worst_price: float = None
     notion_id: str = ""
     idea: list = field(default_factory=list)        # list of IdeaBlock
     exit_images: list = field(default_factory=list)
@@ -139,7 +154,26 @@ class Trade:
         if self.breakeven is not None and self.opened is not None:
             if _day(self.breakeven) < _day(self.opened):
                 raise RecordError(f"{self.id}: the stop went to breakeven before the entry")
+        self._check_prices()
         return self
+
+    def _check_prices(self):
+        """A stop on the wrong side of the entry makes every R of the prices
+        wrong in sign, and it is nearly always a slip of the hand."""
+        entry, stop, target = self.entry_price, self.stop_price, self.target_price
+        side = 1 if self.direction == "long" else -1
+        for name, value in (("entry", entry), ("stop", stop), ("target", target),
+                            ("exit", self.exit_price), ("best", self.best_price),
+                            ("worst", self.worst_price)):
+            if value is not None and value <= 0:
+                raise RecordError(f"{self.id}: the {name} price must be above zero")
+        if entry is not None and stop is not None:
+            if (entry - stop) * side <= 0:
+                raise RecordError(f"{self.id}: the stop of a {self.direction} "
+                                  f"stands {'under' if side > 0 else 'over'} the entry")
+        if entry is not None and target is not None and (target - entry) * side <= 0:
+            raise RecordError(f"{self.id}: the target of a {self.direction} "
+                              f"stands {'over' if side > 0 else 'under'} the entry")
 
 
 @dataclass
@@ -483,31 +517,81 @@ class Week:
 ACCOUNT_KEYS = [
     ("id", "id"),
     ("name", "name"),
+    ("kind", "kind"),
+    ("firm", "firm"),
     ("start_balance", "start balance"),
     ("currency", "currency"),
     ("archived", "archived"),
     ("daily_loss_limit", "daily loss limit"),
+    ("max_loss", "max loss"),
+    ("max_loss_mode", "max loss mode"),
+    ("profit_target", "profit target"),
+    ("min_days", "min trading days"),
+    ("day_start", "day starts at"),
+    ("zone", "time zone"),
     ("notion_id", "notion id"),
 ]
+
+# a broker account holds your own money; a prop account is run under the
+# rules of a firm, which the journal holds it against
+ACCOUNT_KINDS = ("broker", "prop")
+
+# How the most an account may lose is measured. static: from the start
+# balance, a floor that never moves. trailing: from the highest balance the
+# account has closed at, a floor that follows every new high. trailing to
+# start: the same until the floor reaches the start balance, where it stays.
+# Firms differ; the owner picks the one of theirs.
+MAX_LOSS_MODES = ("static", "trailing", "trailing to start")
+
+_HOUR = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 @dataclass
 class Account:
     id: str                       # bybit, prop-100k
     name: str = ""
+    kind: str = "broker"          # broker or prop
+    firm: str = ""                # the prop firm, a name of the owner's
     start_balance: float = 0.0
     currency: str = "USD"
     archived: bool = False        # archived ones stay in statistics, not in forms
     daily_loss_limit: float = None  # a prop rule: how much a day may lose
+    max_loss: float = None        # a prop rule: how much the account may lose at all
+    max_loss_mode: str = "static"
+    profit_target: float = None   # what the account has to make to pass
+    min_days: int = None          # the days with a trade the firm asks for
+    day_start: str = "00:00"      # when the firm's day begins, on its clock
+    zone: str = ""                # the firm's clock, e.g. Europe/Prague; empty is the journal's
     notion_id: str = ""
     note: str = ""
     extra: dict = field(default_factory=dict)
 
+    @property
+    def is_prop(self):
+        return self.kind == "prop"
+
+    @property
+    def has_rules(self):
+        """Any rule of a firm set: a limit, a floor, a target or the days."""
+        return any(x is not None for x in (self.daily_loss_limit, self.max_loss,
+                                           self.profit_target, self.min_days))
+
     def check(self):
         if not self.id:
             raise RecordError("account has no id")
-        if self.daily_loss_limit is not None and self.daily_loss_limit <= 0:
-            raise RecordError(f"{self.id}: the daily loss limit must be above zero")
+        if self.kind not in ACCOUNT_KINDS:
+            raise RecordError(f"{self.id}: bad kind {self.kind!r}")
+        for name, value in (("daily loss limit", self.daily_loss_limit),
+                            ("max loss", self.max_loss),
+                            ("profit target", self.profit_target)):
+            if value is not None and value <= 0:
+                raise RecordError(f"{self.id}: the {name} must be above zero")
+        if self.min_days is not None and self.min_days <= 0:
+            raise RecordError(f"{self.id}: the trading days must be above zero")
+        if self.max_loss_mode not in MAX_LOSS_MODES:
+            raise RecordError(f"{self.id}: bad max loss mode {self.max_loss_mode!r}")
+        if not _HOUR.match(self.day_start or ""):
+            raise RecordError(f"{self.id}: the day starts at HH:MM, not {self.day_start!r}")
         return self
 
 
@@ -530,6 +614,7 @@ class Adjustment:
     kind: str = "reconciliation"
     amount: float = 0.0
     day: date = None
+    day_time: bool = False          # is the hour of it known
     comment: str = ""
     extra: dict = field(default_factory=dict)
 

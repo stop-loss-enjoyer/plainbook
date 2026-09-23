@@ -11,7 +11,7 @@ import html as _html
 import json
 import math
 from urllib.parse import quote as _quote
-from datetime import timedelta, time
+from datetime import datetime, timedelta, time
 
 from . import __version__, flags
 
@@ -30,7 +30,7 @@ SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500"]
 GOOD = "#48ac7a"
 BAD = "#d05c55"
 WARN = "#d9a441"
-# The rings of the R distribution. One hue per ring with steps that get
+# The buckets of the R distribution. One hue per side with steps that get
 # brighter as R grows, so the order of the buckets is visible in the colour
 # itself and not only in the legend. Checked against the card surface: every
 # step clears 3:1 contrast and stays colourful enough not to read as grey.
@@ -147,19 +147,19 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 .switch a:hover{{color:{INK};background:{SURFACE}}}
 .switch a.current{{color:{INK};background:{RAISED};font-weight:600}}
 
-/* tiles. Each tile draws its own right and bottom line and hangs 1px over
-   the neighbour, so the frame clips the last ones: a place in the grid with
-   no tile in it is plain surface, not a grey block */
+/* tiles. Three surfaces, no shadow: the page, the frame of the strip, and
+   each tile a step lighter inside it, with a lit top edge a pixel thick.
+   The steps are what tells one figure from the next, where a line between
+   them used to; a place in the grid with no tile is the frame showing */
 .tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(184px,1fr));
- background:{SURFACE};border:1px solid {EDGE};border-radius:5px;
- overflow:hidden;margin-bottom:16px}}
+ gap:6px;padding:6px;background:{SURFACE};border:1px solid {EDGE};
+ border-top-color:rgba(255,255,255,.10);border-radius:5px;margin-bottom:16px}}
 /* accounts are not stretched across the screen: there are two of them, and a
    full-width strip would read as an empty table */
 .tiles.narrow{{display:flex;flex-wrap:wrap;width:fit-content;max-width:100%}}
 .tiles.narrow .tile{{min-width:236px;flex:0 0 auto}}
-.tile{{background:{SURFACE};padding:12px 15px 13px;
- border-right:1px solid {EDGE};border-bottom:1px solid {EDGE};
- margin:0 -1px -1px 0}}
+.tile{{background:{RAISED};padding:12px 15px 13px;border-radius:4px;
+ border:1px solid rgba(255,255,255,.035);border-top-color:rgba(255,255,255,.10)}}
 .tile .name{{color:{DIM};font-size:10px;text-transform:uppercase;
  letter-spacing:.09em}}
 /* the name of an account leads to its statistics: it keeps the quiet look of
@@ -302,9 +302,30 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
  display:flex;align-items:center;justify-content:center}}
 .shot .remove:hover{{background:{BAD};color:#fff}}
 
+/* trade page: the fields on the left, the passport of the trade beside
+   them, one under the other on a narrow screen */
+.trade-head{{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;
+ align-items:start}}
+@media (max-width:1000px){{.trade-head{{grid-template-columns:1fr}}}}
+.passport h3{{margin:4px 0 2px}}
+.passport h3 .muted{{text-transform:none;letter-spacing:0;margin-left:6px;font-weight:400}}
+.passport svg{{display:block}}
+.passport .caption{{margin:0 0 8px}}
 /* trade page */
 .shots img{{max-width:100%;border:1px solid {EDGE};border-radius:5px;
- margin:8px 0;display:block}}
+ margin:8px 0;display:block;cursor:zoom-in}}
+/* a screenshot over the page: the ground dimmed, no shadow; the picture
+   fits the window, and at its own size the box scrolls */
+.viewer{{position:fixed;inset:0;z-index:20;background:rgba(10,10,11,.94);
+ overflow:auto;display:flex;outline:none}}
+.viewer img{{margin:auto;max-width:96vw;max-height:92vh;cursor:zoom-in;
+ border:1px solid {EDGE};border-radius:4px}}
+.viewer img.full{{max-width:none;max-height:none;cursor:zoom-out}}
+.viewer-count{{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+ font:11px/1 {MONO};color:{INK2};background:{RAISED};border:1px solid {AXIS};
+ border-radius:4px;padding:6px 9px;pointer-events:none}}
+.dropzone.over{{border-color:{ACCENT};background:rgba(111,157,255,.06)}}
+.dropzone .pick{{order:10;margin:6px 6px 0 0}}
 .idea-block{{border-left:2px solid {AXIS};padding-left:12px;margin-bottom:16px}}
 .idea-block:last-child{{margin-bottom:0}}
 .example{{display:flex;align-items:center;gap:10px;margin:4px 0}}
@@ -415,6 +436,9 @@ textarea.lines{{font-family:{MONO};font-size:12px}}
 tr.total td{{border-top:1px solid {AXIS};color:{INK};font-weight:500}}
 tr.sub td:first-child{{padding-left:28px;color:{INK2}}}
 tr.sub td{{color:{INK2}}}
+/* a row under another is quieter, but a sum keeps the colour of its sign */
+tr.sub td.win{{color:{GOOD}}}
+tr.sub td.lose{{color:{BAD}}}
 .limit-row{{display:flex;gap:8px;align-items:center;padding:3px 0}}
 .limit-row input[name="limit_name"]{{width:240px}}
 .limit-row .x{{background:transparent;border:0;color:{DIM};cursor:pointer;
@@ -511,12 +535,11 @@ mark{{background:rgba(111,157,255,.28);color:inherit;border-radius:2px}}
 /* the playbook table is eight columns wide and does not fit half a page */
 @media (max-width:1150px){{.twin.books{{grid-template-columns:1fr}}}}
 .tape a rect:hover{{fill-opacity:1}}
-.rings.compact .ring{{flex:1 1 200px;min-width:0;padding:10px 12px}}
-.rings.compact .ring-body{{flex-direction:column;align-items:flex-start;gap:6px}}
-.rings.compact .donut-legend{{flex:none;width:100%}}
+.piles .pile{{flex:1 1 200px;min-width:0;padding:10px 12px}}
+.piles .buckets{{flex:none;width:100%}}
 /* the name of a bucket wraps rather than pushing its figures out of the box:
    the legend stands in half a column here and the window can be narrower */
-.rings.compact .donut-legend td:first-child{{white-space:normal}}
+.piles .buckets td:first-child{{white-space:normal}}
 .grades{{margin:8px 0 0;display:flex;gap:6px;flex-wrap:wrap}}
 .grades .chip b{{color:{INK};font-weight:600;margin-left:4px}}
 ul.errors{{margin:6px 0 0;padding-left:0;list-style:none;max-width:760px}}
@@ -539,23 +562,33 @@ form.inline .quiet:hover{{color:{INK};text-decoration:underline;text-underline-o
  vertical-align:1px;margin-right:5px}}
 .card.conclusions .pb-text{{color:{INK}}}
 
-/* the two rings of the R distribution */
-.rings{{display:flex;flex-wrap:wrap;gap:14px}}
-.ring{{flex:1 1 380px;min-width:300px;background:{GROUND};
+/* the days of a period side by side; one under the other on a narrow screen */
+.days-row{{display:grid;gap:18px;align-items:end;justify-content:center}}
+.days-row h3{{margin:0 0 4px;text-align:center}}
+@media (max-width:1100px){{.days-row{{grid-template-columns:1fr !important}}}}
+svg.weekdays{{display:block;margin:4px 0 14px}}
+.rules-state .sub{{font-size:11px;color:{INK2}}}
+.rules-state.warn .sub{{color:{WARN}}}
+.rules-state.lose .sub{{color:{BAD}}}
+.hour-unknown,.field label.hour-unknown{{display:flex;align-items:center;gap:5px;margin-top:4px;
+ cursor:pointer;text-transform:none;letter-spacing:0;font-size:11px}}
+.hour-unknown input{{margin:0}}
+table.shelf td.path{{padding-top:2px;padding-bottom:2px}}
+table.shelf .spark{{display:block}}
+/* the R distribution: the dots on one line, the two legends under it */
+.piles{{display:flex;flex-wrap:wrap;gap:14px}}
+.pile{{flex:1 1 380px;min-width:300px;background:{GROUND};
  border:1px solid {EDGE};border-radius:8px;padding:14px 16px}}
-.ring h3{{margin:0 0 10px;color:{DIM};font-size:10px;font-weight:500;
+.pile h3 .muted{{text-transform:none;letter-spacing:0;margin-left:6px;font-weight:400}}
+.rline{{display:block;margin:6px 0 12px}}
+.pile h3{{margin:0 0 10px;color:{DIM};font-size:10px;font-weight:500;
  text-transform:uppercase;letter-spacing:.09em}}
-.ring-body{{display:flex;align-items:center;gap:18px;flex-wrap:wrap}}
-.donut-legend{{flex:1 1 190px;width:auto;font-size:12px}}
-.donut-legend td{{border-bottom:none;padding:3px 0 3px 10px}}
-.donut-legend td:first-child{{padding-left:0;white-space:nowrap;color:{INK2}}}
-.donut-legend i{{display:inline-block;width:9px;height:9px;border-radius:2px;
+.buckets{{flex:1 1 190px;width:auto;font-size:12px}}
+.buckets td{{border-bottom:none;padding:3px 0 3px 10px}}
+.buckets td:first-child{{padding-left:0;white-space:nowrap;color:{INK2}}}
+.buckets i{{display:inline-block;width:9px;height:9px;border-radius:2px;
  margin-right:7px;vertical-align:baseline}}
-.donut-legend tr{{cursor:default}}
-.ring [data-slice]{{transition:opacity .12s ease}}
-.ring.lit [data-slice]:not(.on){{opacity:.22}}
-.ring.lit tr.on td{{background:rgba(255,255,255,.06)}}
-.ring.lit tr.on td:first-child{{color:{INK}}}
+.buckets tr{{cursor:default}}
 .tip{{position:fixed;pointer-events:none;background:{RAISED};
  border:1px solid {AXIS};border-radius:4px;padding:6px 9px;font-size:11px;
  color:{INK};display:none;z-index:9;white-space:pre;
@@ -636,27 +669,6 @@ function close_popovers(except){
     if (!except || !box.contains(except)) box.open = false;
   });
 }
-// A slice and its line in the legend light each other up. Five steps of one
-// colour cannot be told apart by eye alone, and they should not have to be:
-// pointing at either half of the pair says which is which.
-function light_slice(ring, which){
-  ring.classList.toggle('lit', which !== null);
-  ring.querySelectorAll('[data-slice]').forEach(el => {
-    el.classList.toggle('on', el.dataset.slice === which);
-  });
-}
-document.addEventListener('mouseover', e => {
-  if (!e.target.closest) return;
-  const ring = e.target.closest('.ring');
-  if (!ring) return;
-  const part = e.target.closest('[data-slice]');
-  light_slice(ring, part ? part.dataset.slice : null);
-});
-document.addEventListener('mouseout', e => {
-  if (!e.target.closest) return;
-  const ring = e.target.closest('.ring');
-  if (ring && !ring.contains(e.relatedTarget)) light_slice(ring, null);
-});
 // A field with our own list under it. The browser's own list cannot show the
 // flags and will not close on a second click on the field, which is the whole
 // reason this exists.
@@ -721,6 +733,80 @@ document.addEventListener('keydown', e => {
     picker.querySelector('input').value = shown[here].dataset.value;
     open_picker(picker, false);
   }
+});
+// A figure under the pointer: any element of a picture that carries
+// data-tip says it in the tip box at once, where a <title> waits a second
+// and a half and is easy to miss. The equity curves keep their own tip.
+document.addEventListener('mousemove', e => {
+  const t = document.getElementById('tip');
+  if (!t) return;
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if (!el) {
+    if (t.dataset.own) { t.style.display = 'none'; delete t.dataset.own; }
+    return;
+  }
+  t.textContent = el.dataset.tip;
+  t.dataset.own = '1';
+  t.style.display = 'block';
+  t.style.left = Math.min(e.clientX + 14, innerWidth - t.offsetWidth - 8) + 'px';
+  t.style.top = Math.min(e.clientY + 14, innerHeight - t.offsetHeight - 8) + 'px';
+});
+// A screenshot opened over the page: the picture at the size of the window,
+// a click shows it at its own size to be read closely, and the arrows go to
+// the next picture of the page. Esc or a click beside it closes it.
+function open_viewer(img){
+  const all = [...document.querySelectorAll('.shots img')];
+  let at = all.indexOf(img);
+  const box = document.createElement('div');
+  box.className = 'viewer';
+  box.tabIndex = -1;
+  const pic = document.createElement('img');
+  const count = document.createElement('div');
+  count.className = 'viewer-count';
+  box.append(pic, count);
+  const show = () => {
+    pic.src = all[at].src;
+    pic.classList.remove('full');
+    count.textContent = all.length > 1 ? (at + 1) + ' / ' + all.length +
+      ' · arrows for the next · click to zoom · Esc' : 'click to zoom · Esc';
+  };
+  const close = () => { box.remove(); document.removeEventListener('keydown', keys); };
+  const keys = e => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowRight' && all.length > 1) { at = (at + 1) % all.length; show(); }
+    else if (e.key === 'ArrowLeft' && all.length > 1) { at = (at - 1 + all.length) % all.length; show(); }
+  };
+  pic.addEventListener('click', e => {
+    e.stopPropagation();
+    const r = pic.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    pic.classList.toggle('full');
+    // the point clicked stays under the pointer
+    if (pic.classList.contains('full'))
+      box.scrollTo(fx * pic.naturalWidth - e.clientX, fy * pic.naturalHeight - e.clientY);
+  });
+  box.addEventListener('click', close);
+  document.addEventListener('keydown', keys);
+  document.body.appendChild(box);
+  show();
+  box.focus();
+}
+document.addEventListener('click', e => {
+  const img = e.target.closest && e.target.closest('.shots img');
+  if (img && !img.closest('a')) open_viewer(img);
+});
+// A form with words or pictures in it is not left by accident: a click on a
+// tab asks first. Saving, and the forms that hold a line or two, do not ask.
+let unsaved = null;
+window.form_changed = el => {
+  const form = el.closest && el.closest('form');
+  if (form && form.method === 'post' && form.querySelector('textarea, .dropzone'))
+    unsaved = form;
+};
+document.addEventListener('input', e => window.form_changed(e.target));
+document.addEventListener('submit', e => { if (e.target === unsaved) unsaved = null; }, true);
+window.addEventListener('beforeunload', e => {
+  if (unsaved && document.body.contains(unsaved)) { e.preventDefault(); e.returnValue = ''; }
 });
 document.addEventListener('click', e => close_popovers(e.target));
 document.addEventListener('keydown', e => {
@@ -879,7 +965,7 @@ def _what(tag):
 
 
 def equity_svg(series, width=980, height=260, cid="equity", sign="$",
-               base=None, base_word="from start", axis="date"):
+               base=None, base_word="from start", axis="date", marks=()):
     """An equity line with hovering. series: [(name, colour, points)], a point
     being (date, value) or (date, value, what) as `stats.equity_events` gives
     them. `sign` is the currency the tip names next to a balance.
@@ -900,6 +986,11 @@ def equity_svg(series, width=980, height=260, cid="equity", sign="$",
 
     Only like quantities share a picture: accounts go on one chart, the total
     on its own. There are never two scales in one image.
+
+    `marks` are moments to point at on a date axis, [(moment, word, colour)]
+    or with a fourth True for a dot where the first curve stands then, when a
+    point of it falls on that moment: a thin line across the picture with its
+    word on top. The page of a trade marks its entry and its exit this way.
     """
     drawn = []
     for name, colour, pts in series:
@@ -1063,6 +1154,38 @@ def equity_svg(series, width=980, height=260, cid="equity", sign="$",
                                 for (sx, sy), x, (day, v, what), b
                                 in zip(screen, xs, pts, bases[k])]})
 
+    if axis == "date" and drawn:
+        _, _, first_pts, _ = drawn[0]
+        first_screen = [(X(x), Y(v)) for x, (_, v, _) in zip(drawn[0][3], first_pts)]
+        placed = []
+        for moment, word, colour, *dot in marks:
+            # a moment the curve has a point on is drawn at that point; one
+            # between points only while it lies inside the picture. Only a
+            # mark that asks for it gets a dot: an entry that falls on the
+            # close of another trade is not that close
+            at = next((pt for pt, (day, _, what) in zip(first_screen, first_pts)
+                       if day == moment and what != "start"), None)
+            if at is None and not x0 <= moment <= x1:
+                continue
+            placed.append((at[0] if at else X(moment), at if dot and dot[0] else None,
+                           word, colour))
+        placed.sort(key=lambda m: m[0])
+        for i, (x, at, word, colour) in enumerate(placed):
+            anchor = "start" if x < left + 30 else "end" if x > right - 30 else "middle"
+            # two marks close together say their words away from each other
+            if i + 1 < len(placed) and placed[i + 1][0] - x < 44:
+                anchor, x_text = "end", x - 3
+            elif i > 0 and x - placed[i - 1][0] < 44:
+                anchor, x_text = "start", x + 3
+            else:
+                x_text = x
+            parts.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{bottom}" '
+                         f'stroke="{colour}" stroke-opacity=".55" stroke-dasharray="3 3"/>'
+                         f'<text x="{x_text:.1f}" y="{top + 10}" fill="{colour}" font-size="10" '
+                         f'text-anchor="{anchor}">{esc(word)}</text>')
+            if at:
+                parts.append(f'<circle cx="{at[0]:.1f}" cy="{at[1]:.1f}" r="5" '
+                             f'fill="{colour}" stroke="{SURFACE}" stroke-width="2"/>')
     parts.append(f'<line id="{cid}-ray" x1="0" y1="{top}" x2="0" '
                  f'y2="{bottom}" stroke="{AXIS}" stroke-width="1" '
                  f'visibility="hidden"/>')
@@ -1251,64 +1374,346 @@ function hover_chart(cid){
 """
 
 
-def donut_svg(segments, size=188, thickness=30, middle="", under=""):
-    """A ring of ordered slices. segments: [(label, count, colour)].
+def tip(text):
+    """The data-tip attribute of an element of a picture: lines joined the
+    way the tip box breaks them."""
+    return f' data-tip="{esc(text)}"'
 
-    The slices are separated by a gap of the card colour rather than by a
-    stroke: a ring read at a glance should not have a second colour in it.
-    """
-    total = sum(n for _, n, _ in segments)
-    if not total:
+
+# --- the R distribution on one line ---------------------------------------------
+
+def r_line_svg(dots, loss_tops, win_tops, width=560):
+    """Every closed trade a dot at its R, the dots of one R stacked, and under
+    them a strip of the buckets the legend counts.
+
+    dots: [(r, pile, bucket, href, words)], pile "Lose", "Win" or "BE" and
+    bucket the index into the buckets of the pile (stats.r_line). A loss is
+    drawn in the step of its bucket, the same colours the legend uses, and a
+    break-even in amber at its own R, which is near zero and never exactly
+    it. The dashed line is the stop, -1 R; what lies left of the stop edge
+    lost more than the trade was sized for. Each dot opens its trade.
+
+    loss_tops and win_tops are the far edges of the buckets in R, the last
+    one None (stats.loss_buckets and stats.WIN_BUCKETS): the strip is cut
+    where the legend cuts."""
+    edge = next((t for t in reversed(loss_tops) if t is not None), 1.0)
+    if not dots:
         return '<p class="muted">Nothing to plot yet.</p>'
-    r = (size - thickness) / 2
-    c = size / 2
-    circumference = 2 * math.pi * r
-    gap = 3 if sum(1 for _, n, _ in segments if n) > 1 else 0
-    parts, offset = [], 0.0
-    for i, (label, n, colour) in enumerate(segments):
-        if not n:
+    rs = [d[0] for d in dots]
+    lo = min(-(edge + 0.5), math.floor(min(rs) * 2) / 2 - 0.25)
+    hi = max(3.5, math.ceil(max(rs) * 2) / 2 + 0.25)
+    pad = 16
+    X = lambda v: pad + (v - lo) / (hi - lo) * (width - 2 * pad)
+    # one column of dots per step of the axis; with many trades in one
+    # column the dots get smaller rather than the picture taller
+    step, columns = 7.5, {}
+    for r, *_ in dots:
+        key = round((X(r) - pad) / step)
+        columns[key] = columns.get(key, 0) + 1
+    tallest = max(columns.values())
+    size = max(3.0, min(6.5, 150 / tallest - 1.2))
+    lift = size + 1.2
+    base = 30 + tallest * lift
+    height = base + 22
+    out = [f'<svg class="rline" viewBox="0 0 {width} {height:.0f}" width="100%" '
+           f'role="img" aria-label="R distribution">']
+    for v in range(math.ceil(lo), math.floor(hi) + 1):
+        out.append(f'<line x1="{X(v):.1f}" x2="{X(v):.1f}" y1="16" y2="{base:.1f}" '
+                   f'stroke="{GRID}"/><text x="{X(v):.1f}" y="11" fill="{DIM}" '
+                   f'font-size="9.5" text-anchor="middle" font-family="{esc(MONO)}">'
+                   f'{v:+d}</text>')
+    # the strip: where each bucket of the legend lies on the axis
+    bands = []
+    near = 0.0
+    for i, far in enumerate(loss_tops):
+        bands.append((-(far if far is not None else -lo), -near, LOSS_STEPS[i % len(LOSS_STEPS)]))
+        near = far if far is not None else near
+    near = 0.0
+    for i, far in enumerate(win_tops):
+        bands.append((near, far if far is not None else hi, WIN_STEPS[i % len(WIN_STEPS)]))
+        near = far if far is not None else near
+    for a, b, colour in bands:
+        a, b = max(a, lo), min(b, hi)
+        if b > a:
+            out.append(f'<rect x="{X(a):.1f}" y="{base + 5:.1f}" width="{X(b) - X(a):.1f}" '
+                       f'height="5" fill="{colour}"/>')
+    out.append(f'<line x1="{X(-1):.1f}" x2="{X(-1):.1f}" y1="16" y2="{base + 12:.1f}" '
+               f'stroke="{BAD}" stroke-dasharray="3 3"/>'
+               f'<text x="{X(-1):.1f}" y="{base + 21:.1f}" fill="{BAD}" font-size="9.5" '
+               f'text-anchor="middle">stop</text>')
+    seen = {}
+    for r, pile, bucket, href, words in dots:
+        key = round((X(r) - pad) / step)
+        n = seen.get(key, 0)
+        seen[key] = n + 1
+        colour = (WARN if pile == "BE" else
+                  (LOSS_STEPS if pile == "Lose" else WIN_STEPS)[bucket % 5 if pile == "Win" else bucket % 4])
+        dot = (f'<circle cx="{pad + key * step:.1f}" cy="{base - size / 2 - n * lift:.1f}" '
+               f'r="{size / 2:.2f}" fill="{colour}"{tip(words)}/>')
+        out.append(f'<a href="{esc(href)}">{dot}</a>' if href else dot)
+    out.append("</svg>")
+    return "".join(out)
+
+
+# --- blocks in isometry: the days of a month ---------------------------------
+
+_COS, _SIN = math.cos(math.radians(30)), math.sin(math.radians(30))
+
+
+def _iso(cell):
+    return lambda col, row, z=0.0: ((col - row) * cell * _COS,
+                                    (col + row) * cell * _SIN - z)
+
+
+def _block(P, ox, oy, col, row, z, steps, inset=0.12):
+    """A column standing on the cell (col, row), z pixels tall: two sides and
+    a roof in three flat steps of one colour, the light from the top left."""
+    a, b, c, d = (P(col + inset, row + inset), P(col + 1 - inset, row + inset),
+                  P(col + 1 - inset, row + 1 - inset), P(col + inset, row + 1 - inset))
+    up = lambda p: (p[0], p[1] - z)
+    poly = lambda pts, fill: (f'<polygon points="{" ".join(f"{ox + x:.1f},{oy + y:.1f}" for x, y in pts)}" '
+                              f'fill="{fill}"/>')
+    return (poly([d, c, up(c), up(d)], steps[1]) + poly([b, c, up(c), up(b)], steps[0])
+            + poly([up(a), up(b), up(c), up(d)], steps[-2]))
+
+
+def _tile(P, ox, oy, col, row, fill, extra="", inset=0.12):
+    pts = (P(col + inset, row + inset), P(col + 1 - inset, row + inset),
+           P(col + 1 - inset, row + 1 - inset), P(col + inset, row + 1 - inset))
+    return (f'<polygon points="{" ".join(f"{ox + x:.1f},{oy + y:.1f}" for x, y in pts)}" '
+            f'fill="{fill}" stroke="{GRID}"{extra}/>')
+
+
+def month_days_svg(year, month, days, tallest, today=None, cell=36, per_r=11.0):
+    """The days of a month as a calendar lying on its back: a tile a day, a
+    column on a day that closed something, as tall as the R it made. Green
+    for a day that made R, red for one that lost it; the height is the size
+    either way, so a bad day stands as tall as a good one of the same size.
+
+    days: {date: (sum of R, tip words)}. `tallest` is the largest day of
+    every month drawn side by side, so their columns share one scale."""
+    first = datetime(year, month, 1).date()
+    nxt = datetime(year + (month == 12), month % 12 + 1, 1).date()
+    count = (nxt - first).days
+    offset = first.weekday()
+    rows = (offset + count + 6) // 7
+    P = _iso(cell)
+    top = max(tallest, 0.5) * per_r + 16
+    width = (7 + rows) * cell * _COS + 16
+    height = (7 + rows) * cell * _SIN + top + 8
+    ox, oy = rows * cell * _COS + 8, top
+    out = [f'<svg class="days" viewBox="0 0 {width:.0f} {height:.0f}" width="100%" '
+           f'role="img" aria-label="{first:%B %Y} day by day">']
+    for col, name in enumerate("MTWTFSS"):
+        x, y = P(col + 0.5, -0.55)
+        out.append(f'<text x="{ox + x:.1f}" y="{oy + y:.1f}" font-size="9.5" fill="{DIM}" '
+                   f'text-anchor="middle">{name}</text>')
+    # far to near, so a near column stands in front of the ones behind it
+    cells = sorted(((offset + i) % 7 + (offset + i) // 7, (offset + i) % 7,
+                    (offset + i) // 7, first + timedelta(days=i)) for i in range(count))
+    for _, col, row, day in cells:
+        future = today is not None and day > today
+        fill = SURFACE if future else GROUND if day.weekday() >= 5 else RAISED
+        got = days.get(day)
+        words = got[1] if got else f"{day:%a %d.%m.%Y}\nno trade closed"
+        out.append(f'<g{tip(words)}>' + _tile(P, ox, oy, col, row, fill))
+        if got:
+            total = got[0]
+            steps = WIN_STEPS if total > 0 else LOSS_STEPS if total < 0 else [WARN] * 4
+            z = max(3.0, abs(total) * per_r)
+            out.append(_block(P, ox, oy, col, row, z, steps))
+            x, y = P(col + 0.5, row + 0.5)
+            out.append(f'<text x="{ox + x:.1f}" y="{oy + y - z + 3:.1f}" font-size="8.5" '
+                       f'text-anchor="middle" fill="#07080c" font-family="{esc(MONO)}">'
+                       f'{day.day}</text>')
+        out.append("</g>")
+    out.append("</svg>")
+    return "".join(out)
+
+
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def _ev_fill(ev):
+    steps = WIN_STEPS if ev > 0 else LOSS_STEPS
+    return steps[min(len(steps) - 1, int(abs(ev) / 0.35))]
+
+
+def weekday_svg(cells, days, thin=3, width=560):
+    """The week in one row of cells, a weekday each, filled by the EV of the
+    trades entered on it, with the EV and the count written in. A day of
+    fewer than `thin` trades is pale. cells: {weekday: (ev, trades, words)}."""
+    gap, height = 6, 58
+    cw = (width - gap * (len(days) - 1)) / len(days)
+    out = [f'<svg class="weekdays" viewBox="0 0 {width} {height}" width="100%" '
+           f'role="img" aria-label="EV by weekday of entry">']
+    for i, day in enumerate(days):
+        x = i * (cw + gap)
+        got = cells.get(day)
+        if not got:
+            out.append(f'<rect x="{x:.1f}" y="0" width="{cw:.1f}" height="{height}" rx="4" '
+                       f'fill="{SURFACE}" stroke="{GRID}"/><text x="{x + cw / 2:.1f}" y="22" '
+                       f'fill="{DIM}" font-size="11" text-anchor="middle">{WEEKDAYS[day]}</text>')
             continue
-        length = circumference * n / total
-        drawn = max(length - gap, 1.0)
-        parts.append(
-            f'<circle data-slice="{i}" cx="{c}" cy="{c}" r="{r:.2f}" fill="none" '
-            f'stroke="{colour}" stroke-width="{thickness}" '
-            f'stroke-dasharray="{drawn:.2f} {circumference - drawn:.2f}" '
-            f'stroke-dashoffset="{-offset:.2f}">'
-            f'<title>{esc(label)}: {n} trade{"" if n == 1 else "s"}, '
-            f'{100.0 * n / total:.0f}%</title>'
-            f'</circle>')
-        offset += length
-    # the figures in the middle follow the ring: 30px in a ring of 188
-    text, big = "", size * 30 / 188
-    if middle:
-        text += (f'<text x="{c}" y="{c - 1}" fill="{INK}" font-size="{big:g}" '
-                 f'font-family="{MONO}" text-anchor="middle">{esc(middle)}</text>')
-    if under:
-        text += (f'<text x="{c}" y="{c + big * 17 / 30:g}" fill="{DIM}" font-size="11" '
-                 f'text-anchor="middle">{esc(under)}</text>')
-    # only the ring turns, so that the reading starts at twelve o'clock; the
-    # text in the middle stays upright
-    return (f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}" '
-            f'role="img"><g transform="rotate(-90 {c} {c})">'
-            + "".join(parts) + f'</g>{text}</svg>')
+        ev, n, words = got
+        pale = n < thin
+        ink = INK2 if pale else "#07080c"
+        out.append(f'<g{tip(words)}><rect x="{x:.1f}" y="0" width="{cw:.1f}" height="{height}" '
+                   f'rx="4" fill="{_ev_fill(ev)}"{" fill-opacity=" + chr(34) + ".35" + chr(34) if pale else ""}/>'
+                   f'<text x="{x + cw / 2:.1f}" y="18" fill="{ink}" font-size="11" '
+                   f'text-anchor="middle">{WEEKDAYS[day]}</text>'
+                   f'<text x="{x + cw / 2:.1f}" y="37" fill="{ink}" font-size="13" font-weight="600" '
+                   f'text-anchor="middle" font-family="{esc(MONO)}">{ev:+.2f}</text>'
+                   f'<text x="{x + cw / 2:.1f}" y="51" fill="{ink}" font-size="9.5" '
+                   f'text-anchor="middle">{n} {"trade" if n == 1 else "trades"}</text></g>')
+    out.append("</svg>")
+    return "".join(out)
 
 
-def donut_legend(rows, total):
-    """The slices in words: a chip, the bucket, how many and what share.
+# --- small pictures of the shelf and of a trade -----------------------------------
 
-    A ring alone leaves the reader guessing at the sizes, so the numbers stand
-    next to it and the colour only carries the order. The R is not repeated
-    on every row: the middle of the ring carries the unit, and the row is
-    read beside it."""
+def spark_svg(path, width=150, height=26):
+    """The running sum of R of a period, from zero: the way it went to its
+    total, which the total alone does not say."""
+    if len(path) < 2:
+        return ""
+    lo, hi = min(path), max(path)
+    X = lambda i: 2 + i / (len(path) - 1) * (width - 4)
+    Y = lambda v: height - 3 - (v - lo) / max(1e-9, hi - lo) * (height - 6)
+    line = " ".join(f"{'M' if i == 0 else 'L'}{X(i):.1f},{Y(v):.1f}" for i, v in enumerate(path))
+    colour = GOOD if path[-1] > 0 else BAD if path[-1] < 0 else WARN
+    return (f'<svg class="spark" width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+            f'aria-hidden="true"><line x1="2" x2="{width - 2}" y1="{Y(0):.1f}" y2="{Y(0):.1f}" '
+            f'stroke="{AXIS}" stroke-dasharray="2 2"/><path d="{line}" fill="none" '
+            f'stroke="{colour}" stroke-width="1.5"/><circle cx="{X(len(path) - 1):.1f}" '
+            f'cy="{Y(path[-1]):.1f}" r="2.2" fill="{colour}"/></svg>')
+
+
+def year_svg(year, days, today=None, cell=13, gap=3):
+    """A year a square a day, by the exit: green made R, red lost it, amber
+    came out at zero, brighter is more. days: {date: (sum of R, tip words)}."""
+    first = datetime(year, 1, 1).date()
+    start = first - timedelta(days=first.weekday())
+    left, top = 30, 18
+    weeks = ((datetime(year, 12, 31).date() - start).days // 7) + 1
+    step = cell + gap
+    width, height = left + weeks * step + 4, top + 7 * step + 2
+    out = [f'<svg class="year" viewBox="0 0 {width} {height}" width="{width}" '
+           f'style="max-width:100%" role="img" aria-label="{year} day by day">']
+    for month in range(1, 13):
+        at = (datetime(year, month, 1).date() - start).days // 7
+        out.append(f'<text x="{left + at * step}" y="11" font-size="9.5" fill="{DIM}">'
+                   f'{datetime(year, month, 1):%b}</text>')
+    for row, name in ((0, "Mon"), (2, "Wed"), (4, "Fri")):
+        out.append(f'<text x="{left - 6}" y="{top + row * step + cell - 3}" font-size="9" '
+                   f'fill="{DIM}" text-anchor="end">{name}</text>')
+    for k in range(weeks * 7):
+        day = start + timedelta(days=k)
+        if day.year != year:
+            continue
+        x, y = left + (k // 7) * step, top + (k % 7) * step
+        got = days.get(day)
+        if got is None:
+            fill = SURFACE if today is not None and day > today else RAISED
+            out.append(f'<rect x="{x}" y="{y}" width="{cell}" height="{cell}" rx="2.5" fill="{fill}"/>')
+            continue
+        total, words = got
+        fill = WARN if abs(total) < 0.2 else (WIN_STEPS if total > 0 else LOSS_STEPS)[
+            min(3, int(abs(total) / 0.8))]
+        out.append(f'<rect x="{x}" y="{y}" width="{cell}" height="{cell}" rx="2.5" '
+                   f'fill="{fill}"{tip(words)}/>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def result_svg(r, others, edge, marks=(), width=560):
+    """One trade against the risk it was sized for: a bar from zero to its R
+    on an axis of R, the band from the stop to zero shaded as the risk, the
+    band from the stop to the stop edge a shade deeper, and a tick for every
+    other closed trade of the account, so the result is read against the
+    ones around it. others: [(r, result)]. marks: [(R, word, colour)], the
+    target and the best and worst price of the trade in R, drawn as thin
+    lines across the band with their word above."""
+    rs = [x for x, _ in others] + [r] + [v for v, _, _ in marks]
+    lo = min(-(edge + 0.4), math.floor(min(rs) * 2) / 2 - 0.2)
+    hi = max(3.5, math.ceil(max(rs) * 2) / 2 + 0.2)
+    pad = 22
+    X = lambda v: pad + (v - lo) / (hi - lo) * (width - 2 * pad)
+    colour = GOOD if r > 0 else BAD if r < 0 else WARN
+    out = [f'<svg class="result" viewBox="0 0 {width} 98" width="100%" role="img" '
+           f'aria-label="the result against the risk">',
+           f'<rect x="{X(-1):.1f}" y="24" width="{X(0) - X(-1):.1f}" height="42" '
+           f'fill="{BAD}" fill-opacity=".07"/>',
+           f'<rect x="{X(-edge):.1f}" y="24" width="{X(-1) - X(-edge):.1f}" height="42" '
+           f'fill="{BAD}" fill-opacity=".14"/>']
+    for v in range(math.ceil(lo), math.floor(hi) + 1):
+        out.append(f'<line x1="{X(v):.1f}" x2="{X(v):.1f}" y1="24" y2="66" stroke="{GRID}"/>'
+                   f'<text x="{X(v):.1f}" y="82" fill="{DIM}" font-size="10" text-anchor="middle" '
+                   f'font-family="{esc(MONO)}">{v:+d}</text>')
+    out.append(f'<line x1="{X(0):.1f}" x2="{X(0):.1f}" y1="20" y2="70" stroke="{AXIS}"/>'
+               f'<line x1="{X(-1):.1f}" x2="{X(-1):.1f}" y1="18" y2="70" stroke="{BAD}" '
+               f'stroke-dasharray="3 3"/>')
+    # the word stop stands on its line unless the figure of the trade needs
+    # the place, which is the case for a trade that closed at the stop
+    if abs(X(r) - X(-1)) > 60:
+        out.append(f'<text x="{X(-1):.1f}" y="13" fill="{BAD}" font-size="10" '
+                   f'text-anchor="middle">stop</text>')
+    for v, result in others:
+        c = GOOD if result == "Win" else BAD if result == "Lose" else WARN
+        out.append(f'<line x1="{X(v):.1f}" x2="{X(v):.1f}" y1="54" y2="66" stroke="{c}" '
+                   f'stroke-opacity=".45"/>')
+    for v, word, c in marks:
+        out.append(f'<line x1="{X(v):.1f}" x2="{X(v):.1f}" y1="22" y2="68" stroke="{c}" '
+                   f'stroke-width="1.5"{" stroke-dasharray=" + chr(34) + "4 3" + chr(34) if word == "target" else ""}/>'
+                   f'<text x="{X(v):.1f}" y="92" fill="{c}" font-size="9.5" '
+                   f'text-anchor="middle">{esc(word)}</text>')
+    a, b = sorted((X(0), X(r)))
+    out.append(f'<rect x="{a:.1f}" y="31" width="{max(2.0, b - a):.1f}" height="16" rx="2" '
+               f'fill="{colour}"/>')
+    anchor = "start" if X(r) < 40 else "end" if X(r) > width - 40 else "middle"
+    out.append(f'<line x1="{X(r):.1f}" x2="{X(r):.1f}" y1="19" y2="31" stroke="{colour}"/>'
+               f'<text x="{X(r):.1f}" y="15" '
+               f'fill="{colour}" font-size="13" '
+               f'font-weight="600" font-family="{esc(MONO)}" '
+               f'text-anchor="{anchor}">{r:+.2f} R</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def hold_svg(marks, spans, width=560):
+    """How a trade spent its time: the entry, the stop moved to the entry, the
+    exit or now, on one line. marks: [(x 0..1, word, when, colour)];
+    spans: [(x from, x to, colour)] the stretches at risk and at breakeven."""
+    pad = 22
+    X = lambda f: pad + f * (width - 2 * pad)
+    out = [f'<svg class="hold" viewBox="0 0 {width} 66" width="100%" role="img" '
+           f'aria-label="time in the market">',
+           f'<line x1="{pad}" x2="{width - pad}" y1="30" y2="30" stroke="{AXIS}" stroke-width="2"/>']
+    for a, b, colour in spans:
+        out.append(f'<line x1="{X(a):.1f}" x2="{X(b):.1f}" y1="30" y2="30" stroke="{colour}" '
+                   f'stroke-opacity=".75" stroke-width="2"/>')
+    for f, word, when, colour in marks:
+        anchor = "start" if f < 0.08 else "end" if f > 0.92 else "middle"
+        out.append(f'<circle cx="{X(f):.1f}" cy="30" r="5" fill="{SURFACE}" stroke="{colour}" '
+                   f'stroke-width="2"/><text x="{X(f):.1f}" y="15" fill="{INK2}" font-size="10.5" '
+                   f'text-anchor="{anchor}">{esc(word)}</text><text x="{X(f):.1f}" y="54" '
+                   f'fill="{DIM}" font-size="10" text-anchor="{anchor}" '
+                   f'font-family="{esc(MONO)}">{esc(when)}</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def bucket_legend(rows, total):
+    """The buckets of R in words: a chip in the colour of the dots, the
+    bucket, how many trades and what share, and the R they add up to."""
     lines = "".join(
-        f'<tr data-slice="{i}"><td><i style="background:{colour}"></i>{esc(label)}</td>'
+        f'<tr><td><i style="background:{colour}"></i>{esc(label)}</td>'
         f'<td class="num">{n}</td>'
         f'<td class="num muted">{100.0 * n / total:.0f}%</td>'
         f'<td class="num {"win" if sum_r > 0 else "lose" if sum_r < 0 else "muted"}">'
         f'{sum_r:+.1f}</td></tr>'
         for i, (label, n, sum_r, colour) in enumerate(rows) if n)
-    return f'<table class="donut-legend"><tbody>{lines}</tbody></table>'
+    return f'<table class="buckets"><tbody>{lines}</tbody></table>'
 
 
 def legend(pairs):

@@ -22,9 +22,11 @@ A trade body has four sections: "Idea" (sub-sections per timeframe, text and
 screenshots), "Exit" (screenshots), "Conclusions" and "Updates" (free
 markdown, kept as is).
 """
+import math
 import os
 import re
 import shutil
+import threading
 from datetime import datetime, timedelta
 
 from . import mdfile
@@ -96,7 +98,11 @@ def _number(s):
     text = _text(s).replace(",", ".").replace("$", "").strip()
     if not text:
         return None
-    return float(text)
+    x = float(text)
+    # nan and inf parse, and one of them would take over every sum it joins
+    if not math.isfinite(x):
+        raise ValueError(f"{text!r} is not a number")
+    return x
 
 
 def _number_to_text(x):
@@ -104,6 +110,12 @@ def _number_to_text(x):
     if x is None:
         return ""
     return str(int(x)) if float(x) == int(x) else repr(round(float(x), 4))
+
+
+def _price_to_text(x):
+    """A price as it was typed, to its last digit: 1.08452 and 0.00001234
+    keep what _number_to_text would round away."""
+    return f"{float(x):.10g}"
 
 
 def _reasons(lines):
@@ -160,6 +172,12 @@ def trade_to_text(t):
             head["exit deviations"] = [str(n) for n in t.exit_deviations]
         if t.reasons:
             head["reasons"] = [f"{n}: {why}" for n, why in sorted(t.reasons.items())]
+    for attr, key in (("entry_price", "entry price"), ("stop_price", "stop price"),
+                      ("target_price", "target price"), ("exit_price", "exit price"),
+                      ("best_price", "best price"), ("worst_price", "worst price")):
+        value = getattr(t, attr)
+        if value is not None:
+            head[key] = _price_to_text(value)
     if t.notion_id:
         head["notion id"] = t.notion_id
     head.update(t.extra)
@@ -216,6 +234,12 @@ def text_to_trade(text):
                          [int(x) for x in _list(head.get("exit deviations"))
                           if str(x).strip()]),
         reasons=_reasons(_list(head.get("reasons"))),
+        entry_price=_number(head.get("entry price")),
+        stop_price=_number(head.get("stop price")),
+        target_price=_number(head.get("target price")),
+        exit_price=_number(head.get("exit price")),
+        best_price=_number(head.get("best price")),
+        worst_price=_number(head.get("worst price")),
         notion_id=_text(head.get("notion id")),
         extra={k: v for k, v in head.items() if k not in known},
     )
@@ -278,11 +302,25 @@ def _text_and_images(chunk):
 # --- account and adjustment: object <-> text -------------------------------
 
 def account_to_text(a):
-    head = {"id": a.id, "name": a.name or a.id,
+    head = {"id": a.id, "name": a.name or a.id, "kind": a.kind,
             "start balance": _number_to_text(a.start_balance),
             "currency": a.currency, "archived": "yes" if a.archived else "no"}
-    if a.daily_loss_limit is not None:
-        head["daily loss limit"] = _number_to_text(a.daily_loss_limit)
+    if a.firm:
+        head["firm"] = a.firm
+    # the rules are written only when set, so a broker account keeps the few
+    # lines it always had
+    for key, value in (("daily loss limit", a.daily_loss_limit),
+                       ("max loss", a.max_loss), ("profit target", a.profit_target)):
+        if value is not None:
+            head[key] = _number_to_text(value)
+    if a.max_loss is not None:
+        head["max loss mode"] = a.max_loss_mode
+    if a.min_days is not None:
+        head["min trading days"] = str(a.min_days)
+    if a.day_start and a.day_start != "00:00":
+        head["day starts at"] = a.day_start
+    if a.zone:
+        head["time zone"] = a.zone
     if a.notion_id:
         head["notion id"] = a.notion_id
     head.update(a.extra)
@@ -292,13 +330,26 @@ def account_to_text(a):
 def text_to_account(text):
     head, body = mdfile.parse(text)
     known = {key for _, key in ACCOUNT_KEYS}
+    limit = _number(head.get("daily loss limit"))
+    days = _number(head.get("min trading days"))
+    # an account written before the kind existed and carrying a daily loss
+    # limit was a prop account; that limit was the only prop rule there was
+    kind = _text(head.get("kind")) or ("prop" if limit is not None else "broker")
     return Account(
         id=_text(head.get("id")),
         name=_text(head.get("name")),
+        kind=kind,
+        firm=_text(head.get("firm")),
         start_balance=_number(head.get("start balance")) or 0.0,
         currency=_text(head.get("currency")) or "USD",
         archived=_text(head.get("archived")).strip().lower() in ("yes", "true", "1"),
-        daily_loss_limit=_number(head.get("daily loss limit")),
+        daily_loss_limit=limit,
+        max_loss=_number(head.get("max loss")),
+        max_loss_mode=_text(head.get("max loss mode")) or "static",
+        profit_target=_number(head.get("profit target")),
+        min_days=int(days) if days is not None else None,
+        day_start=_text(head.get("day starts at")) or "00:00",
+        zone=_text(head.get("time zone")),
         notion_id=_text(head.get("notion id")),
         note=body.strip(),
         extra={k: v for k, v in head.items() if k not in known},
@@ -307,7 +358,8 @@ def text_to_account(text):
 
 def adjustment_to_text(c):
     head = {"id": c.id, "account": c.account, "kind": c.kind,
-            "amount": _number_to_text(c.amount), "date": _date_to_text(c.day)}
+            "amount": _number_to_text(c.amount),
+            "date": _date_to_text(c.day, getattr(c, "day_time", False))}
     head.update(c.extra)
     return mdfile.dump(head, c.comment)
 
@@ -315,13 +367,14 @@ def adjustment_to_text(c):
 def text_to_adjustment(text):
     head, body = mdfile.parse(text)
     known = {key for _, key in ADJUSTMENT_KEYS}
-    day, _ = _date(head.get("date"))
+    day, timed = _date(head.get("date"))
     return Adjustment(
         id=_text(head.get("id")),
         account=_text(head.get("account")),
         kind=_text(head.get("kind")),
         amount=_number(head.get("amount")) or 0.0,
         day=day,
+        day_time=timed,
         comment=body.strip(),
         extra={k: v for k, v in head.items() if k not in known},
     )
@@ -700,9 +753,15 @@ def text_to_week(text):
 
 def _write(path, text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
+    # a name of its own per write, so a form sent twice at once does not
+    # take the other's file away from under it
+    tmp = f"{path}.{os.getpid()}-{threading.get_ident()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(text)
+        # on the disk before the rename: a laptop that loses power right
+        # after a save must not wake up with an empty record
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)          # atomic: the server never reads a half file
 
 
@@ -1340,6 +1399,41 @@ def save_stop_edge(root, value):
     _write(settings_file(root), mdfile.dump(
         head, "The owner's settings. Edited in the interface."))
     return clean_stop_edge(value)
+
+
+def zone(name):
+    """The clock of a place, or None when the name is not one this computer
+    knows. Python on Windows knows no place without the tzdata package, which
+    the journal does not install; there every clock falls back to the local
+    one and the page says so."""
+    if not name:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(name)
+    except Exception:            # an unknown name, or no zone data at all
+        return None
+
+
+def clock(root):
+    """The name of the clock the times of the trades are written in, empty
+    for the clock of this computer."""
+    return _text(_settings(root).get("clock"))
+
+
+def save_clock(root, name):
+    name = (name or "").strip()
+    if name and zone(name) is None:
+        raise RecordError(f"no time zone {name!r} on this computer: "
+                          f"a name like Europe/Prague or America/New_York")
+    head = _settings(root)
+    if name:
+        head["clock"] = name
+    else:
+        head.pop("clock", None)
+    _write(settings_file(root), mdfile.dump(
+        head, "The owner's settings. Edited in the interface."))
+    return name
 
 
 def delete_account(root, account_id):

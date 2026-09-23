@@ -156,8 +156,9 @@ An application shortcut: Chrome → "Save as application" on the journal page, o
 
 ## The ready-made file
 
-`Plainbook-<version>-windows.exe`, `Plainbook-<version>-macos-arm64.zip` and
-`Plainbook-<version>-linux-x86_64` on the releases page are the source of
+`Plainbook-<version>-windows.exe`, `Plainbook-<version>-macos-arm64.zip`,
+`Plainbook-<version>-macos-x86_64.zip` and `Plainbook-<version>-linux-x86_64`
+on the releases page are the source of
 that release packed with a Python interpreter into one file. It installs
 nothing and writes nothing into the operating system, and deleting the file
 removes it. Started by a double-click, the file prints the address and the

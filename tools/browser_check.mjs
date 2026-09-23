@@ -42,6 +42,10 @@ ws.onmessage = e => {
   if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
   else if (m.method) {
     events.push(m);
+    // a form left with words in it asks before the page goes; the check
+    // leaves such forms on purpose, so it answers yes
+    if (m.method === "Page.javascriptDialogOpening" && m.params.type === "beforeunload")
+      ws.send(JSON.stringify({ id: ++id, method: "Page.handleJavaScriptDialog", params: { accept: true } }));
     if (m.method === "Runtime.exceptionThrown")
       errors.push("exception: " + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text));
     if (m.method === "Runtime.consoleAPICalled" && (m.params.type === "error" || m.params.type === "warning"))
@@ -160,8 +164,10 @@ async function run(p) {
   await p.evaluate(`var r=document.querySelector('[name=risk]'); r.value='1'; r.dispatchEvent(new Event('input',{bubbles:true}))`);
   // the field takes money too: the line under it says the percent, and the
   // frame compares that percent to the cap
-  const balance = await p.evaluate(`JSON.parse(document.querySelector('form').dataset.balances)[document.querySelector('[name=account]').value]`);
-  check(balance > 0, "the form carries the balance of the account: " + balance);
+  // the form carries the history of every account, and the balance is the
+  // one at the entry typed in the form
+  const balance = await p.evaluate(`balance_of(document.querySelector('[name=account]').value)`);
+  check(balance > 0, "the form works out the balance of the account at the entry: " + balance);
   check(await has(`document.querySelector('.field .risk-hint').textContent`, "= "), "a percent is said in money under the field");
   await p.evaluate(`var r=document.querySelector('[name=risk]'); r.value=${JSON.stringify(balance * 0.02 + "$")}; r.dispatchEvent(new Event('input',{bubbles:true}))`);
   check(await has(`document.querySelector('.field .risk-hint').textContent`, "= 2% of"), "money is said in percent under the field");
@@ -317,6 +323,56 @@ async function run(p) {
   check(name.startsWith("plainbook-trades-") && name.endsWith(".html"),
     "the file is handed over named: " + name);
   check(kind === "blob:", "the page saves a file it built itself");
+
+  // ---- the paste path: two pictures pasted at once into an idea block,
+  // and Save pressed before they are up. The save waits for both, and the
+  // trade comes out with both, under two names.
+  await p.goto(B + "/new");
+  await p.evaluate(`document.querySelector('[name=pair]').value='GBPUSD';
+    document.querySelector('[name=style]').value='swing';
+    document.querySelector('[name=idea_text_1]').value='two pictures at once';
+    document.querySelector('[name=entry]').value=${JSON.stringify(DAY + "T08:00")}`);
+  events.length = 0;
+  await p.evaluate(`(async () => {
+    // a one-pixel PNG drawn by the page itself
+    const c = document.createElement('canvas'); c.width = c.height = 1;
+    const png = await new Promise(r => c.toBlob(r, 'image/png'));
+    const dt = new DataTransfer();
+    dt.items.add(new File([png], 'a.png', {type: 'image/png'}));
+    dt.items.add(new File([png], 'b.png', {type: 'image/png'}));
+    const zone = document.querySelector('.dropzone[data-zone="idea-1"]');
+    zone.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true}));
+    document.querySelector('form').requestSubmit();
+  })()`);
+  await loaded();
+  check((await p.url()).startsWith("/trade/"), "the save went out once the pictures were up");
+  const shots = await p.evaluate(`[...document.querySelectorAll('img[alt="idea screenshot"]')].map(i => i.src.split('/').pop()).join(' ')`);
+  check(shots.split(" ").length === 2 && new Set(shots.split(" ")).size === 2,
+    "both pasted pictures reached the trade: " + shots);
+
+  // ---- a screenshot opens over the page, and Esc closes it
+  await p.evaluate(`document.querySelector('.shots img').click()`);
+  check(await p.evaluate(`!!document.querySelector('.viewer img')`), "a screenshot opens over the page");
+  await p.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))`);
+  check(await p.evaluate(`!document.querySelector('.viewer')`), "Esc closes it");
+
+  // ---- a picture dropped from a folder lands like a pasted one, and the
+  // zone offers a button to choose a file
+  await p.goto(B + "/new");
+  check(await p.evaluate(`!!document.querySelector('.dropzone[data-zone="idea-1"] .pick')`),
+    "the zone offers Choose a file");
+  const dropped = await p.evaluate(`(async () => {
+    const c = document.createElement('canvas'); c.width = c.height = 1;
+    const png = await new Promise(r => c.toBlob(r, 'image/png'));
+    const dt = new DataTransfer();
+    dt.items.add(new File([png], 'dragged.png', {type: 'image/png'}));
+    const zone = document.querySelector('.dropzone[data-zone="idea-1"]');
+    zone.dispatchEvent(new DragEvent('drop', {dataTransfer: dt, bubbles: true, cancelable: true}));
+    for (let i = 0; i < 50 && !zone.querySelector('.shot'); i++)
+      await new Promise(r => setTimeout(r, 50));
+    return zone.querySelectorAll('.shot').length;
+  })()`);
+  check(dropped === 1, "a dropped picture lands in the zone");
 }
 
 let failed = false;

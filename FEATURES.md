@@ -55,11 +55,13 @@ exists, where it stands, and which requests it answers, so that the answer to
 | daily review, end of day, journal grade, process grade, report card | **Cards, + DRC**: the day on the pattern of a paper Daily Report Card, with the trades of the day graded. |
 | weekly review | **Cards, + WRC**: the same for a trading week. |
 | monthly review, quarterly review, period report | **Reports.** A shelf of every month and quarter since the first closed trade; a report opens on its figures against the period before, the mistakes, the rules not met, the errors from the cards, your conclusions, kept through every rebuild. |
-| statistics, analytics, dashboard, equity curve, winrate, win rate, expectancy, R multiples, distribution | **Statistics.** Any cut of the history: the strip (EV, winrate against the break-even winrate, payoff, deepest fall, mistakes, best and worst trade), the bars per trade or per period, the R rings, the equity per account, the tables by pair, style, account, direction, playbook. The front page holds the current period, the account tiles and the list. |
+| statistics, analytics, dashboard, equity curve, winrate, win rate, expectancy, R multiples, distribution | **Statistics.** Any cut of the history: the strip (EV, winrate against the break-even winrate, payoff, deepest fall, mistakes, best and worst trade), the bars per trade or per period, the R distribution as dots on one line, the equity per account, the EV by weekday of entry, the tables by pair, style, account, direction, playbook. The front page holds the current period, the account tiles and the list. |
 | trade commentary while open, updates, journaling during the trade | **The page of an open trade, Update**: a dated line with a screenshot, kept after the close. |
 | breakeven, stop moved to entry, risk-free | **Breakeven** on an open position: frees its risk in the daily loss limit, and Statistics says what moving the stop was worth. |
-| stop overrun, slippage, losses past the stop, what a stop costs | **Statistics, Past the stop** with the stop edge slider, and the rings of losses cut where a stop lands. |
-| several accounts, prop firm and broker, the same trade on two accounts | **Accounts**: any number, each in its own currency, archive for the closed ones; the trade form has Duplicate on other accounts, a copy per ticked account with a risk of its own. |
+| stop overrun, slippage, losses past the stop, what a stop costs | **Statistics, Past the stop** with the stop edge slider, and the losses of the R distribution cut where a stop lands. |
+| prop firm rules, FTMO, challenge, max loss, trailing drawdown, profit target, trading days | **Accounts, Rules**: an account is broker or prop; a prop account holds the rules of its firm (daily loss limit, max loss static or trailing, profit target, min trading days, the firm's day and clock), and its tile on the front page says where it stands against each. |
+| entry price, stop loss, take profit, RR, MFE, MAE, left on the table | **The Prices fold** of the trade form and of the closing form; the trade page reads them in R, Statistics has a **Prices** card. |
+| several accounts, prop firm and broker, the same trade on two accounts | **Accounts**: any number, each in its own currency, archive for the closed ones; the trade form has Duplicate on other accounts, a copy per ticked account with a risk of its own; **Statistics** counts the copies once with its Trades \| Ideas switch. |
 | deposits, withdrawals, payouts, fees, balance does not match the broker | **Accounts, money**: deposits, withdrawals and fees written apart from trading, withdrawals with a running total; a correction records the difference to the broker without editing history. |
 | custom fields, my own words in the form, styles, entry formats | **Accounts, vocabularies**: styles, entry timeframes, execution formats are lists you edit; a word taken out stops being offered and stays on the trades that carry it. |
 | screenshots, charts, pictures | Paste with Ctrl+V into any drop zone: the idea and the exit of a trade, its updates, a plan and its updates, a note, a playbook review. |
@@ -112,7 +114,7 @@ and the counts come from the trades and stay editable.
 
 **Statistics**, any cut of the history. A cut by account,
 pair, style, direction, result, period, and the page opens on what
-that cut did: the strip, the bars, the R rings, the losses cut at the stop
+that cut did: the strip, the bars, the R distribution, the losses cut at the stop
 edge, the equity per account, By playbook, the stop at breakeven, the tables.
 A bar or a row narrows the page to itself, Back steps out one click at a
 time, the trades of the cut stand at the foot.

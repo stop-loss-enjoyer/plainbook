@@ -37,17 +37,23 @@ than it was.
   capitals whatever way it was typed, so `eurusd` and `EURUSD` are one pair.
 - **direction**, **style**, **entry TF**: the styles and the timeframes come
   from your own lists, edited on the Accounts tab.
-- **risk, % or money**: the risk as a percent of the current computed
-  balance of the account, or as a sum of money with a currency sign or code
+- **risk, % or money**: the risk as a percent of the computed balance of
+  the account at the entry, or as a sum of money with a currency sign or code
   beside it: `150$`, `$150`, `150 usd`. The line under the field says what
   the other one is, `= 150 $ of 10 000 $` for a percent and `= 1.5% of
-  10 000 $` for a sum, against the balance of the account picked above. A
+  10 000 $` for a sum, against the balance of the account picked above on
+  the entry date typed below. A trade written in days after it was taken is
+  measured against the balance of its own day, so the trades closed since
+  do not change its R. A
   sum is saved as the percent it makes, to two decimals, since the percent
   is what R is measured by, and the trade page shows both. The field starts at the risk
   of your last trade on that account and follows the account until you type
   a figure yourself; a duplicate's risk starts at the last trade of its own
   account and takes money the same way, against its own balance.
 - **entry**: date and time of entry; clicking the field opens a calendar.
+  The time counts as known, midnight included. When you do not know the
+  hour, tick **hour not known** under the field: the journal then keeps the
+  date alone, and orders the trade within its day by the date only.
 - **plan**: the trading plan this trade follows, picked from the plans you have
   written. Left at "-" if the trade belongs to none.
 - **playbook**: the playbook the trade is opened under, if any. Picking one
@@ -55,13 +61,24 @@ than it was.
   idea blocks; see [Playbooks](#playbooks) below.
 - **execution**: the checkboxes. They come from your list too, so the formats
   you actually trade are the ones offered.
+- **Prices**, a fold under the fields, all optional: the **entry**, the
+  **stop** and the **target** price as you planned them. The stop sets 1 R by
+  price, so the line beside the fields says the RR of the target while you
+  type, whatever the pair. A stop on the wrong side of the entry is refused.
+  Under a playbook with a *least RR* limit, the frame of its checklist
+  compares the RR typed to it and turns red below it.
 
 Below is the idea block: timeframe, text and screenshots. **+ idea block** adds
 another one when the idea rests on several timeframes.
 
 **Screenshots**: click inside the dashed frame and press **Ctrl+V**. Whatever is
 on the clipboard goes in, a screenshot from TradingView or a cut of the screen.
-To take a screenshot out, press the cross in its top right corner.
+A picture file can be dragged in from a folder too, or picked with **Choose a
+file**. To take a screenshot out, press the cross in its top right corner.
+Pressing Save while a picture is still on its way waits for it.
+
+**A form is not lost by accident.** Once you have typed in a form with text or
+screenshots, leaving the page by a tab or a link asks first.
 
 **Duplicate on other accounts** is for the same position taken on several
 accounts, for example on the exchange and on two prop accounts. Open the block:
@@ -389,14 +406,45 @@ The result starts on **pick one** and the form will not be sent until you choose
 so a trade cannot be closed with a result nobody picked.
 
 The exit holds the hour as well as the date, and it matters: a trade opened later
-the same day is measured against the balance this close left behind. Leave the
-time at midnight and the journal takes the hour as unknown, as it does for an
-entry. An exit dated before the entry is refused. A Win with a negative PnL,
+the same day is measured against the balance this close left behind. When the
+hour is not known, tick **hour not known** under the field, as for the entry. An exit dated before the entry is refused. A Win with a negative PnL,
 or a Lose with a positive one, is saved but pointed out on the trade page:
 nearly always one of the two is a slip, and Edit puts it right.
 
 R is worked out by the journal, `PnL / (risk% × the balance at the moment of
 entry)`, and there is nothing to recompute by hand.
+
+**Prices at the close**, a fold of the closing form, all optional: the **exit**
+price, and the **best** and the **worst** price the market reached while the
+trade was open. With the entry and the stop written on the trade they read in
+R: how far the trade went for you (MFE), how far against it (MAE), and what a
+winner gave back from its best. The trade page says them under **in R by
+price**, and marks the target, the best and the worst on the bar of its
+result.
+
+## The trade page
+
+The fields of the trade stand on the left and its **passport** beside them:
+
+- **Result against the risk**, for a closed trade: a bar from zero to its R
+  on an axis of R, the risk it was sized for shaded from the stop to zero,
+  the stretch from the stop to the stop edge a shade deeper, and a tick for
+  every other closed trade of the account, so the result is read against the
+  ones around it. The heading says where it stands among them by R.
+- **In the market**: the entry, the moment the stop went to the entry, and
+  the exit on one line, red while the trade was at risk and amber once the
+  stop stood at the entry, with how long it ran and how much of it was at
+  risk. An open trade runs to now. Without the hours on the entry and the
+  exit the line is drawn by the day.
+- **On the account**: the curve of the account drawn as on the Statistics
+  tab, with the scale of the balance, the dates, the wash against the start
+  and the balance under the pointer; the entry and the exit of this trade are
+  marked on it, the exit with a dot where the trade moved the balance.
+
+**A screenshot opens over the page** on a click: at the size of the window,
+and at its own size on a second click, to read a level closely. The arrows go
+to the next and the previous picture of the page, Esc or a click beside it
+closes it.
 
 ## Editing and deleting
 
@@ -519,10 +567,9 @@ written on the card, the daily one a hyphen.
 - **Account tiles**: the computed balance, the start balance and the difference
   in colour, in the currency of the account. The difference is what the account
   earned, so money you put in or took out is named separately and is never
-  mistaken for a win or a loss. Archived accounts do not appear here. An
-  account with a **daily loss limit** (see Accounts) carries one more line:
-  what today has already cost, what the open trades still put at risk, and the
-  limit; the tile turns amber at four fifths of it and red when it is reached.
+  mistaken for a win or a loss. Archived accounts do not appear here. The
+  rules of a prop firm are not on the tile: where an account stands against
+  them is on the Accounts tab.
   **The name of an account is a link**: it opens Statistics with that account
   chosen, its own equity curve and its own figures.
 - **Open positions**: what is in the market right now, with the risk in money,
@@ -612,6 +659,16 @@ the equity, then the playbooks with the rules and the tables. The cut, the
 selection and the filter are one thing on this page, the trades the figures
 are worked out on.
 
+**Trades or ideas.** A position taken on two accounts at once, a prop
+account and your own, is two trades in the journal and one decision. When
+the selection holds such copies, a **Trades | Ideas** switch stands at the
+top right. Trades counts every copy, the way the reports and the front page
+do. Ideas counts each position once: its R is the mean R of its copies, its
+money is the money of all of them, so the winrate, the EV, the streaks and
+the deepest fall in R describe your decisions and not how many accounts you
+ran them on. The equity curves stay in money and carry every copy in both
+modes.
+
 **The cut is written out at the top.** Under the word Statistics stands the
 selection in words, `XAUUSD · swing · Broker · August 2026`, and every part of it
 is a link that drops that one part. **← Back** to the right of it takes one
@@ -643,12 +700,17 @@ has no month before it, but it always has a rest.
   trades pay, under it they do not, which is what the EV says in one number.
   Under the tile the trades won, lost, break-even and still open, by colour.
 - **Payoff**: how many R a win brings for every R a loss costs, the average
-  win and the average loss under it. A ratio carries no sign; whether it is
-  enough is what the winrate needed beside it answers.
+  win and the average loss under it, and the **profit factor**: the money the
+  winners made for every unit of money the losers lost, fees and sizes
+  included. A ratio carries no sign; whether it is enough is what the
+  winrate needed beside it answers.
 - **Deepest fall from a high**, the maximum drawdown: how far the selection
   went under its own high, between which dates, whether it has been made back or how far under it still
-  stands, and the longest run of losses. The figure is never painted red,
-  because a fall is negative by definition and a colour would say nothing.
+  stands, and the longest run of losses. With one account chosen, the tile
+  also says the deepest fall of its balance in money and in percent of the
+  high it fell from, money you took out not counted as a fall. The figure is
+  never painted red, because a fall is negative by definition and a colour
+  would say nothing.
 - **Mistakes**, counted the way a report counts them: a rule ticked as not
   met, at the entry or at the close, or a loss past the stop, a trade that
   did both being one mistake. Under the count stand what the losses ran past
@@ -708,15 +770,15 @@ of that pair closed in that month. Only with no cut at all does the button
 open the journal. The CSV file is written from the same selection the page
 counted.
 
-**R distribution.** Two rings beside the tape: the losses on the left, the
-wins on the right, each cut by the size of R. Pointing at a slice, or at its
-line in the list under the ring, lights up both and dims the rest: five steps
-of one colour cannot be told apart by eye, and they do not have to be. In the
-middle of a ring stands the number of trades in it and their total R; under
-it every slice is written out with its count, its share and its R, the unit
-being the one in the middle. The further a bucket is from zero, the brighter
-the slice. Break-even trades are in
-neither ring, and their number is named above.
+**R distribution.** Beside the tape, every closed trade is a dot on one
+axis of R, the trades of the same R stacked into a column: a loss and a win
+of the same size stand the same distance from zero, the stop is the dashed
+line at -1, and a dot left of the stop edge lost more than the risk allowed.
+Point at a dot for the pair, the date and the R; click it to open the trade.
+Under the dots runs a strip of the buckets, and under the strip two tables,
+**Losses** and **Wins**, count each bucket with its share and its R, in the
+colours of the dots: the further a bucket is from zero, the brighter. The
+break-evens are the amber dots near zero, counted in a line of their own.
 
 **The losses are cut where a stop lands.** A trade taken to the stop comes back
 a little worse than -1R, because commission and swap are paid on top of it, so
@@ -727,12 +789,18 @@ that never reached the stop: **0…-0.5** and **-0.5…-1**. A bucket reads from
 zero outwards and its far edge belongs to the next one, so exactly -1R is the
 stop, not the bucket that stops short of it. The edge of 1.2 is the journal's
 figure until you set your own: the slider on the **Past the stop** card,
-below, moves it by a tenth between 1 and 2 R, and the rings follow. At an edge
+below, moves it by a tenth between 1 and 2 R, and the buckets follow. At an edge
 of exactly 1 the stop bucket is gone, and the last one reads **-1R and worse**.
 
-Read together the two rings answer two questions: are the losses one size,
-and do the wins reach far enough to pay for them. The rings in
-a monthly or quarterly report are cut the same way, on the trades of that period.
+Read together the two sides answer two questions: are the losses one size,
+and do the wins reach far enough to pay for them. The R distribution of a
+monthly or quarterly report is cut the same way, on the trades of that period.
+
+**By weekday.** Among the tables: a tile for every day of the week with the
+EV of the closed trades entered on it and how many there were, green above
+zero and red under it, pale under three trades. Point at a tile for its
+winrate and its R. Saturday and Sunday stand only when something was entered
+on them.
 
 **Equity.** Across the page under the charts: one curve per account, side
 by side, each on its own scale, because the small moves of a small account
@@ -795,10 +863,17 @@ than by the whole of it.
 from 1 to 2 R by tenths and stands at 1.2 until you move it: how much a stop
 with the fees on it may cost before the loss counts as an overrun. Release it
 and the journal keeps the figure, in `journal/settings.md`, and every number
-that hangs on it is worked out afresh on the next look: the rings, this table
+that hangs on it is worked out afresh on the next look: the buckets, this table
 and its total, the mistakes of every report, the old months as much as the
 new ones, since nothing computed is ever stored. A report built earlier keeps
 the edge it was written with in its text; rebuild it to read it at the new one.
+
+**Prices.** Among the tables, once closed trades carry an entry and a stop:
+how many do, the RR planned on average, how often the market reached the
+target whether it was taken or not, how far the trades went for you (MFE) and
+against you (MAE) on average, and what a winner gave back on average from its
+best to its exit. Every figure is in R by price, so pairs of any size stand
+together.
 
 **Stop at breakeven.** The trades whose stop you moved to the entry (the
 Breakeven button, see The stop at breakeven) against the ones whose stop
@@ -843,7 +918,10 @@ its own fold below, with its own list. They are apart because one is money you
 moved and the other is a difference you found.
 
 Pick the account, pick what happened (**deposit**, **withdrawal** or **fee**),
-type the amount as a plain positive number, set the date and add a comment.
+type the amount as a plain positive number, set the date, the time if you know
+it, and add a comment. With a time, the money counts from that moment: a
+deposit made in the evening stays out of the risk of a trade opened that
+morning. Without one it counts from the start of its day.
 What the amount does to the balance is decided by what you picked, so a payout
 cannot be typed in as a plus by accident.
 
@@ -874,12 +952,44 @@ The **Accounts** tab.
   today, put in today's real balance.
 - **Currency** is shown next to every sum of the account: a sign for the usual
   ones ($, €, £, ¥), the code for the rest.
-- **Daily loss limit** is the prop rule: the most a day may lose before the firm
-  closes the account. Type it in the row of the account and press **Set**;
-  empty means the account has no such rule. With one set, the tile on the front
-  page adds up what today has already cost in closed trades and what the open
-  ones still put at risk at their stops, and changes colour as the limit comes
-  near.
+- **Kind**: a **broker** account holds your own money, a **prop** account is
+  run under the rules of a firm. Pick it when you create the account; a prop
+  account opens on its rules next. **Rules** in the row of any account opens
+  them again.
+- **The rules of a prop firm** differ from firm to firm, and between the
+  challenge, the verification and the funded account of one firm, so the
+  journal carries none of its own: copy them from your firm's page. A sum is
+  money or a percent of the start balance, `5%` of 100 000 being 5 000, and a
+  rule the firm does not have is left empty.
+  - **daily loss limit**: the most one day of the firm may lose, counting the
+    trades closed that day, the fees charged on it and what the open trades
+    still put at risk at their stops;
+  - **max loss** and how it is measured: *static* from the start balance, a
+    floor that never moves; *trailing* under the highest balance the account
+    has closed at; *trailing to start* the same until the floor reaches the
+    start balance, where it stays;
+  - **profit target**, what the account has to make, money moved in and out
+    aside, and **min trading days**, the days a trade was entered on;
+  - **the firm's day**: the hour it begins and on whose clock, since many firms
+    count it from midnight in Prague or in New York. Empty is the journal's
+    clock.
+
+  Under the rules, the row of the account says where it stands against each,
+  a line a rule: what the firm's day has already cost, fees included, with
+  what the open trades still put at risk and the limit; the floor of the max
+  loss and how far the balance stands above it, now and at the stops of the
+  open trades; the target and how much of it is made; the trading days
+  against the ones required; and when every rule is met, that the target is
+  made. The lines turn amber at four fifths of a limit and red when one is
+  reached.
+- **The journal's clock** is the clock the times of your trades are written
+  in. Empty is this computer's, which is right when you write the times you
+  see on your own watch; a trader who copies them from a terminal running on
+  another clock names that clock, so the day of a firm is cut in the right
+  place. The downloaded file knows every clock. Run from the source on
+  Windows, Python needs its `tzdata` package for the names
+  (`py -m pip install tzdata`); without it the journal says the clock is
+  unknown and counts on the computer's own.
 - **Archive** keeps the account in the history and the statistics but stops
   offering it when a trade is opened. An account with trades or money
   movements cannot be deleted, only archived; one without them is deleted into
@@ -915,13 +1025,21 @@ The **Accounts** tab.
 The **Reports** tab is a shelf: every quarter and month since your first closed
 trade, newest first, each with the figures the journal holds for it now, whether
 a report was built for it or not. Trades, then won / lost / break-even and, on
-the running period, the positions open now in blue, WR, Σ R, EV, money, and
-the daily cards written against the days you took a trade on. A period with trades and no
+the running period, the positions open now in blue, WR, Σ R, EV, the **path
+of R** (the running sum of R trade by trade, a small line from the first exit
+of the period to the last, so a month that went up and gave half of it back
+reads differently from one that climbed), money, and the daily cards written
+against the days you took a trade on. A period with trades and no
 report has a **Build** button in its row, blue on the one that is due, the
 newest finished period with trades and no report. A period with a report is a
 link to it, with the day its file was built and a blue dot once conclusions
 are written; *rebuild* refreshes the file. The month and the quarter still
 running are marked so.
+
+Under the shelf stands every year **day by day**: a square a day, by the
+exit, green for a day that made R, red for one that lost it, amber for one
+that came out at zero, and the brighter the square the more. Point at a day
+for its trades, its R and its money.
 
 **A report counts the trades that closed in the period**, the way a broker
 states a month and the cards count a day. The list of trades groups by entry,
@@ -971,8 +1089,17 @@ in the order of the exits: a win stands up in green, a loss hangs down in
 red, a break-even is an amber tick on the zero line, and a thin line marks
 where a new week begins, or a new month in a quarter. The dashed line is the
 stop, -1 R, and a bar that reaches past it lost more than the risk allowed.
-Hover a bar for the trade, click it to open it. Beside the tape stand **the
-rings**, the R distribution of the period, the same as on the Statistics tab.
+Hover a bar for the trade, click it to open it. Beside the tape stands **the
+R distribution** of the period, the same as on the Statistics tab.
+
+**Day by day** lays the period out as a calendar on its back: a tile a day,
+a column on every day that closed a trade, as tall as the R the day made or
+lost, green for a day that made R and red for one that lost it. A quarter
+shows its three months side by side on one scale, so a tall column in July
+and one in September are the same size of day. Point at any day, the column
+or the tile, for the trades it closed, the won and the lost, its R and its
+money; a day with nothing closed says so. Days are counted by the exit, the
+way the report counts its figures.
 
 Then come **By playbook** with its setups beneath, when any trade names one,
 and **Process**: the daily cards against the days you took a trade on, the

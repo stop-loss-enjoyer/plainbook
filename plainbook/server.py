@@ -18,6 +18,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import http.server
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -36,7 +37,7 @@ from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
                     Playbook, Setup, Rule, PLAYBOOK_STATUSES, LIMITS,
                     Plan, Note, RecordError, DIRECTIONS, RESULTS, NARRATIVES,
                     CARD_SECTIONS, WEEK_SECTIONS, ASSESSMENT_ROWS, TRADE_KEYS,
-                    PAIR_NOT_SET)
+                    PAIR_NOT_SET, ACCOUNT_KINDS, MAX_LOSS_MODES)
 
 PORT = int(os.environ.get("PLAINBOOK_PORT") or 8778)
 
@@ -490,17 +491,18 @@ def account_tiles(j):
             moved += f' · added {amount(j, j.deposited(a), a)}'
         if j.cashed_out(a):
             moved += f' · cashed out {amount(j, j.cashed_out(a), a)}'
-        cls, limit = daily_limit_state(j, account)
         # the name is the way into the account: the statistics tab with this
-        # account already chosen, its own equity curve and its own figures
+        # account already chosen, its own equity curve and its own figures.
+        # The rules of a prop firm are not here: the owner wants the balance
+        # alone on the front page, and they stand on the Accounts tab
         parts.append(
-            f'<div class="tile{cls}"><div class="name">'
+            f'<div class="tile"><div class="name">'
             f'<a href="/stats?account={U(a)}" title="statistics of this account">'
             f'{esc(account.name or a)}</a></div>'
             f'<div class="value">{amount(j, balance, a)}</div>'
             f'<div class="sub">start {amount(j, account.start_balance, a)} · '
             f'<span style="color:{colour}">{amount(j, result, a, signed=True)}</span>'
-            f'{moved}</div>{limit}</div>')
+            f'{moved}</div></div>')
     if not parts:
         return ('<div class="card"><p class="muted">No account yet. Create one on '
                 'the <a href="/accounts">Accounts</a> tab: a name and the balance '
@@ -509,31 +511,63 @@ def account_tiles(j):
 
 
 def daily_limit_state(j, account, now=None):
-    """How close an account stands to its daily loss limit: (tile class, line).
+    """How a prop account stands against the rules of its firm: (tile class,
+    lines). A broker account has no rules and gets nothing.
 
-    A prop firm closes the account for a day that loses more than the limit,
-    and the loss it counts is the closed one plus whatever is still at risk in
-    the market. So both are added up: what today has cost, and what the open
-    trades could still cost at their stops. The tile turns amber at four
-    fifths of the limit and red past it."""
-    limit = account.daily_loss_limit
-    if not limit:
+    A firm closes the account for a day that loses more than the limit, and
+    the loss it counts is the closed one plus whatever is still at risk in
+    the market, so both are added up. The day is the firm's, from its hour on
+    its clock. Under it the floor of the most the account may lose, with the
+    open risk taken off as well, the target, and the trading days. A tile
+    turns amber at four fifths of a limit and red once one is broken."""
+    if not account.has_rules:
         return "", ""
-    now = now or datetime.now()
-    closed = j.closed_on(account.id, now)
-    at_risk = j.open_risk(account.id)
-    used = max(0.0, -closed) + at_risk
-    words = f"today {amount(j, closed, account.id, signed=True)}"
-    if at_risk:
-        words += f", {amount(j, at_risk, account.id)} at risk in open trades"
-    secured = len(j.at_breakeven(account.id))
-    if secured:
-        words += f", {secured} at breakeven"
-    words += f" · limit {amount(j, limit, account.id)}"
-    cls = " over" if used >= limit else " warn" if used >= 0.8 * limit else ""
-    if cls == " over":
-        words = "daily loss limit reached: " + words
-    return cls, f'<div class="sub">{esc(words)}</div>'
+    p = j.prop(account.id, now)
+    a = account.id
+    lines, cls = [], ""
+
+    def level(used, limit):
+        return 2 if used >= limit else 1 if used >= 0.8 * limit else 0
+
+    worst = 0
+    limit = account.daily_loss_limit
+    if limit:
+        words = f"today {amount(j, p.today, a, signed=True)}"
+        if p.at_risk:
+            words += f", {amount(j, p.at_risk, a)} at risk in open trades"
+        secured = len(j.at_breakeven(a))
+        if secured:
+            words += f", {secured} at breakeven"
+        words += f" · limit {amount(j, limit, a)}"
+        step = level(p.daily_used, limit)
+        worst = max(worst, step)
+        if step == 2:
+            words = "daily loss limit reached: " + words
+        lines.append(words)
+    if p.floor is not None:
+        words = (f"floor {amount(j, p.floor, a)} ({account.max_loss_mode}), "
+                 f"{amount(j, p.floor_left, a)} above it")
+        if p.at_risk:
+            words += f", {amount(j, p.floor_left_at_stops, a)} at the stops"
+        step = level(account.max_loss - p.floor_left_at_stops, account.max_loss)
+        worst = max(worst, step)
+        if p.balance <= p.floor:
+            words = "max loss reached: " + words
+        lines.append(words)
+    if account.profit_target:
+        share = 100.0 * max(0.0, p.made) / account.profit_target
+        lines.append(f"target {amount(j, account.profit_target, a)}: "
+                     f"{amount(j, p.made, a, signed=True)}, {share:.0f}%"
+                     + (" · made" if p.target_left == 0 else ""))
+    if account.min_days:
+        lines.append(f"trading days {p.days} of {account.min_days}")
+    if p.passed:
+        lines.append("every rule met: the target is made")
+    if not p.zone_found:
+        lines.append(f"the clock {account.zone} is unknown here, the day is counted "
+                     f"on the journal's clock")
+    cls = " over" if worst == 2 else " warn" if worst == 1 else ""
+    return cls, "".join(f'<div class="sub">{esc(w)}</div>' for w in lines)
 
 
 def breakeven_form(t, back="", keep=""):
@@ -646,6 +680,9 @@ def export_csv(j, trades):
                     "" if t.deviations is None else " ".join(map(str, t.deviations)),
                     "" if t.exit_deviations is None else " ".join(map(str, t.exit_deviations)),
                     "; ".join(f"{n}: {why}" for n, why in sorted(t.reasons.items())),
+                    *("" if getattr(t, a) is None else f"{getattr(t, a):.10g}"
+                      for a in ("entry_price", "stop_price", "target_price",
+                                "exit_price", "best_price", "worst_price")),
                     "" if r is None else f"{r:.4f}",
                     f"{c.balance_at_entry:.2f}", f"{c.risk_money:.2f}",
                     j.currency(t.account)])
@@ -835,6 +872,20 @@ def trade_page(trade_id, q):
               ("result", t.result or "position open"),
               ("PnL", amount(j, t.pnl, t.account, signed=True)),
               ("R", f"{r:+.2f}" if r is not None else "-")]
+    typed = [(PRICE_FIELDS[n][0].replace(" price", ""), getattr(t, n))
+             for n in PRICE_FIELDS if getattr(t, n) is not None]
+    if typed:
+        fields.append(("prices", " · ".join(f"{w} {v:.10g}" for w, v in typed)))
+        p = stats.prices(t)
+        if p is not None:
+            said = [x for x in (
+                f"RR planned {p.planned:.2f}" if p.planned is not None else "",
+                f"exit {p.taken:+.2f} R" if p.taken is not None else "",
+                f"best {p.best:+.2f} R" if p.best is not None else "",
+                f"worst {p.worst:+.2f} R" if p.worst is not None else "",
+                f"gave back {p.left:.2f} R from its best" if p.left else "") if x]
+            if said:
+                fields.append(("in R by price", " · ".join(said)))
     if t.breakeven is not None:
         # the risk is freed while it is open; closed, the line stays as the
         # history of the stop
@@ -911,7 +962,8 @@ def trade_page(trade_id, q):
                or back_to_journal(q) or back_to_stats(q)) + buttons
     body = (f'<div class="card{" is-open" if t.is_open else ""}">'
             f'<h2>{esc(t.id)}</h2>{outcome_warning(t)}'
-            f'<table class="props">{table}</table></div>'
+            f'<div class="trade-head"><table class="props">{table}</table>'
+            f'{passport(j, t)}</div></div>'
             + checklist
             + (f'<div class="card"><h2>Idea</h2>{idea}</div>' if idea else "")
             + updates
@@ -922,6 +974,88 @@ def trade_page(trade_id, q):
                f'</div>' if t.conclusions.strip() else "")
             + scripts)
     return page(t.id, body, "journal", buttons, home=home_href(q))
+
+
+def held_words(hours):
+    """A stretch of time the way a trader says it: hours under two days,
+    days after."""
+    if hours < 48:
+        return f"{hours:.0f} h"
+    return f"{hours / 24:.1f} days".replace(".0 days", " days")
+
+
+def passport(j, t, now=None):
+    """The right half of a trade: its result against the risk, its time in
+    the market, and its place on the curve of its account. Every figure is
+    worked out here from the journal; nothing of it is stored."""
+    now = now or datetime.now()
+    r = j.r(t.id)
+    colour = (H.GOOD if r and r > 0 else H.BAD if r and r < 0 else
+              H.WARN if r is not None else H.ACCENT)
+    parts = []
+    own = [x for x in j.trades if x.account == t.account and not x.is_open]
+    if r is not None:
+        others = [(j.r(x.id) or 0.0, x.result) for x in own if x.id != t.id]
+        place = sorted((j.r(x.id) or 0.0 for x in own), reverse=True).index(r) + 1
+        p = stats.prices(t)
+        marks = [] if p is None else [
+            (v, word, colour) for v, word, colour in (
+                (p.planned, "target", H.ACCENT), (p.best, "best", H.GOOD),
+                (p.worst, "worst", H.BAD)) if v is not None]
+        parts.append(f'<h3>Result against the risk <span class="muted">{place} of '
+                     f'{len(own)} on {esc(t.account)} by R</span></h3>'
+                     + H.result_svg(r, others, j.stop_edge, marks)
+                     + f'<p class="caption">The shaded band is the risk the trade was '
+                       f'sized for, the ticks the other closed trades of the account.</p>')
+    # the time line: exact where both ends carry an hour, by the day otherwise
+    end = t.closed if not t.is_open else now
+    timed = t.opened_time and (t.closed_time if not t.is_open else True)
+    start = t.opened
+    total = (end - start).total_seconds()
+    if not timed:
+        start = datetime(t.opened.year, t.opened.month, t.opened.day)
+        end = datetime(end.year, end.month, end.day) + timedelta(days=1)
+        total = (end - start).total_seconds()
+    total = max(total, 60.0)
+    at = lambda moment: min(1.0, max(0.0, (moment - start).total_seconds() / total))
+    when = lambda moment, hour: f"{moment:%d.%m %H:%M}" if hour else f"{moment:%d.%m}"
+    marks = [(0.0, "entry", when(t.opened, t.opened_time), H.INK)]
+    spans = []
+    if t.breakeven is not None:
+        spans.append((0.0, at(t.breakeven), H.BAD))
+        spans.append((at(t.breakeven), 1.0, H.WARN))
+        marks.append((at(t.breakeven), "stop to entry", when(t.breakeven, True), H.WARN))
+    else:
+        spans.append((0.0, 1.0, H.BAD))
+    marks.append((1.0, "now" if t.is_open else "exit",
+                  when(end if t.is_open else t.closed, t.is_open or t.closed_time), colour))
+    hours = total / 3600
+    words = (f"{held_words(hours)} in the market" if timed
+             else f"{max(1, round(hours / 24))} days in the market, the hours not written")
+    if t.breakeven is not None and timed:
+        words += f", {held_words((t.breakeven - t.opened).total_seconds() / 3600)} of it at risk"
+    parts.append(f'<h3>{"In the market" if not t.is_open else "In the market so far"} '
+                 f'<span class="muted">{esc(words)}</span></h3>' + H.hold_svg(marks, spans))
+    # the curve of the account, drawn the way the Statistics tab draws it:
+    # the scale of the balance, the dates, the wash against the start, the
+    # tip under the pointer; the entry and the exit of this trade marked on it
+    points = stats.equity_events(j, t.account)
+    if len(points) >= 2:
+        account = j.accounts.get(t.account)
+        marks = [(t.opened, "entry", H.INK2)]
+        if not t.is_open and t.closed:
+            marks.append((t.closed, "exit", colour, True))
+        chart = H.equity_svg(
+            [(account.name or t.account if account else t.account,
+              H.SERIES[sorted(j.accounts).index(t.account) % len(H.SERIES)]
+              if t.account in j.accounts else H.SERIES[0], points)],
+            width=560, height=220, cid="trade-equity",
+            sign=H.sign(j.currency(t.account)),
+            base=account.start_balance if account else None, marks=marks)
+        parts.append(f'<h3>On the account <span class="muted">balance '
+                     f'{amount(j, j.computed[t.id].balance_at_entry, t.account)} at the entry'
+                     f'</span></h3>' + chart)
+    return f'<div class="passport">{"".join(parts)}</div>'
 
 
 def updates_card(t, keep=""):
@@ -943,7 +1077,7 @@ def updates_card(t, keep=""):
             f'<label>add an update</label>'
             f'<input type="text" name="update" style="width:100%"'
             f' placeholder="what changed since the entry" required>'
-            f'{dropzone("update", "click here and press Ctrl+V to paste a screenshot")}'
+            f'{dropzone("update", "click here and press Ctrl+V, drag a picture in or choose a file")}'
             f'<div class="actions"><button class="btn">Add</button></div>'
             f'</form>')
     card = f'<div class="card" id="updates"><h2>Updates</h2>{lines}{form}</div>'
@@ -1011,47 +1145,50 @@ def account_switch(j, q, selected):
     return '<div class="switch">' + "".join(parts) + "</div>"
 
 
-def ring(title, rows, steps, kind, size=188):
-    """One ring of the R distribution, with its slices written out beside it."""
-    total = sum(n for _, n, _ in rows)
-    coloured = [(label, n, sum_r, steps[i % len(steps)])
-                for i, (label, n, sum_r) in enumerate(rows)]
-    if not total:
-        return (f'<div class="ring"><h3>{esc(title)}</h3>'
-                f'<p class="muted">None yet.</p></div>')
-    sum_r = sum(r for _, _, r in rows)
-    donut = H.donut_svg([(label, n, colour) for label, n, _, colour in coloured],
-                        size=size, thickness=round(size * 30 / 188),
-                        middle=str(total), under=f"{sum_r:+.1f} R")
-    return (f'<div class="ring"><h3>{esc(title)}</h3>'
-            f'<div class="ring-body">{donut}{H.donut_legend(coloured, total)}</div></div>')
-
-
-def r_rings(j, trades):
-    """Where the trades landed by the size of R: losses in one ring, wins in
-    the other. The share of a bucket is read off the ring directly, instead of
-    being measured against the tallest bar of a histogram.
-
-    The rings are small and their legends go under them, because on both pages
-    that draw them they stand beside another picture."""
-    losses, wins, be = stats.r_split(j, trades)
-    if not sum(n for _, n, _ in losses) and not sum(n for _, n, _ in wins):
+def r_distribution(j, trades):
+    """Where the trades landed by the size of R, on one line: every closed
+    trade a dot at its R, the dots of one R stacked, the buckets under them,
+    and the two legends that count them, losses and wins. The two rings this
+    replaced said the same with the two halves on two scales; on one axis a
+    loss and a win of the same size stand the same distance from zero."""
+    line = stats.r_line(j, trades)
+    if not line:
         return ('<div class="card"><h2>R distribution</h2>'
                 '<p class="muted">Nothing to plot yet.</p></div>')
+    losses, wins, be = stats.r_split(j, trades)
     s = stats.summary(j, trades)
     head = (f'{s.trades} closed · {s.wins} won · {s.losses} lost'
             + (f' · {be} break-even' if be else ''))
-    # one line: what a stop costs and where a loss ran past it is said under
-    # Past the stop, and at length in the guide
-    explained = ('Losses and wins by the size of R; break-evens are in neither '
-                 'ring.')
+    # a trade closed with no exit date written is still a dot; it is named by
+    # its entry then
+    dots = [(r, pile, bucket, f"/trade/{U(t.id)}",
+             f"{t.pair} {t.direction}, "
+             f"{f'closed {t.closed:%d.%m.%Y}' if t.closed else f'opened {t.opened:%d.%m.%Y}'}"
+             f"\n{r:+.2f} R · {t.result}")
+            for t, r, pile, bucket in line]
+    be_r = sum(r for _, r, pile, _ in line if pile == "BE")
+    loss_tops = [top for _, top in stats.loss_buckets(j.stop_edge)]
+    win_tops = [top for _, top in stats.WIN_BUCKETS]
+
+    def legend(title, rows, steps):
+        total = sum(n for _, n, _ in rows)
+        if not total:
+            return f'<div class="pile"><h3>{esc(title)}</h3><p class="muted">None yet.</p></div>'
+        coloured = [(label, n, sum_r, steps[i % len(steps)])
+                    for i, (label, n, sum_r) in enumerate(rows)]
+        return (f'<div class="pile"><h3>{esc(title)} <span class="muted">{total}, '
+                f'{sum(r for _, _, r in rows):+.1f} R</span></h3>'
+                f'{H.bucket_legend(coloured, total)}</div>')
+    flat = (f'<p class="caption">Break-even: {be}, {be_r:+.2f} R, the amber dots at zero.</p>'
+            if be else "")
     return (f'<div class="card"><h2>R distribution</h2>'
             f'<p class="caption">{esc(head)}</p>'
-            f'<div class="rings compact">'
-            f'{ring("Losses", losses, H.LOSS_STEPS, "lose", 150)}'
-            f'{ring("Wins", wins, H.WIN_STEPS, "win", 150)}'
-            f'</div>'
-            f'<p class="caption">{explained}</p>'
+            f'{H.r_line_svg(dots, loss_tops, win_tops)}'
+            f'<div class="piles">{legend("Losses", losses, H.LOSS_STEPS)}'
+            f'{legend("Wins", wins, H.WIN_STEPS)}</div>{flat}'
+            f'<p class="caption">Every closed trade is a dot at its R, the same R '
+            f'stacked; point at one for the trade, click to open it. The strip under '
+            f'the dots is the buckets of the two tables; the dashed line is the stop.</p>'
             f'</div>')
 
 
@@ -1214,7 +1351,20 @@ def span_text(first, last):
     return f"{first:%d.%m} to {last:%d.%m.%Y}"
 
 
-def stats_head(j, q, trades, rest):
+def count_switch(q, twins, folded):
+    """Trades or ideas: shown only when the selection holds a position taken
+    on more than one account, with the number of copies it would fold."""
+    if not twins:
+        return ""
+    word = "copy" if twins == 1 else "copies"
+    return (f'<span title="{twins} {word} of a position taken on another account: '
+            f'Ideas counts each position once, with the mean R of its copies; '
+            f'the curves stay in money, every copy in them">'
+            + switch(q, "count", [("", "Trades"), ("ideas", "Ideas")],
+                     "ideas" if folded else "", "/stats") + "</span>")
+
+
+def stats_head(j, q, trades, rest, count=""):
     """What is being looked at, at reading size, and every part of it a way
     out of itself: the cut is the title of the page, and each word in it
     drops that one word from the filter."""
@@ -1231,6 +1381,8 @@ def stats_head(j, q, trades, rest):
     if s.trades and len(accounts) == 1:
         bits.append(f'<span class="{sum_class(s.sum_pnl)}">'
                     f'{amount(j, s.sum_pnl, accounts.pop(), signed=True)}</span>')
+    if (q.get("count") or [""])[0] == "ideas" and count:
+        bits[0] = f"{s.trades} closed positions, the copies on other accounts counted once"
     if live:
         bits.append(f"{len(live)} still open, not in the figures")
     if closed:
@@ -1270,7 +1422,7 @@ def stats_head(j, q, trades, rest):
             if active_filters(q) else "")
     reset = ('<a class="btn" href="/stats" title="drop the whole cut and read '
              'every closed trade">Reset</a>' if active_filters(q) else "")
-    right = (back + filters_box(j, q, "/stats") + reset + listed
+    right = (count + back + filters_box(j, q, "/stats") + reset + listed
              + f'<a class="btn" href="{cut_only(q, "/export.csv")}" '
              f'title="the selection as CSV">CSV</a>')
     return (f'<div class="page-head"><div><h2>Statistics</h2>'
@@ -1350,11 +1502,13 @@ def payoff_tile(s, rest):
                     f'{won} · <span class="muted">too few trades to '
                     f'weigh</span>', "muted")
     was = rest.payoff if rest else None
+    factor = (f'profit factor {s.profit_factor:.2f} in money'
+              if s.profit_factor is not None else "")
     return tile("payoff", f"{s.payoff:.1f} : 1", " · ".join(x for x in (
-        won, rest_clause(rest, f"{was:.1f} : 1" if was else "-")) if x))
+        won, factor, rest_clause(rest, f"{was:.1f} : 1" if was else "-")) if x))
 
 
-def fall_tile(j, trades, s, fall, ends_now):
+def fall_tile(j, trades, s, fall, ends_now, account=""):
     """How far the selection went under its own high, when, and whether it has
     come back. The figure is ink and never red: a fall is negative by
     definition, so painting it says nothing. `ends_now` says whether the
@@ -1376,8 +1530,16 @@ def fall_tile(j, trades, s, fall, ends_now):
                 f'{"now" if ends_now else "at the end"}')
     else:
         back = ""
+    # the account's own fall in money, when one account is looked at: the R
+    # above is the selection's, this is what the balance went through
+    money = ""
+    if account in j.accounts:
+        m = stats.money_fall(j, account)
+        if m.worst:
+            money = (f'the balance: {amount(j, m.worst, account, signed=True)}, '
+                     f'{m.share:+.1f}% from its high')
     return tile("deepest fall from a high", r_text(fall.worst),
-                " · ".join(x for x in (when, back, run) if x))
+                " · ".join(x for x in (when, back, run, money) if x))
 
 
 def stats_tiles(j, q, trades, rest, d, fall, ends_now):
@@ -1388,7 +1550,8 @@ def stats_tiles(j, q, trades, rest, d, fall, ends_now):
     best, worst = reports.extremes(j, trades)
     return ('<div class="tiles strip">'
             + ev_tile(s, rest) + wr_tile(j, trades, s, rest)
-            + payoff_tile(s, rest) + fall_tile(j, trades, s, fall, ends_now)
+            + payoff_tile(s, rest)
+            + fall_tile(j, trades, s, fall, ends_now, (q.get("account") or [""])[0])
             + mistakes_tile(d, s)
             + extremes_tile(j, best, worst, s.trades, stats_way(q))
             + "</div>")
@@ -1499,7 +1662,7 @@ def period_label(key, group):
 
 
 def periods_card(j, q, trades, group):
-    """The selection over time, one bar each, beside the rings the way the
+    """The selection over time, one bar each, beside the R distribution the way the
     report stands its tape beside them. The card holds the picture and one
     sentence, so its height is a constant of the design and not of the
     journal; the same figures as a table stand among the tables below.
@@ -1871,7 +2034,7 @@ def stats_page(q):
     tab is the only page with no period of its own and a free filter, so
     everything on it is written to be read against the trades the filter left
     out. The zones are the report's, in the report's order: the cut as the
-    title, the strip, the tape beside the rings, then the page's own picture,
+    title, the strip, the tape beside the R distribution, then the page's own picture,
     the curves, then the playbooks and the rules and the tables."""
     j = journal()
     period = (q.get("closed") or [""])[0]
@@ -1879,15 +2042,24 @@ def stats_page(q):
     # the months of the filter pick by the entry, a period picks by the exit:
     # a row of the picture must answer with the figures it was clicked on
     trades = stats.closed_in(apply_filters(j, q), period)
-    s = stats.summary(j, trades)
     # the trades the filter left out: what every grey figure of the strip is
     # read against. Nothing to compare with when nothing was filtered
     chosen = {t.id for t in trades}
     left_out = [t for t in j.trades if t.id not in chosen]
+    # the curves are money and stay with every copy; the figures in R can
+    # count a position held on two accounts once, see stats.Ideas
+    money_j, money_trades = j, trades
+    twins = stats.copies(trades)
+    folded = twins and (q.get("count") or [""])[0] == "ideas"
+    if folded:
+        j, trades = stats.ideas(j, trades)
+        _, left_out = stats.ideas(money_j, left_out)
+    s = stats.summary(j, trades)
     rest = (stats.summary(j, left_out)
             if active_filters(q) and any(not t.is_open for t in left_out) else None)
+    count = count_switch(q, twins, folded)
     if not s.trades:
-        body = (stats_head(j, q, trades, rest)
+        body = (stats_head(j, q, trades, rest, count)
                 + '<p class="muted">No closed trade matches this selection, '
                 'so there are no figures to show.</p>')
         return page("Statistics", body, "stats")
@@ -1920,6 +2092,8 @@ def stats_page(q):
              stats_slice(j, "By style", slices["By style"], link),
              stats_slice(j, "By account", slices["By account"], link),
              stats_slice(j, "By direction", slices["By direction"], link),
+             weekday_card(j, trades),
+             prices_card(trades),
              stats_slice(j, "By entry TF", slices["By entry TF"], link),
              stats_slice(j, "By execution", slices["By execution"], link,
                          caption="A trade entered on two formats stands in "
@@ -1927,11 +2101,12 @@ def stats_page(q):
              stats_slice(j, "By time in the market", stats.by_hold(j, trades), link,
                          caption="Whole days between the entry and the exit: an "
                                  "exit is often written without an hour.")]
-    body = (stats_head(j, q, trades, rest)
+    body = (stats_head(j, q, trades, rest, count)
             + stats_tiles(j, q, trades, rest, d, stats.drawdown(j, trades), ends_now)
             + f'<div class="pictures">{periods_card(j, q, trades, grain)}'
-            f'{r_rings(j, trades)}</div>'
-            + equity_card(j, q, trades, (q.get("account") or [""])[0], axis, since, until)
+            f'{r_distribution(j, trades)}</div>'
+            + equity_card(money_j, q, money_trades, (q.get("account") or [""])[0],
+                          axis, since, until)
             + deal(cards, pinned=2 if books and rules else 1 if books else 0)
             + '<p class="caption">A row of the pair, style, account, direction '
             'or period table narrows this page to that value, and the name of '
@@ -2107,7 +2282,7 @@ function refresh_zone(zone){
   if (hint.dataset.empty === undefined) hint.dataset.empty = hint.textContent;
   const n = zone.querySelectorAll('.shot').length;
   hint.textContent = n ? n + (n === 1 ? ' screenshot' : ' screenshots') +
-                         ' · Ctrl+V to add another' : hint.dataset.empty;
+                         ' · Ctrl+V, drag or choose to add another' : hint.dataset.empty;
 }
 function make_shot(url, field, value){
   const s = document.createElement('span');
@@ -2132,21 +2307,71 @@ function init_zones(){
       button.closest('.shot').remove();
       refresh_zone(zone);
     });
-    zone.addEventListener('paste', async e => {
-      for (const item of e.clipboardData.items) {
-        if (!item.type.startsWith('image/')) continue;
-        const blob = item.getAsFile();
+    zone.addEventListener('paste', e => {
+      // the items go away once the handler yields, so take the files first
+      upload_shots(zone, [...e.clipboardData.items]
+        .filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()));
+    });
+    // a picture dragged in from a folder, or picked with the button
+    zone.addEventListener('dragover', e => {
+      if ([...e.dataTransfer.types].includes('Files')) {
+        e.preventDefault(); zone.classList.add('over');
+      }
+    });
+    zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('over');
+      upload_shots(zone, [...e.dataTransfer.files].filter(f => f.type.startsWith('image/')));
+    });
+    const pick = document.createElement('input');
+    pick.type = 'file'; pick.accept = 'image/png,image/jpeg,image/gif,image/webp';
+    pick.multiple = true; pick.hidden = true;
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'btn small pick';
+    button.textContent = 'Choose a file';
+    button.addEventListener('click', e => { e.stopPropagation(); pick.click(); });
+    pick.addEventListener('change', () => { upload_shots(zone, [...pick.files]); pick.value = ''; });
+    zone.append(button, pick);
+  });
+}
+async function upload_shots(zone, blobs){
+  if (!blobs.length) return;
+  // counted up front: between two pictures of one paste the count must not
+  // touch zero, or a waiting save would go out without the second
+  uploading += blobs.length;
+  let failed = false;
+  for (const blob of blobs) {
+    try {
+      if (!failed) {
         const answer = await fetch('/draft/upload?token=' + token() +
                                    '&zone=' + encodeURIComponent(zone.dataset.zone),
                                    {method:'POST', body: blob,
                                     headers:{'Content-Type': blob.type}});
-        if (!answer.ok) { alert('Screenshot was not saved'); return; }
+        if (!answer.ok) throw new Error(answer.status);
         const data = await answer.json();
-        zone.appendChild(make_shot(data.url, 'file_' + zone.dataset.zone, data.file));
+        zone.insertBefore(make_shot(data.url, 'file_' + zone.dataset.zone, data.file),
+                          zone.querySelector('.pick'));
         refresh_zone(zone);
+        window.form_changed && window.form_changed(zone);
       }
-    });
-  });
+    } catch (error) {
+      failed = true;
+    }
+    uploading--;
+  }
+  if (failed) {
+    // a save that was waiting stays with the owner: the picture is not in
+    // the form, and going out without it would look like it was
+    if (waiting) { const [, button, label] = waiting; if (button) button.textContent = label; }
+    waiting = null;
+    alert('Screenshot was not saved');
+  }
+  if (!uploading && waiting) {
+    const [form, button, label] = waiting;
+    waiting = null;
+    if (button) button.textContent = label;
+    form.requestSubmit(button && button.form === form ? button : undefined);
+  }
 }
 function add_block(){
   const template = document.getElementById('block-template');
@@ -2158,6 +2383,17 @@ function add_block(){
   document.querySelector('[name=blocks]').value = n;
   init_zones();
 }
+// A form saved while a picture is still on its way would save without it: the
+// picture has no field in the form until the upload answers. The save waits
+// for the last one and goes out by itself.
+let uploading = 0, waiting = null;
+document.addEventListener('submit', e => {
+  if (!uploading) return;
+  e.preventDefault();
+  const button = e.submitter || null;
+  if (!waiting) waiting = [e.target, button, button ? button.textContent : ''];
+  if (button) button.textContent = 'Waiting for the screenshot…';
+});
 document.addEventListener('DOMContentLoaded', () => { init_zones(); });
 """
 
@@ -2226,17 +2462,18 @@ def block_inside(n, tf="", text="", existing=(), base=None, label="idea text"):
 <input type="text" name="idea_tf_{n}" value="{esc(tf)}" placeholder="H4" size="8"></div></div>
 <label style="margin-top:8px">{label}</label>
 <textarea name="idea_text_{n}">{esc(text)}</textarea>
-{dropzone(f"idea-{n}", "click here and press Ctrl+V to paste a screenshot", old)}"""
+{dropzone(f"idea-{n}", "click here and press Ctrl+V, drag a picture in or choose a file", old)}"""
 
 
 def risk_bases(j, t=None):
-    """The balance each account measures a risk against, for the hint under
-    the field: the balance now, and for the trade being edited the one it
-    was opened on, the same figure the server converts by."""
-    bases = j.balances()
-    if t is not None and t.id in j.computed:
-        bases[t.account] = j.computed[t.id].balance_at_entry
-    return bases
+    """What the hint under the risk field measures by: for each account its
+    opening balance and the movements of money after it, the trade being
+    edited left out. The script adds up the ones before the entry typed in
+    the form, by the rule of `Journal.balance_at`, so the hint names the
+    balance the server will convert by even for a trade of last week."""
+    own = t.id if t is not None else None
+    return {a: {"start": j._start(a), "events": j.history(a, own)}
+            for a in j.accounts}
 
 
 def last_risks(j):
@@ -2472,6 +2709,10 @@ def frame_html(p):
     if risk is not None:
         cells += (f'<span data-risk="{risk:g}">risk <b class="risk-now">-</b> '
                   f'of {risk:g}%</span>')
+    least = stats._figure(limits, "min rr")
+    if least is not None:
+        cells += (f'<span data-min-rr="{least:g}">RR <b class="rr-now">-</b> '
+                  f'of at least {least:g}</span>')
     if not cells:
         return ""
     return f'<div class="frame">{cells}</div>'
@@ -2570,7 +2811,7 @@ def trade_form(t=None, token="", keep=""):
 {outcome_fields(t)}</div>
 {exit_checklist(t)}
 <div class="card"><h2>Exit moment</h2>
-{dropzone("exit", "click here and press Ctrl+V",
+{dropzone("exit", "click here and press Ctrl+V, drag a picture in or choose a file",
           [shot_in_zone(shots_base(t.id), s, "have_exit") for s in t.exit_images])}</div>
 <div class="card"><h2>Conclusions</h2>
 <textarea name="conclusions">{esc(conclusions_text(t.conclusions))}</textarea>
@@ -2615,7 +2856,8 @@ def trade_form(t=None, token="", keep=""):
 <div class="caption risk-hint"></div></div>
 <div class="field"><label>entry</label>
 <input type="datetime-local" name="entry" value="{entry}"
- onclick="this.showPicker && this.showPicker()"></div>
+ onclick="this.showPicker && this.showPicker()">
+{hour_unknown("entry", editing and not t.opened_time)}</div>
 <div class="field"><label>plan</label>
 {select("plan", plan_ids, t.plan if editing else "", empty="-",
         labels=plan_names, style="max-width:270px")}</div>
@@ -2624,6 +2866,7 @@ def trade_form(t=None, token="", keep=""):
         labels=book_names)}</div>
 </div>
 <p class="caption" style="margin:8px 0 0">execution: {checkboxes}</p>
+{price_fields(t, ("entry_price", "stop_price", "target_price"))}
 {duplicate}
 </div>
 <div class="card" id="checklist-card"{"" if editing and t.playbook else " hidden"}>
@@ -2642,6 +2885,7 @@ def trade_form(t=None, token="", keep=""):
 <script>document.body.dataset.token = {json.dumps(token)};
 init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}{f"<script>{DUP_SCRIPT}</script>" if duplicate else ""}
 <script>{RISK_HINT_SCRIPT}</script>
+<script>{PRICE_SCRIPT}</script>
 <script>{CHECKLIST_SCRIPT}</script><script>{EXIT_SCRIPT}</script>"""
 
 
@@ -2650,7 +2894,27 @@ init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}{f"<
 # parsing here mirrors `parse_risk`, and the checklist reads the percent
 # through `risk_percent` so that a cap is compared to the right figure.
 RISK_HINT_SCRIPT = """
-const balances = JSON.parse(document.querySelector('form').dataset.balances || '{}');
+const histories = JSON.parse(document.querySelector('form').dataset.balances || '{}');
+// mirrors balances._before: anything with an hour counts from its moment when
+// the entry has one; else money moved by hand from its day, a close from the
+// next day
+function balance_of(account){
+  const h = histories[account];
+  if (!h) return NaN;
+  const entry = (document.querySelector('[name=entry]') || {}).value || '';
+  const day = entry.slice(0, 10), timed = entry !== '' && !entry.endsWith('T00:00');
+  let b = h.start;
+  for (const [moment, adjustment, hour, amount] of h.events) {
+    const on = moment.slice(0, 10);
+    const counts = !entry ? true
+      : hour && timed ? moment <= entry
+      : adjustment ? on <= day
+      : on < day;
+    if (counts) b += amount;
+  }
+  return b;
+}
+const balances = new Proxy({}, {get: (_, account) => balance_of(account)});
 const signs = JSON.parse(document.querySelector('form').dataset.signs || '{}');
 function risk_parts(text){
   const m = text.trim().replace(',', '.').replace(/\\s+/g, '')
@@ -2688,6 +2952,7 @@ function show_risks(){
 }
 document.querySelector('[name=risk]').addEventListener('input', show_risks);
 document.querySelector('[name=account]').addEventListener('change', show_risks);
+document.querySelector('[name=entry]').addEventListener('input', show_risks);
 document.querySelectorAll('[name^=dup_risk_]').forEach(input =>
   input.addEventListener('input', show_risks));
 show_risks();
@@ -2760,6 +3025,110 @@ show_playbook();
 """
 
 
+def hour_unknown(field, checked):
+    """The box that says the hour of an entry or an exit is not known. Without
+    it a time of 00:00 had to mean both midnight and "no hour"; with it, 00:00
+    is midnight unless the box is ticked. The hidden field tells the server
+    the form asked, so a form without the box keeps the old reading."""
+    return (f'<input type="hidden" name="{field}_asked" value="1">'
+            f'<label class="caption hour-unknown"><input type="checkbox" '
+            f'name="{field}_unknown" value="1"{" checked" if checked else ""}> '
+            f'hour not known</label>')
+
+
+def hour_known(data, field, moment, known_before):
+    """Whether the hour of an entry or an exit is known: what the box says
+    when the form had one, and otherwise the reading the journal always had,
+    that 00:00 is a date alone unless the hour was known already."""
+    if one(data, f"{field}_asked"):
+        return not one(data, f"{field}_unknown")
+    # the entry kept an hour it once had; an exit was read afresh every time
+    return bool(moment.hour or moment.minute) or (field == "entry" and known_before)
+
+
+PRICE_FIELDS = {"entry_price": ("entry price", "planned"),
+                "stop_price": ("stop price", "planned"),
+                "target_price": ("target price", "planned"),
+                "exit_price": ("exit price", "taken"),
+                "best_price": ("best price", "while it ran"),
+                "worst_price": ("worst price", "while it ran")}
+
+
+def price_fields(t, names):
+    """The prices of a trade, all optional, folded away until wanted: open
+    already when the trade has any, so a price in the file is never hidden.
+    Every form that edits a trade sends all of the ones it draws, and a
+    field the owner empties is a price taken out."""
+    shown = "".join(
+        f'<div class="field"><label>{PRICE_FIELDS[n][0]}</label>'
+        f'<input type="text" name="{n}" inputmode="decimal" style="width:120px" '
+        f'value="{"" if t is None or getattr(t, n) is None else f"{getattr(t, n):.10g}"}">'
+        f'</div>' for n in names)
+    has = t is not None and any(getattr(t, n) is not None for n in names)
+    what = ("the entry, the stop and the target" if "entry_price" in names
+            else "the exit, and the best and the worst price while it ran")
+    return (f'<details class="fold prices"{" open" if has else ""}><summary>Prices '
+            f'<span class="caption">{what}, optional</span></summary>'
+            f'<div class="fields">{shown}<div class="field"><label>in R</label>'
+            f'<div class="rr-hint caption">-</div></div></div>'
+            f'<p class="caption">The stop sets 1 R by price, so the target reads as the '
+            f'RR planned, the best price as how far the trade went for you and the '
+            f'worst as how far against it, whatever the pair.</p></details>')
+
+
+def read_prices(t, data, names):
+    for n in names:
+        if n in data:
+            text = one(data, n)
+            setattr(t, n, figure(text, PRICE_FIELDS[n][0]) if text else None)
+
+
+# The line under the prices says what they are in R while they are typed:
+# the RR of the target on the trade form, the exit, the best and the worst on
+# the closing form, where the entry and the stop ride in hidden fields.
+PRICE_SCRIPT = """
+function price_of(name){
+  // the closing form has no entry or stop to type: it carries them shown
+  const el = document.querySelector('[name=' + name + ']') ||
+             document.querySelector('[name=' + name + '_shown]');
+  if (!el || !el.value.trim()) return null;
+  const x = parseFloat(el.value.trim().replace(/\\s/g, '').replace(',', '.'));
+  return isFinite(x) && x > 0 ? x : null;
+}
+function show_prices(){
+  // the form of a closed trade holds both folds, each with its line
+  const lines = [...document.querySelectorAll('.rr-hint')];
+  if (!lines.length) return;
+  const out = {set textContent(v){ lines.forEach(l => { l.textContent = v; }); }};
+  const dir = (document.querySelector('[name=direction]') ||
+               document.querySelector('[name=direction_shown]') || {}).value || 'long';
+  const side = dir === 'short' ? -1 : 1;
+  const entry = price_of('entry_price'), stop = price_of('stop_price');
+  if (entry === null || stop === null || (entry - stop) * side <= 0) {
+    out.textContent = entry !== null && stop !== null ? 'the stop is on the wrong side' : '-';
+    return;
+  }
+  const r = p => p === null ? null : (p - entry) * side / ((entry - stop) * side);
+  const bits = [];
+  const target = r(price_of('target_price')), exit = r(price_of('exit_price'));
+  const best = r(price_of('best_price')), worst = r(price_of('worst_price'));
+  if (target !== null) bits.push('RR ' + target.toFixed(2));
+  if (exit !== null) bits.push('exit ' + (exit >= 0 ? '+' : '') + exit.toFixed(2) + ' R');
+  if (best !== null) bits.push('best ' + (best >= 0 ? '+' : '') + best.toFixed(2) + ' R');
+  if (worst !== null) bits.push('worst ' + Math.min(0, worst).toFixed(2) + ' R');
+  out.textContent = bits.join(' · ') || '-';
+  const cap = document.querySelector('.checklist:not([hidden]) [data-min-rr]');
+  if (cap) {
+    cap.querySelector('.rr-now').textContent = target === null ? '-' : target.toFixed(2);
+    cap.classList.toggle('over', target !== null && target < parseFloat(cap.dataset.minRr));
+  }
+}
+document.addEventListener('input', e => { if (e.target.name && /_price$|^direction$/.test(e.target.name)) show_prices(); });
+document.addEventListener('change', e => { if (e.target.name === 'direction' || e.target.name === 'playbook') show_prices(); });
+show_prices();
+"""
+
+
 def outcome_fields(t):
     """What a trade ended with: asked when it is closed and editable afterwards,
     because a result picked by accident stays wrong otherwise.
@@ -2772,12 +3141,17 @@ def outcome_fields(t):
 <div class="field"><label>result</label>
 {select("result", RESULTS, t.result or "", empty="pick one", required=True)}</div>
 <div class="field"><label>PnL, {H.sign(journal().currency(t.account))}</label>
-<input type="number" name="pnl" step="0.01" style="width:130px"
- value="{t.pnl if t.pnl is not None else ""}" required></div>
+<input type="text" name="pnl" inputmode="decimal" style="width:130px"
+ value="{f"{t.pnl:g}" if t.pnl is not None else ""}" required></div>
 <div class="field"><label>exit</label>
 <input type="datetime-local" name="exit" value="{exit_at}"
- onclick="this.showPicker && this.showPicker()"></div>
-</div>"""
+ onclick="this.showPicker && this.showPicker()">
+{hour_unknown("exit", t.closed is not None and not t.closed_time)}</div>
+</div>
+<input type="hidden" name="direction_shown" value="{esc(t.direction)}">
+<input type="hidden" name="entry_price_shown" value="{"" if t.entry_price is None else f"{t.entry_price:.10g}"}">
+<input type="hidden" name="stop_price_shown" value="{"" if t.stop_price is None else f"{t.stop_price:.10g}"}">
+{price_fields(t, ("exit_price", "best_price", "worst_price"))}"""
 
 
 def close_form(t, token, keep=""):
@@ -2793,7 +3167,7 @@ def close_form(t, token, keep=""):
 R is calculated automatically.</p></div>
 {exit_checklist(t)}
 <div class="card"><h2>Exit moment</h2>
-{dropzone("exit", "click here and press Ctrl+V", exit_shots)}</div>
+{dropzone("exit", "click here and press Ctrl+V, drag a picture in or choose a file", exit_shots)}</div>
 <div class="card"><h2>Conclusions</h2>
 <textarea name="conclusions">{esc(conclusions_text(t.conclusions))}</textarea>
 {dropzone("concl", "screenshots for conclusions, Ctrl+V here", concl_shots)}</div>
@@ -2802,7 +3176,8 @@ R is calculated automatically.</p></div>
 </form>
 <script>{FORM_SCRIPT}</script>
 <script>document.body.dataset.token = {json.dumps(token)};init_zones();</script>
-<script>{EXIT_SCRIPT}</script>"""
+<script>{EXIT_SCRIPT}</script>
+<script>{PRICE_SCRIPT}</script>"""
 
 
 # --- screenshot drafts -----------------------------------------------------
@@ -2828,10 +3203,16 @@ def save_draft(token, zone, data):
     folder = draft_dir(token)
     os.makedirs(folder, exist_ok=True)
     n = len([i for i in os.listdir(folder) if i.startswith(zone + "-")]) + 1
-    name = f"{zone}-{n:02d}{ext}"
-    with open(os.path.join(folder, name), "wb") as f:
-        f.write(data)
-    return name
+    # two pictures pasted at once count the same folder; "x" takes a name
+    # only if nobody has it, so the second moves on to the next number
+    while True:
+        name = f"{zone}-{n:02d}{ext}"
+        try:
+            with open(os.path.join(folder, name), "xb") as f:
+                f.write(data)
+            return name
+        except FileExistsError:
+            n += 1
 
 
 def zone_sources(data, zone, folder, token):
@@ -2881,9 +3262,23 @@ def apply_shots(record, zones):
             shutil.copyfile(src, os.path.join(fresh, name))
             names.append(store.record_path(name))
         result[zone] = names
-    shutil.rmtree(folder, ignore_errors=True)
-    os.replace(fresh, folder)
+    swap_folder(fresh, folder)
     return result
+
+
+def swap_folder(fresh, folder):
+    """Puts `fresh` where `folder` stands. The old one steps aside before the
+    new one comes in and is removed only after, so a crash or a file held
+    open by a viewer on Windows leaves the pictures in one of the two names
+    and never in neither; a folder left aside by such a crash is put back."""
+    old = folder + ".old"
+    if os.path.isdir(old) and not os.path.isdir(folder):
+        os.replace(old, folder)
+    shutil.rmtree(old, ignore_errors=True)
+    if os.path.isdir(folder):
+        os.replace(folder, old)
+    os.replace(fresh, folder)
+    shutil.rmtree(old, ignore_errors=True)
 
 
 def add_shots(record, prefix, sources):
@@ -3055,12 +3450,13 @@ def apply_fields(t, data, editing=False):
     apply_playbook(t, data, editing)
     if t.account not in journal(True).accounts:
         raise RecordError(f"no account {t.account!r}")
+    t.opened_time = hour_known(data, "entry", entry, t.opened_time)
+    t.opened = entry
+    read_prices(t, data, ("entry_price", "stop_price", "target_price"))
     risk = one(data, "risk")
     if not risk:
         raise RecordError("the risk is missing")
     t.risk = parse_risk(risk, risk_base(journal(True), t, was))
-    t.opened = entry
-    t.opened_time = bool(entry.hour or entry.minute) or t.opened_time
     return t
 
 
@@ -3071,6 +3467,29 @@ def blocks_from_form(data):
         tf = one(data, f"idea_tf_{n}")
         blocks.append((n, IdeaBlock(tf=tf, text=text)))
     return blocks
+
+
+# what a number is typed with besides its digits: the spaces a broker puts
+# between thousands (MT5 copies "1 234.56" with a narrow one), the minus of a
+# copied figure and the currency signs of the accounts
+_GROUPING = str.maketrans("", "", " \u00a0\u202f\u2009'$€£¥₽")
+
+
+def figure(text, what="the number"):
+    """A number typed into a form, or RecordError saying which field.
+
+    A comma alone is the decimal point, as in 12,5; beside a point it groups
+    thousands, as in 1,234.56. nan and inf read as numbers to Python and
+    would turn every sum of the journal into one of them."""
+    raw = str(text).strip().translate(_GROUPING).replace("\u2212", "-")
+    raw = raw.replace(",", "") if "." in raw else raw.replace(",", ".")
+    try:
+        x = float(raw)
+    except ValueError:
+        x = None
+    if x is None or not math.isfinite(x) or not re.search(r"\d", raw):
+        raise RecordError(f"{what}: {text!r} is not a number")
+    return x
 
 
 _RISK = re.compile(r"^([^\d.]*)(\d+(?:\.\d+)?|\.\d+)([^\d.]*)$")
@@ -3103,13 +3522,12 @@ def money_to_percent(money, balance):
 
 
 def risk_base(j, t, was=""):
-    """The balance a risk typed as money is measured against: for a new
-    trade the balance of the account now, for one being edited the balance
-    it was opened on, unless it is moved to another account."""
-    computed = j.computed.get(t.id)
-    if computed is not None and t.account == was:
-        return computed.balance_at_entry
-    return j.balance(t.account)
+    """The balance a risk typed as money is measured against: the balance
+    of the account at the entry the form names, which for a trade written
+    as it is taken is the balance now, and for one written in a week later
+    is the balance of that day. The trade itself is left out of it, so an
+    edited trade is measured the way the replay measures it."""
+    return j.balance_at(t.account, t.opened, t.opened_time, t.id)
 
 
 def build_trade(data, token, account="", risk=None):
@@ -3151,7 +3569,7 @@ def create_trade(data):
     twins = ticked_accounts(data, one(data, "account"))
     t = build_trade(data, token)
     for a in twins:
-        build_trade(data, token, account=a, risk=dup_risk(data, a, t.risk))
+        build_trade(data, token, account=a, risk=dup_risk(data, a, t))
     drop_draft(token)
     drop_cache()
     return t
@@ -3171,10 +3589,13 @@ def ticked_accounts(data, own, taken=()):
     return twins
 
 
-def dup_risk(data, account, fallback):
-    """The risk of a copy, measured against the balance of its own account."""
+def dup_risk(data, account, t):
+    """The risk of a copy, measured against the balance its own account had
+    at the entry; without a figure of its own, the risk of `t`."""
     risk = one(data, f"dup_risk_{account}")
-    return parse_risk(risk, journal().balance(account)) if risk else fallback
+    if not risk:
+        return t.risk
+    return parse_risk(risk, journal().balance_at(account, t.opened, t.opened_time))
 
 
 def copy_trade(t, account, risk):
@@ -3265,7 +3686,7 @@ def edit_trade(t, data):
                      else rewrite_conclusions(t.conclusions, names.get("concl", [])))
     t.updates = place_shots(t.updates, names.get("update", []))
     store.save_trade(ROOT, t)
-    copies = [copy_trade(t, a, dup_risk(data, a, t.risk))
+    copies = [copy_trade(t, a, dup_risk(data, a, t))
               for a in twins if t.is_open]
     drop_draft(token)
     drop_cache()
@@ -3303,12 +3724,13 @@ def apply_outcome(t, data):
     if result not in RESULTS:
         raise RecordError("pick how the trade ended: " + ", ".join(RESULTS))
     t.result = result
-    t.pnl = float(one(data, "pnl", "0").replace(",", "."))
+    t.pnl = figure(one(data, "pnl", "0"), "PnL")
     closed, _ = store._date(one(data, "exit"))
     if closed is None:
         raise RecordError("the exit date is missing")
+    t.closed_time = hour_known(data, "exit", closed, t.closed_time)
     t.closed = closed
-    t.closed_time = bool(closed.hour or closed.minute)
+    read_prices(t, data, ("exit_price", "best_price", "worst_price"))
     return t
 
 
@@ -3512,7 +3934,7 @@ def plan_page(plan_id):
                    f'<label>add an update</label>'
                    f'<input type="text" name="update" style="width:100%"'
                    f' placeholder="what changed since the plan was written" required>'
-                   f'{dropzone("update", "click here and press Ctrl+V to paste a screenshot")}'
+                   f'{dropzone("update", "click here and press Ctrl+V, drag a picture in or choose a file")}'
                    f'<div class="actions"><button class="btn">Add</button></div>'
                    f'</form>')
 
@@ -3905,7 +4327,7 @@ def note_block_inside(n, heading="", text="", existing=(), base=None):
 <input type="text" name="idea_tf_{n}" value="{esc(heading)}" placeholder="optional" style="width:300px"></div></div>
 <label style="margin-top:8px">text</label>
 <textarea name="idea_text_{n}" style="min-height:120px">{esc(text)}</textarea>
-{dropzone(f"idea-{n}", "click here and press Ctrl+V to paste a screenshot", old)}"""
+{dropzone(f"idea-{n}", "click here and press Ctrl+V, drag a picture in or choose a file", old)}"""
 
 
 # The examples of the form: a list of every trade, and the ones picked stand
@@ -4380,7 +4802,7 @@ def playbook_page(playbook_id):
                    f'<textarea name="review" placeholder="the block in a few '
                    f'lines: what held, what leaked, what the next version changes" '
                    f'required></textarea>'
-                   f'{dropzone("review", "click here and press Ctrl+V to paste a screenshot")}'
+                   f'{dropzone("review", "click here and press Ctrl+V, drag a picture in or choose a file")}'
                    f'<div class="actions"><button class="btn">Add</button></div>'
                    f'</form>')
     review = (f'<div class="card"><h2>Review</h2>{entries}{review_form}</div>'
@@ -5214,7 +5636,7 @@ def card_page(day):
 <input type="text" name="grade" list="grades" value="{esc(k.grade)}"
  placeholder="A" style="width:110px"><datalist id="grades">{options}</datalist></div>
 <div class="field"><label>PnL, {H.sign(j.currency())}</label>
-<input type="number" name="pnl" step="0.01" style="width:130px"
+<input type="text" name="pnl" inputmode="decimal" style="width:130px"
  value="{"" if k.pnl is None else f"{k.pnl:g}"}"></div>
 <div class="field"><label>opportunity quality</label>
 <input type="text" name="quality" list="grades" value="{esc(k.quality)}"
@@ -5245,7 +5667,7 @@ def save_card(data):
     previous = one(data, "previous")
     k = Card(day=day, grade=one(data, "grade"), quality=one(data, "quality"))
     pnl = one(data, "pnl")
-    k.pnl = float(pnl.replace(",", ".")) if pnl else None
+    k.pnl = figure(pnl, "PnL") if pnl else None
     for name, _, _ in CARD_SECTIONS:
         setattr(k, name, one(data, name))
     k.assessment = read_assessment(data)
@@ -5346,7 +5768,7 @@ def week_page(key):
 <input type="text" name="grade" list="grades" value="{esc(k.grade)}"
  placeholder="A" style="width:110px"><datalist id="grades">{options}</datalist></div>
 <div class="field"><label>PnL, {H.sign(j.currency())}</label>
-<input type="number" name="pnl" step="0.01" style="width:130px"
+<input type="text" name="pnl" inputmode="decimal" style="width:130px"
  value="{"" if k.pnl is None else f"{k.pnl:g}"}"></div>
 <div class="field"><label>trades</label>
 <input type="number" name="trades" step="1" min="0" style="width:90px"
@@ -5374,9 +5796,9 @@ def save_week(data):
     previous = one(data, "previous")
     k = Week(week=key, grade=one(data, "grade"), quality=one(data, "quality"))
     pnl = one(data, "pnl")
-    k.pnl = float(pnl.replace(",", ".")) if pnl else None
+    k.pnl = figure(pnl, "PnL") if pnl else None
     trades = one(data, "trades")
-    k.trades = int(float(trades.replace(",", "."))) if trades else None
+    k.trades = int(figure(trades, "trades")) if trades else None
     progress = one(data, "progress")
     k.progress = int(progress) if progress else None
     for name, _, _ in WEEK_SECTIONS:
@@ -5402,7 +5824,7 @@ def save_week(data):
 # answers what a review asks, in the order it asks: how the period ended, what
 # stood behind it, where the rules gave way, which two trades are worth
 # reopening, and only then the tables. Every shape on it is one the front page
-# already has: a tile, a bar, a ring, a table. Nothing is graded and no
+# already has: a tile, a bar, a dot, a table. Nothing is graded and no
 # surface is coloured.
 
 def tile(name, value, sub="", cls="", lead=False):
@@ -5628,7 +6050,7 @@ def trade_tape(j, order, kind, way, width=980, height=270):
 
 
 def report_pictures(j, r):
-    """The shape of the period: every trade by size, and the two rings."""
+    """The shape of the period: every trade by size, and the R distribution."""
     word = "week" if r.kind == "month" else "month"
     caption = (f'<p class="caption">One bar per closed trade, in the order of the '
                f'exits, a line where a new {word} begins. A break-even is the amber '
@@ -5637,7 +6059,103 @@ def report_pictures(j, r):
     tape = trade_tape(j, r.order, r.kind, lambda t: trade_way(r, t))
     left = (f'<div class="card"><h2>Trade by trade</h2>{tape}'
             f'{caption if r.order else ""}</div>')
-    return f'<div class="pictures">{left}{r_rings(j, r.trades)}</div>'
+    return f'<div class="pictures">{left}{r_distribution(j, r.trades)}</div>'
+
+
+def day_tips(j, trades):
+    """{date: (Σ R, words)} for the pictures that draw a day: what the day
+    closed, by the exit, the way a report counts it, said in full under the
+    pointer: the trades, the winrate, the R and the money."""
+    out = {}
+    for day, s in stats.by_exit_day(j, trades).items():
+        words = [f"{day:%a %d.%m.%Y}",
+                 f"{plural(s.trades, 'trade')} closed"
+                 + (f" · {s.wins} won · {s.losses} lost" if s.decided else "")
+                 + (f" · {s.be} break-even" if s.be else ""),
+                 f"{s.sum_r:+.2f} R · {amount(j, s.sum_pnl, signed=True)}"]
+        out[day] = (s.sum_r, "\n".join(words))
+    return out
+
+
+def days_card(j, r):
+    """The period as a calendar lying on its back, a column a day as tall as
+    the R the day closed: the month of a monthly report, the three months of
+    a quarter side by side, on one scale."""
+    days = day_tips(j, r.trades)
+    if not days:
+        return ""
+    tallest = max(abs(v) for v, _ in days.values())
+    months = []
+    cursor = datetime(r.start.year, r.start.month, 1)
+    while cursor < r.end:
+        months.append(cursor)
+        cursor = datetime(cursor.year + (cursor.month == 12), cursor.month % 12 + 1, 1)
+    today = datetime.now().date()
+    cells = "".join(
+        f'<div><h3>{m:%B %Y}</h3>'
+        f'{H.month_days_svg(m.year, m.month, days, tallest, today)}</div>'
+        for m in months)
+    return (f'<div class="card"><h2>Day by day</h2>'
+            f'<div class="days-row" style="grid-template-columns:repeat({len(months)},minmax(0,460px))">'
+            f'{cells}</div>'
+            f'<p class="caption">A column on every day that closed a trade, as tall as '
+            f'the R the day made or lost: green made R, red lost it, amber came out at '
+            f'zero. Point at a day for its trades, its R and its money. The darker '
+            f'tiles are the weekends.</p></div>')
+
+
+def prices_card(trades):
+    """What the prices of the closed trades say, for the ones written with an
+    entry and a stop. Nothing when none is."""
+    ps = stats.price_summary(trades)
+    if not ps.trades:
+        return ""
+    closed = sum(1 for t in trades if not t.is_open)
+    mean = ps.mean
+
+    def row(word, value, note=""):
+        return (f'<tr><td>{word}</td><td class="num">{value}</td>'
+                f'<td class="caption">{note}</td></tr>')
+    rows = row("closed trades with prices", f"{ps.trades} of {closed}")
+    if ps.planned:
+        rows += row("RR planned, on average", f"{mean(ps.planned):.2f}",
+                    f"over {plural(len(ps.planned), 'trade')} with a target")
+        rows += row("the target reached", f"{ps.reached} of {len(ps.planned)}",
+                    "by the best price or the exit, taken or not")
+    if ps.best:
+        rows += row("went for you, on average", f"{mean(ps.best):+.2f} R",
+                    "the best price, MFE")
+    if ps.worst:
+        rows += row("went against you, on average", f"{mean(ps.worst):+.2f} R",
+                    "the worst price, MAE")
+    if ps.left:
+        rows += row("a winner gave back, on average", f"{mean(ps.left):.2f} R",
+                    f"from its best to its exit, over {plural(len(ps.left), 'winner')}")
+    return (f'<div class="card"><h2>Prices</h2><table><tbody>{rows}</tbody></table>'
+            f'<p class="caption">The stop sets 1 R by price, so every price reads in '
+            f'R on its own. A trade enters here with its entry and its stop; the rest '
+            f'of the prices count where they are written.</p></div>')
+
+
+def weekday_card(j, trades):
+    """The EV of the trades by the weekday they were entered on, a tile a
+    day with its count, dealt among the tables of the page."""
+    week = stats.by_entry_weekday(j, trades)
+    if not week:
+        return ""
+    days = sorted(set(week) | {0, 1, 2, 3, 4})
+    cells = {}
+    for d, s in week.items():
+        words = (f"{H.WEEKDAYS[d]}, by the entry\n{plural(s.trades, 'trade')} · "
+                 f"EV {s.average_r:+.2f} R" + (f" · WR {s.wr:.0f}%" if s.decided else "")
+                 + f"\nΣ {s.sum_r:+.2f} R"
+                 + ("\ntoo few trades to read as a figure" if s.trades < 3 else ""))
+        cells[d] = (s.average_r, s.trades, words)
+    return (f'<div class="card"><h2>By weekday</h2>{H.weekday_svg(cells, days)}'
+            f'<p class="caption">The EV of the closed trades by the day they were '
+            f'entered on, with how many there were; green above zero, red under it, '
+            f'pale under three trades. Saturday and Sunday stand only when something '
+            f'was entered on them.</p></div>')
 
 
 def past_stop_why(edge):
@@ -5855,7 +6373,7 @@ def report_page(period):
                    slice_card(j, "By entry TF", slices.get("By entry TF"), link),
                    slice_card(j, "By execution", slices.get("By execution"), link,
                               caption="A trade entered on two formats stands in both rows.")])
-    story = (report_head(r) + report_tiles(j, r) + report_pictures(j, r)
+    story = (report_head(r) + report_tiles(j, r) + report_pictures(j, r) + days_card(j, r)
              + (f'<div class="twin books">{by_playbook_card(j, r.trades)}{rules_card(j, r)}</div>'
                 if r.playbooks else (rules_card(j, r) if r.past_stop else ""))
              + f'<div class="twin">{process_card(r)}'
@@ -5892,13 +6410,14 @@ def shelf_cells(j, r):
     s = r.total
     if not s.trades:
         return ('<td class="num muted">-</td><td></td><td class="num muted">-</td>'
-                '<td class="num muted">-</td><td class="num muted">-</td>'
+                '<td class="num muted">-</td><td class="num muted">-</td><td></td>'
                 '<td class="num muted">-</td><td class="num muted">-</td>')
     cards = f"{len(r.cards)} / {r.days_traded}"
     return (f'<td class="num">{s.trades}</td><td>{trades_breakdown(j, r.trades, r.held)}</td>'
             f'<td class="num">{f"{s.wr:.1f}%" if s.decided else "-"}</td>'
             f'<td class="num {sum_class(s.sum_r)}">{s.sum_r:+.2f}</td>'
             f'<td class="num">{s.average_r:+.2f}</td>'
+            f'<td class="path">{H.spark_svg(stats.cumulative_r(j, r.trades))}</td>'
             f'<td class="num">{amount(j, s.sum_pnl, signed=True)}</td>'
             f'<td class="num{"" if r.cards else " muted"}">{cards}</td>')
 
@@ -5964,7 +6483,7 @@ def reports_page():
     rows = ""
     for year in years:
         if len(years) > 1:
-            rows += (f'<tr class="group"><td colspan="9"><span class="label">{year}</span>'
+            rows += (f'<tr class="group"><td colspan="10"><span class="label">{year}</span>'
                      f'</td></tr>')
         for q in sorted((q for q in quarters if q.startswith(year)), reverse=True):
             start, end, _ = reports.parse_period(q)
@@ -5983,7 +6502,9 @@ def reports_page():
                          f'{shelf_cells(j, composed[m])}{cell}</tr>')
     table = (f'<table class="shelf"><thead><tr><th>period</th><th class="num">trades</th>'
              f'<th></th><th class="num">WR</th><th class="num">Σ R</th>'
-             f'<th class="num">EV</th><th class="num">Σ {H.sign(j.currency())}</th>'
+             f'<th class="num">EV</th><th title="the running sum of R, trade by trade, '
+             f'from the first exit of the period to the last">path of R</th>'
+             f'<th class="num">Σ {H.sign(j.currency())}</th>'
              f'<th class="num">cards</th><th>report</th></tr></thead><tbody>{rows}</tbody>'
              f'</table>')
     body = (f'<div class="card"><h2>Reports</h2>{table}'
@@ -5995,7 +6516,16 @@ def reports_page():
             f'written against the days an entry was taken on. Building a report writes the figures '
             f'into a file under <code>journal/reports</code> with a place for your '
             f'conclusions, marked with a dot here once written; rebuilding never '
-            f'touches them.</p></div>')
+            f'touches them. The path of R is the running sum of R trade by trade, '
+            f'from the first exit of the period to its last.</p></div>')
+    days = day_tips(j, j.trades)
+    today = now.date()
+    for year in sorted({d.year for d in days}, reverse=True):
+        body += (f'<div class="card"><h2>{year} day by day</h2>'
+                 f'{H.year_svg(year, days, today)}'
+                 f'<p class="caption">A square a day, by the exit: green made R, red lost '
+                 f'it, amber came out at zero, and the brighter the square the more. '
+                 f'Point at a day for its trades, its R and its money.</p></div>')
     return page("Reports", body, "reports", problems=problems)
 
 
@@ -6023,7 +6553,6 @@ def accounts_page(message=""):
             f'<span class="caption">has {plural(trades, "trade")} / '
             f'{plural(adjustments, "adjustment")}, archive instead</span>')
         out = j.cashed_out(a)
-        limit = account.daily_loss_limit
         rows.append(
             f'<tr><td>{esc(account.name or a)}<div class="caption">{esc(a)} · '
             f'{esc(account.currency)}</div></td>'
@@ -6031,12 +6560,11 @@ def accounts_page(message=""):
             f'<td class="num">{amount(j, j.balance(a), a)}</td>'
             f'<td class="num">{amount(j, out, a) if out else "-"}</td>'
             f'<td class="num">{trades}</td>'
-            f'<td><form method="post" action="/account/limit" '
-            f'style="display:inline;white-space:nowrap">'
-            f'<input type="hidden" name="id" value="{esc(a)}">'
-            f'<input type="number" name="limit" step="1" min="1" placeholder="none" '
-            f'value="{"" if limit is None else f"{limit:g}"}" style="width:92px"> '
-            f'<button class="btn">Set</button></form></td>'
+            f'<td>{"prop" if account.is_prop else "broker"}'
+            f'{" · " + esc(account.firm) if account.firm else ""}'
+            f'<div class="caption">{esc(rules_summary(j, account)) if account.is_prop or account.has_rules else ""}</div>'
+            f'{rules_state(j, account)}</td>'
+            f'<td><a class="btn" href="/account/{U(a)}/rules">Rules</a></td>'
             f'<td>{archive[1]}</td>'
             f'<td><form method="post" action="/account/archive" style="display:inline">'
             f'<input type="hidden" name="id" value="{esc(a)}">'
@@ -6118,7 +6646,7 @@ def accounts_page(message=""):
     def move_rows(kinds):
         # newest first: a list of money movements is read from the last one
         return "".join(
-        f'<tr><td>{c.day:%d.%m.%Y}</td>'
+        f'<tr><td>{c.day:%d.%m.%Y}{f" {c.day:%H:%M}" if c.day_time else ""}</td>'
         f'<td>{esc(j.accounts[c.account].name if c.account in j.accounts else c.account)}</td>'
         f'<td>{esc(c.kind)}</td>'
         f'<td class="num {"win" if c.amount > 0 else "lose"}">'
@@ -6147,16 +6675,19 @@ def accounts_page(message=""):
 <form method="post" action="/money/new" class="filters">
 <div><label>account</label>{select("account", live)}</div>
 <div><label>what</label>{select("kind", MONEY_KINDS)}</div>
-<div><label>amount</label><input type="number" name="amount" step="0.01"
- min="0.01" placeholder="500" required style="width:120px"></div>
+<div><label>amount</label><input type="text" name="amount" inputmode="decimal"
+ placeholder="500" required style="width:120px"></div>
 <div><label>date</label><input type="date" name="day" value="{today}"
  onclick="this.showPicker && this.showPicker()"></div>
+<div><label>time, if known</label><input type="time" name="time"></div>
 <div><label>comment</label><input type="text" name="comment"
  placeholder="payout" style="width:200px"></div>
 <div><button class="btn primary">Record</button></div>
 </form>
 <p class="caption">The amount is always positive: what it does to the balance is
-decided by what you picked. A withdrawal is also counted as a cashout, and the
+decided by what you picked. With a time, the money counts from that moment:
+a deposit made in the evening stays out of the risk of a trade opened that
+morning. Without one it counts from the start of its day. A withdrawal is also counted as a cashout, and the
 total sits in the accounts table above.</p>
 {move_table(MONEY_KINDS, "No money has been moved yet.")}
 <p class="caption">Deleting moves the record to <code>.trash</code>. Balances are
@@ -6167,8 +6698,8 @@ recomputed from what is left, nothing is stored as a number.</p>
 <span class="caption">{count(("reconciliation",))}</span></summary>
 <form method="post" action="/money/correct" class="filters">
 <div><label>account</label>{select("account", every)}</div>
-<div><label>real balance now</label><input type="number" name="balance"
- step="0.01" required style="width:150px"></div>
+<div><label>real balance now</label><input type="text" name="balance"
+ inputmode="decimal" required style="width:150px"></div>
 <div><label>date</label><input type="date" name="day" value="{today}"
  onclick="this.showPicker && this.showPicker()"></div>
 <div><label>comment</label><input type="text" name="comment"
@@ -6211,16 +6742,29 @@ other is a difference you found.</p></div>"""
     body = f"""{top}
 <div class="card"><h2>Accounts</h2>
 <table><thead><tr><th>account</th><th class="num">start</th><th class="num">current</th>
-<th class="num">cashed out</th><th class="num">trades</th><th>daily loss limit</th>
+<th class="num">cashed out</th><th class="num">trades</th><th>kind</th><th></th>
 <th>status</th><th></th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table>
 <p class="caption">An account with trades cannot be deleted, archive it instead.
 Archived accounts stay in history and statistics but are not offered when opening
-a trade. The daily loss limit is a prop rule: the most a day may lose before the
-firm closes the account. With one set, the tile on the front page adds up what
-today has already cost and what the open trades still put at risk, turns amber at
-four fifths of the limit and red when it is reached. Leave it empty for an
-account that has no such rule.</p></div>
+a trade. <b>Rules</b> makes an account a prop account and holds the rules of its
+firm: the daily loss limit, the max loss, the profit target, the trading days and
+the hour its day begins. With them set, the row of the account says where it
+stands against each, in amber at four fifths of a limit and in red when one is
+reached.</p></div>
+
+<div class="card"><h2>The journal's clock</h2>
+<form method="post" action="/settings/clock" class="filters">
+<div><label>the times of the trades are written on the clock of</label>
+<input type="text" name="clock" list="clocks" value="{esc(j.clock)}"
+ placeholder="this computer" style="width:220px">
+<datalist id="clocks">{"".join(f'<option value="{z}">' for z in ZONES)}</datalist></div>
+<div><button class="btn">Save</button></div>
+</form>
+<p class="caption">Empty is this computer's clock, which is right when you write the
+times you see on your own watch. A trader who copies the times from the
+terminal of a broker whose server runs on another clock names that clock here,
+so the day of a prop firm is cut in the right place.</p></div>
 
 {money}
 
@@ -6230,17 +6774,19 @@ account that has no such rule.</p></div>
  pattern="[a-z0-9][a-z0-9-]*" required style="width:130px"></div>
 <div><label>name</label><input type="text" name="name" placeholder="Broker 2"
  style="width:160px"></div>
-<div><label>start balance</label><input type="number" name="start" step="0.01"
+<div><label>start balance</label><input type="text" name="start" inputmode="decimal"
  value="10000" style="width:130px"></div>
 <div><label>currency</label><input type="text" name="currency" value="USD"
  style="width:70px"></div>
-<div><label>daily loss limit</label><input type="number" name="limit" step="1"
- min="1" placeholder="none" style="width:110px"></div>
+<div><label>kind</label>{select("kind", list(ACCOUNT_KINDS), "broker")}</div>
+<div><label>firm</label><input type="text" name="firm" placeholder="for a prop"
+ style="width:140px"></div>
 <div><button class="btn primary">Create account</button></div>
 </form>
 <p class="caption">id is used in file names: latin letters, digits and dashes.
 The currency is shown next to every sum of this account; its sign is drawn for
-the usual ones and the code is written for the rest.</p></div>
+the usual ones and the code is written for the rest. A prop account opens on its
+rules next: the limits, the target and the day of its firm.</p></div>
 
 {trash}
 
@@ -6273,13 +6819,166 @@ def create_account(data):
     if account_id in journal(True).accounts:
         raise RecordError(f"account {account_id} already exists")
     limit = one(data, "limit")
+    kind = one(data, "kind") or "broker"
     store.save_account(ROOT, Account(
         id=account_id, name=one(data, "name") or account_id,
-        start_balance=float(one(data, "start", "0").replace(",", ".")),
+        kind=kind if kind in ACCOUNT_KINDS else "broker", firm=one(data, "firm"),
+        start_balance=figure(one(data, "start", "0"), "start balance"),
         currency=(one(data, "currency", "USD") or "USD").upper(),
-        daily_loss_limit=float(limit.replace(",", ".")) if limit else None))
+        daily_loss_limit=figure(limit, "daily loss limit") if limit else None).check())
     drop_cache()
     return f"Account {account_id} created."
+
+
+# the clocks a trader is most likely to be asked for: the firms of Europe
+# count their day in Prague or London, the ones of America in New York
+ZONES = ["Europe/Prague", "Europe/London", "Europe/Moscow", "America/New_York",
+         "America/Chicago", "Asia/Dubai", "Asia/Tokyo", "Australia/Sydney", "UTC"]
+
+
+def rule_money(text, start, what):
+    """A rule typed as money, or as a percent of the start balance: `5%` of
+    a 100 000 account is 5 000. Empty is no rule."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    if text.endswith("%"):
+        return round(figure(text[:-1], what) * start / 100.0, 2)
+    return figure(text, what)
+
+
+def rules_summary(j, account):
+    """A prop account's rules in one line, for the table of accounts."""
+    a = account.id
+    bits = []
+    if account.daily_loss_limit:
+        bits.append(f"daily {amount(j, account.daily_loss_limit, a)}")
+    if account.max_loss:
+        bits.append(f"max loss {amount(j, account.max_loss, a)} {account.max_loss_mode}")
+    if account.profit_target:
+        bits.append(f"target {amount(j, account.profit_target, a)}")
+    if account.min_days:
+        bits.append(f"at least {account.min_days} trading days")
+    return " · ".join(bits) or "no rules yet"
+
+
+def rules_state(j, account):
+    """Where a prop account stands against its rules now, under its rules in
+    the table of accounts: the lines of `daily_limit_state`, in amber or red
+    when a limit comes near or is reached."""
+    cls, lines = daily_limit_state(j, account)
+    if not lines:
+        return ""
+    colour = {" over": "lose", " warn": "warn"}.get(cls, "")
+    return f'<div class="rules-state {colour}">{lines}</div>'
+
+
+def rules_page(account_id):
+    """The rules of one account: what kind it is, and for a prop account the
+    rules of its firm, typed from the firm's own page."""
+    j = journal(True)
+    account = j.accounts.get(account_id)
+    if account is None:
+        return None
+    a = account_id
+    start = account.start_balance
+
+    def money_field(name, label, value, hint):
+        shown = "" if value is None else f"{value:g}"
+        share = (f' <span class="caption">{100.0 * value / start:.2f}% of the start</span>'
+                 if value is not None and start else "")
+        return (f'<div class="field"><label>{label}</label><input type="text" '
+                f'name="{name}" value="{shown}" placeholder="{hint}" '
+                f'inputmode="decimal" style="width:150px">{share}</div>')
+
+    zones = "".join(f'<option value="{z}">' for z in ZONES)
+    body = f"""<form method="post" action="/account/{U(a)}/rules">
+<div class="card"><h2>{esc(account.name or a)}: the rules</h2>
+<div class="fields">
+<div class="field"><label>kind</label>{select("kind", list(ACCOUNT_KINDS), account.kind)}</div>
+<div class="field"><label>firm</label><input type="text" name="firm"
+ value="{esc(account.firm)}" placeholder="the name of the prop firm" style="width:200px"></div>
+</div>
+<p class="caption">A broker account holds your own money and has no rules. A prop
+account is held against the rules of its firm below. Every firm writes its own,
+and a challenge, a verification and a funded account of one firm often differ:
+copy them from the firm's page for this account. A sum is money, or a percent of
+the start balance ({amount(j, start, a)}): <code>5%</code> is
+{amount(j, start * 0.05, a)}. Leave a field empty for a rule the firm does not
+have.</p></div>
+
+<div class="card"><h2>Loss limits</h2>
+<div class="fields">
+{money_field("daily", "daily loss limit", account.daily_loss_limit, "5% or 5000")}
+{money_field("max", "max loss", account.max_loss, "10% or 10000")}
+<div class="field"><label>max loss is measured</label>{select("mode", list(MAX_LOSS_MODES), account.max_loss_mode)}</div>
+</div>
+<p class="caption"><b>Daily loss limit</b>: the most one day of the firm may lose,
+the trades closed that day, the fees charged on it and what the open trades still
+put at risk at their stops. <b>Max loss</b>: the most the account may lose at all.
+<i>static</i> puts the floor at the start balance less the max loss, and it never
+moves; <i>trailing</i> puts it under the highest balance the account has closed
+at, so it follows every new high; <i>trailing to start</i> follows the highs
+until the floor reaches the start balance and stays there.</p></div>
+
+<div class="card"><h2>Target and days</h2>
+<div class="fields">
+{money_field("target", "profit target", account.profit_target, "10% or 10000")}
+<div class="field"><label>min trading days</label><input type="number" name="days"
+ min="1" step="1" value="{"" if account.min_days is None else account.min_days}"
+ placeholder="none" style="width:110px"></div>
+</div>
+<p class="caption">The target is what the account has to make, money moved in and out
+aside. A trading day is a day a trade was entered on.</p></div>
+
+<div class="card"><h2>The firm's day</h2>
+<div class="fields">
+<div class="field"><label>the day starts at</label><input type="time" name="day_start"
+ value="{esc(account.day_start or "00:00")}"></div>
+<div class="field"><label>on the clock of</label><input type="text" name="zone"
+ list="zones" value="{esc(account.zone)}" placeholder="the journal's clock"
+ style="width:200px"><datalist id="zones">{zones}</datalist></div>
+</div>
+<p class="caption">When the firm's day turns over and on whose clock: many count
+it from midnight in Prague or in New York. The daily loss limit counts the trades
+closed inside that day. Empty is the clock of the journal, set on the Accounts
+tab.</p></div>
+<button class="btn primary">Save the rules</button>
+<a class="btn" href="/accounts">Cancel</a>
+</form>"""
+    return page(f"{account.name or a}: rules", body, "accounts")
+
+
+def save_rules(account_id, data):
+    j = journal(True)
+    account = j.accounts.get(account_id)
+    if account is None:
+        raise RecordError("no such account")
+    start = account.start_balance
+    account.kind = one(data, "kind") or "broker"
+    account.firm = one(data, "firm")
+    account.daily_loss_limit = rule_money(one(data, "daily"), start, "daily loss limit")
+    account.max_loss = rule_money(one(data, "max"), start, "max loss")
+    account.max_loss_mode = one(data, "mode") or "static"
+    account.profit_target = rule_money(one(data, "target"), start, "profit target")
+    days = one(data, "days")
+    account.min_days = int(figure(days, "min trading days")) if days else None
+    account.day_start = one(data, "day_start") or "00:00"
+    zone = one(data, "zone")
+    if zone and store.zone(zone) is None:
+        raise RecordError(f"no time zone {zone!r} on this computer: a name like "
+                          f"Europe/Prague or America/New_York")
+    account.zone = zone
+    account.check()
+    store.save_account(ROOT, account)
+    drop_cache()
+    return account
+
+
+def save_clock(data):
+    name = store.save_clock(ROOT, one(data, "clock"))
+    drop_cache()
+    return f"The journal's clock: {name or 'this computer'}."
 
 
 def set_limit(data):
@@ -6289,7 +6988,7 @@ def set_limit(data):
         raise RecordError("no such account")
     account = j.accounts[account_id]
     limit = one(data, "limit")
-    account.daily_loss_limit = float(limit.replace(",", ".")) if limit else None
+    account.daily_loss_limit = figure(limit, "daily loss limit") if limit else None
     store.save_account(ROOT, account)
     drop_cache()
     if account.daily_loss_limit is None:
@@ -6334,14 +7033,23 @@ def delete_account(data):
     return f"Account {account_id} moved to .trash."
 
 
-def money_day(text):
-    """The date of a money movement, today when the field came back empty."""
-    if not text:
-        return datetime.now()
+def money_day(text, hour=""):
+    """(the moment of a money movement, whether its hour was given): today
+    when the date came back empty. The hour is optional; given, a deposit
+    made in the evening stays out of the balance of a trade opened that
+    morning."""
     try:
-        return datetime.strptime(text, "%Y-%m-%d")
+        day = datetime.strptime(text, "%Y-%m-%d") if text else \
+            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     except ValueError:
         raise RecordError(f"bad date {text!r}: expected YYYY-MM-DD")
+    if not hour:
+        return day, False
+    try:
+        at = datetime.strptime(hour, "%H:%M")
+    except ValueError:
+        raise RecordError(f"bad time {hour!r}: expected HH:MM")
+    return day.replace(hour=at.hour, minute=at.minute), True
 
 
 def record_money(data):
@@ -6356,14 +7064,14 @@ def record_money(data):
     kind = one(data, "kind")
     if kind not in MONEY_KINDS:
         raise RecordError(f"bad kind {kind!r}")
-    money = abs(float(one(data, "amount", "0").replace(",", ".")))
+    money = abs(figure(one(data, "amount", "0"), "amount"))
     if not money:
         raise RecordError("amount is zero")
-    day = money_day(one(data, "day"))
+    day, timed = money_day(one(data, "day"), one(data, "time"))
     c = Adjustment(id=store.new_adjustment_id(ROOT, day, kind, account),
                    account=account, kind=kind,
                    amount=money if kind == "deposit" else -money,
-                   day=day, comment=one(data, "comment"))
+                   day=day, day_time=timed, comment=one(data, "comment"))
     store.save_adjustment(ROOT, c)
     drop_cache()
     word = {"deposit": "added to", "withdrawal": "taken off",
@@ -6380,14 +7088,14 @@ def correct_balance(data):
     account = one(data, "account")
     if account not in j.accounts:
         raise RecordError("no such account")
-    real = float(one(data, "balance", "0").replace(",", "."))
-    day = money_day(one(data, "day"))
+    real = figure(one(data, "balance", "0"), "balance")
+    day, timed = money_day(one(data, "day"), one(data, "time"))
     gap = round(real - j.balance(account), 2)
     if not gap:
         return f"{account} already stands at {amount(j, real, account)}, nothing to correct."
     c = Adjustment(id=store.new_adjustment_id(ROOT, day, "reconciliation", account),
                    account=account, kind="reconciliation", amount=gap, day=day,
-                   comment=one(data, "comment"))
+                   day_time=timed, comment=one(data, "comment"))
     store.save_adjustment(ROOT, c)
     drop_cache()
     return (f"{account}: {amount(j, gap, account, signed=True)} written down as a "
@@ -6769,8 +7477,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         kind = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                 ".gif": "image/gif", ".webp": "image/webp"}.get(
                     os.path.splitext(path)[1].lower(), "application/octet-stream")
+        # A screenshot keeps its name when the record is edited (idea-01.png
+        # is whatever the first picture is now), so the browser may keep a
+        # copy but asks every time; the answer is a few bytes when the file
+        # has not changed, instead of megabytes on every look at a trade.
+        info = os.stat(path)
+        tag = f'"{info.st_mtime_ns:x}-{info.st_size:x}"'
+        headers = [("ETag", tag), ("Cache-Control", "no-cache")]
+        if self.headers.get("If-None-Match") == tag:
+            self.send_response(304)
+            for name, value in headers:
+                self.send_header(name, value)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         with open(path, "rb") as f:
-            self._send(f.read(), 200, kind)
+            self._send(f.read(), 200, kind, headers)
 
     def _share(self, parts, q):
         """The document of a record: the preview to look at, or the file
@@ -6799,11 +7521,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
         origin = self.headers.get("Origin") or self.headers.get("Referer") or ""
         if not origin:
             return True
-        host = urllib.parse.urlsplit(origin).netloc
-        return host in (f"127.0.0.1:{PORT}", f"localhost:{PORT}")
+        return urllib.parse.urlsplit(origin).netloc in self._own_hosts()
+
+    def _own_hosts(self):
+        """The names this server answers to: the port it was bound to, which
+        is PORT outside the tests."""
+        port = self.server.server_address[1]
+        return (f"127.0.0.1:{port}", f"localhost:{port}")
+
+    def _own_host(self):
+        """A guard against DNS rebinding. A page of another site can point its
+        own name at 127.0.0.1 and then read this journal as a page of that
+        site, since the browser sees one origin; the Host header it sends
+        still carries the foreign name, and that is refused here."""
+        return (self.headers.get("Host") or "") in self._own_hosts()
 
     # --- routes ---
     def do_GET(self):
+        if not self._own_host():
+            return self._send("foreign host", 403, "text/plain; charset=utf-8")
         parsed = urllib.parse.urlparse(self.path)
         path = urllib.parse.unquote(parsed.path)
         q = urllib.parse.parse_qs(parsed.query)
@@ -6850,6 +7586,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(week_page(key))
         if path == "/accounts":
             return self._send(accounts_page((q.get("m") or [""])[0]))
+        if len(parts) == 3 and parts[0] == "account" and parts[2] == "rules":
+            shown = rules_page(parts[1]) if store.safe_dir_name(parts[1]) else None
+            return self._send(shown) if shown else self._gone("no such account", "accounts", "/accounts")
         if path == "/playbooks":
             return self._send(playbooks_page())
         if path == "/playbook/new":
@@ -6959,7 +7698,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # the word of the last GET on this connection must not ride on the
         # error page of this form
         SAID.text = SAID.url = ""
-        if not self._same_origin():
+        if not self._own_host() or not self._same_origin():
             return self._send("foreign origin", 403)
         parsed = urllib.parse.urlparse(self.path)
         path = urllib.parse.unquote(parsed.path)
@@ -7133,7 +7872,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._gone("no such trade")
                 close_trade(t, data)
                 return self._go(f"/trade/{U(t.id)}{keep}", "Trade closed")
+            if len(parts) == 3 and parts[0] == "account" and parts[2] == "rules":
+                account = save_rules(parts[1], data)
+                return self._go("/accounts", f"{account.name or account.id}: rules saved")
+            if path == "/account/new" and one(data, "kind") == "prop":
+                try:
+                    create_account(data)
+                except (RecordError, ValueError) as e:
+                    return self._go("/accounts?m=" + U(str(e)))
+                return self._go(f"/account/{U(one(data, 'id').lower())}/rules",
+                                "Account created, now its rules")
             for route, action in (("/account/new", create_account),
+                                  ("/settings/clock", save_clock),
                                   ("/account/archive", toggle_archive),
                                   ("/account/delete", delete_account),
                                   ("/account/limit", set_limit),

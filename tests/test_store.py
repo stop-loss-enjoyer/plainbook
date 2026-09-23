@@ -170,6 +170,34 @@ class TradeRoundTrip(unittest.TestCase):
         sample_trade().check()
 
 
+class PriceRoundTrip(unittest.TestCase):
+    def test_the_prices_keep_every_digit_and_an_old_file_has_none(self):
+        t = Trade(id="2026-08-01-01-eurusd", account="broker", pair="EURUSD",
+                  direction="short", style="swing", risk=1.0,
+                  opened=datetime(2026, 8, 1, 10, 0), opened_time=True,
+                  entry_price=1.08452, stop_price=1.08702, target_price=1.07827,
+                  best_price=0.00001234)
+        again = store.text_to_trade(store.trade_to_text(t))
+        self.assertEqual((again.entry_price, again.stop_price, again.target_price,
+                          again.best_price), (1.08452, 1.08702, 1.07827, 0.00001234))
+        self.assertIsNone(again.exit_price)
+        self.assertEqual(store.trade_to_text(again), store.trade_to_text(t))
+        plain = store.trade_to_text(Trade(id="x", account="a", direction="long",
+                                          style="s", opened=datetime(2026, 8, 1)))
+        self.assertNotIn("price", plain)
+
+    def test_a_stop_on_the_wrong_side_is_refused(self):
+        t = Trade(id="x", account="a", direction="long", style="s",
+                  opened=datetime(2026, 8, 1), entry_price=1.1, stop_price=1.2)
+        with self.assertRaises(RecordError):
+            t.check()
+        t.direction = "short"
+        t.check()
+        t.target_price = 1.15                                # over a short's entry
+        with self.assertRaises(RecordError):
+            t.check()
+
+
 class NoteRoundTrip(unittest.TestCase):
     def note(self, **kw):
         fields = dict(id="2026-09-09-london-sweep", title="London sweep",
@@ -289,6 +317,31 @@ class AccountAndAdjustmentRoundTrip(unittest.TestCase):
         self.assertEqual(again.start_balance, 50000)
         self.assertEqual(again.note, "Closed.")
 
+    def test_a_prop_account_keeps_its_rules(self):
+        a = Account(id="ftmo-100k", name="FTMO 100k", kind="prop", firm="FTMO",
+                    start_balance=100000, daily_loss_limit=5000, max_loss=10000,
+                    max_loss_mode="trailing to start", profit_target=10000,
+                    min_days=4, day_start="17:00", zone="Europe/Prague")
+        text = store.account_to_text(a)
+        again = store.text_to_account(text).check()
+        self.assertEqual(store.account_to_text(again), text)
+        self.assertEqual((again.kind, again.firm, again.max_loss_mode, again.min_days,
+                          again.day_start, again.zone),
+                         ("prop", "FTMO", "trailing to start", 4, "17:00", "Europe/Prague"))
+        # a broker account writes none of it
+        plain = store.account_to_text(Account(id="broker", start_balance=10))
+        self.assertNotIn("max loss", plain)
+        self.assertIn("kind: broker", plain)
+
+    def test_an_old_account_with_a_limit_reads_as_a_prop(self):
+        """Before the kind existed the daily limit was the only prop rule."""
+        old = store.text_to_account("---\nid: p\nstart balance: 100\ndaily loss limit: 5\n---\n")
+        self.assertEqual(old.kind, "prop")
+        self.assertEqual(store.text_to_account("---\nid: b\nstart balance: 100\n---\n").kind,
+                         "broker")
+        with self.assertRaises(RecordError):
+            Account(id="x", day_start="25:00").check()
+
     def test_adjustment(self):
         c = Adjustment(id="2026-08-29-reconciliation-broker", account="broker",
                        kind="reconciliation", amount=-12.5,
@@ -299,6 +352,10 @@ class AccountAndAdjustmentRoundTrip(unittest.TestCase):
         self.assertEqual(store.adjustment_to_text(again), text)
         self.assertEqual(again.amount, -12.5)
         self.assertEqual(again.day, datetime(2026, 8, 29))
+        self.assertIn("date: 2026-08-29\n", text)          # no hour, none written
+        c.day, c.day_time = datetime(2026, 8, 29, 18, 30), True
+        again = store.text_to_adjustment(store.adjustment_to_text(c))
+        self.assertEqual((again.day, again.day_time), (datetime(2026, 8, 29, 18, 30), True))
 
 
 class FilesOnDisk(unittest.TestCase):
@@ -481,6 +538,15 @@ class Settings(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
         store.make_layout(self.root)
+
+    def test_the_clock_is_this_computers_until_named(self):
+        self.assertEqual(store.clock(self.root), "")
+        self.assertEqual(store.save_clock(self.root, "Europe/Prague"), "Europe/Prague")
+        self.assertEqual(store.clock(self.root), "Europe/Prague")
+        with self.assertRaises(RecordError):
+            store.save_clock(self.root, "Mars/Base")
+        store.save_clock(self.root, "")
+        self.assertEqual(store.clock(self.root), "")
 
     def test_the_stop_edge_is_1_2_until_set_and_is_kept_to_a_tenth(self):
         self.assertEqual(store.stop_edge(self.root), 1.2)

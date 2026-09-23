@@ -191,6 +191,89 @@ class RSplitCase(unittest.TestCase):
         self.assertEqual(sum(n for _, n, _ in wins), s.wins)
         self.assertEqual(be, s.be)
 
+    def test_the_dots_on_the_line_are_the_trades_the_legend_counts(self):
+        """Every dot stands in the bucket the tables count it in, so the line
+        and the two legends under it can never disagree about a trade."""
+        j = Journal(self.accounts, [
+            self.trade("t1", "Lose", -100), self.trade("t2", "Lose", -30),
+            self.trade("t3", "Win", 40), self.trade("t4", "Win", 350),
+            self.trade("t5", "BE", -2),
+        ], [])
+        line = stats.r_line(j, j.trades)
+        self.assertEqual([t.id for t, *_ in line], ["t1", "t2", "t5", "t3", "t4"])   # by R
+        losses, wins, be = stats.r_split(j, j.trades)
+        for pile, counted in (("Lose", losses), ("Win", wins)):
+            for i, (_, n, sum_r) in enumerate(counted):
+                mine = [r for _, r, p, b in line if p == pile and b == i]
+                self.assertEqual(len(mine), n)
+                self.assertAlmostEqual(sum(mine), sum_r)
+        self.assertEqual(sum(1 for *_, p, _ in line if p == "BE"), be)
+        svg = H.r_line_svg([(r, p, b, "/trade/" + t.id, t.id) for t, r, p, b in line],
+                           [top for _, top in stats.loss_buckets(1.2)],
+                           [top for _, top in stats.WIN_BUCKETS])
+        self.assertEqual(svg.count("<circle"), 5)
+        self.assertIn('<a href="/trade/t4">', svg)
+        self.assertIn('data-tip="t5"', svg)
+
+    def test_the_days_are_the_exits_and_the_weekdays_the_entries(self):
+        """A day of the calendar is the exit's, a weekday the entry's."""
+        timed = Trade(id="a", account="broker", pair="EURUSD", direction="long",
+                      style="swing", risk=1.0, opened=datetime(2026, 8, 3, 14, 30),
+                      opened_time=True, result="Win", pnl=200,
+                      closed=datetime(2026, 8, 5, 9, 0), closed_time=True)
+        dated = self.trade("b", "Lose", -100)
+        j = Journal(self.accounts, [timed, dated], [])
+        days = stats.by_exit_day(j, j.trades)
+        self.assertEqual(sorted(days), [datetime(2026, 8, 2).date(), datetime(2026, 8, 5).date()])
+        self.assertAlmostEqual(days[datetime(2026, 8, 5).date()].sum_r, j.r("a"))
+        week = stats.by_entry_weekday(j, j.trades)
+        self.assertEqual(sorted(week), [0, 5])           # a Monday and a Saturday
+        self.assertEqual(stats.cumulative_r(j, j.trades), [0.0, -1.0, -1.0 + j.r("a")])
+
+    def test_the_profit_factor_and_the_fall_in_money(self):
+        """Money made against money lost; the fall of the balance from its
+        high, a withdrawal not counted as one."""
+        trades = [Trade(id=f"t{i}", account="broker", pair="EURUSD", direction="long",
+                        style="swing", risk=1.0, opened=datetime(2026, 8, i),
+                        result="Win" if p > 0 else "Lose", pnl=p,
+                        closed=datetime(2026, 8, i))
+                  for i, p in ((1, 500), (2, -300), (3, -200), (4, 400))]
+        out = Adjustment(id="w", account="broker", kind="withdrawal", amount=-1000,
+                         day=datetime(2026, 8, 5))
+        j = Journal(self.accounts, trades, [out])
+        s = stats.summary(j, j.trades)
+        self.assertAlmostEqual(s.profit_factor, 900 / 500)
+        f = stats.money_fall(j, "broker")
+        self.assertEqual(f.worst, -500)                  # 10 500 down to 10 000
+        self.assertAlmostEqual(f.share, -500 / 10500 * 100)
+        self.assertEqual(f.trough_at, datetime(2026, 8, 3))
+
+    def test_the_prices_read_in_r(self):
+        """The stop is 1 R by price, whatever the pair and the side."""
+        t = Trade(id="p", account="broker", pair="USDJPY", direction="short",
+                  style="swing", risk=1.0, opened=datetime(2026, 8, 1),
+                  result="Win", pnl=200, closed=datetime(2026, 8, 2),
+                  entry_price=150.0, stop_price=150.5, target_price=148.5,
+                  exit_price=149.0, best_price=148.25, worst_price=150.25)
+        p = stats.prices(t)
+        self.assertAlmostEqual(p.planned, 3.0)
+        self.assertAlmostEqual(p.taken, 2.0)
+        self.assertAlmostEqual(p.best, 3.5)
+        self.assertAlmostEqual(p.worst, -0.5)
+        self.assertAlmostEqual(p.left, 1.5)
+        self.assertTrue(p.reached)
+        ps = stats.price_summary([t, self.trade("q", "Lose", -100)])
+        self.assertEqual((ps.trades, ps.reached), (1, 1))
+        self.assertAlmostEqual(ps.mean(ps.left), 1.5)
+        self.assertIsNone(stats.prices(self.trade("q", "Lose", -100)))
+
+    def test_a_month_names_every_day_under_the_pointer(self):
+        day = datetime(2026, 8, 5).date()
+        svg = H.month_days_svg(2026, 8, {day: (2.0, "Wed 05.08.2026\n+2.00 R")}, 2.0)
+        self.assertIn('data-tip="Wed 05.08.2026\n+2.00 R"', svg)
+        self.assertIn("no trade closed", svg)                # an empty day says so
+        self.assertEqual(svg.count("data-tip="), 31)
+
     def test_the_stop_is_told_apart_from_too_much_size(self):
         """A stop costs a little more than -1R; past -1.2R it was not the stop.
 

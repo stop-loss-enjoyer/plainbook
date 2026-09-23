@@ -31,23 +31,30 @@ jobs:
             suffix: windows.exe
           - os: macos-latest
             suffix: macos-arm64
-          - os: ubuntu-latest
+          # the Macs with an Intel processor, which the arm64 file does not run on
+          - os: macos-15-intel
+            suffix: macos-x86_64
+          # the oldest Ubuntu GitHub still runs: a file packed on a newer one
+          # asks for a newer glibc and does not start on Ubuntu 22.04
+          - os: ubuntu-22.04
             suffix: linux-x86_64
     runs-on: ${{ matrix.os }}
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: the tests, on the Python that goes into the file
         run: python -m unittest discover -s tests
-      - run: python -m pip install pyinstaller==6.22.3
+      # tzdata goes into the file and not into the source: the clocks of the
+      # prop firms have names Python on Windows cannot read without it
+      - run: python -m pip install pyinstaller==6.22.3 tzdata==2026.4
       - name: one file
-        run: python -m PyInstaller --onefile --clean --name Plainbook --paths . tools/app_entry.py
+        run: python -m PyInstaller --onefile --clean --name Plainbook --paths . --hidden-import tzdata --collect-data tzdata tools/app_entry.py
       - name: name it after the release
         shell: bash
         run: |
@@ -71,7 +78,7 @@ jobs:
         run: |
           zip "$OUT.zip" "$OUT"
           echo "OUT=$OUT.zip" >> "$GITHUB_ENV"
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ env.OUT }}
       - name: attach it to the release

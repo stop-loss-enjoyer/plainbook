@@ -5,6 +5,7 @@ An invented journal, for the screenshots in README.md and for looking at a
 change without opening anybody's records.
 
     python3 tools/demo_journal.py /tmp/pb-demo
+    python3 tools/demo_journal.py /tmp/pb-demo --months=8   # a longer run, for pictures
     PLAINBOOK_ROOT=/tmp/pb-demo PLAINBOOK_PORT=8899 python3 -m plainbook.server
 
 Every number here is made up, and made up the same way every time: the seed is
@@ -24,8 +25,12 @@ from plainbook.model import (Account, Adjustment, Card, Graded, IdeaBlock,
                              Playbook, Setup, Rule,
                              Plan, Note, Trade, Week)
 
+# the prop account carries rules of the usual shape, so that the Accounts tab
+# shows where an account stands against them; they are no firm's in particular
 ACCOUNTS = [Account(id="broker", name="broker", start_balance=10000),
-            Account(id="prop-100k", name="prop 100k", start_balance=100000)]
+            Account(id="prop-100k", name="prop 100k", kind="prop", start_balance=100000,
+                    daily_loss_limit=5000, max_loss=10000, max_loss_mode="static",
+                    profit_target=10000, min_days=4, zone="Europe/Prague")]
 
 # a spread wide enough to show every kind of icon: currencies, an index,
 # a metal and an oil
@@ -126,7 +131,49 @@ def shot(folder, name, seed):
     return f"{store.SHOTS}/{name}"
 
 
-def build(root, days=40):
+def history(root, before, months):
+    """Months of trading before the demo proper, for the pictures that read a
+    long run: the year day by day, the path of R of every period, the days of
+    a quarter. Drawn from a generator of its own, so the demo without it is
+    exactly what it was. Hours, stops moved to the entry, copies on the
+    second account and prices, as a journal kept for a while has them."""
+    rnd = random.Random(31)
+    day = (before - timedelta(days=30 * months)).replace(hour=0, minute=0)
+    balance = {a.id: a.start_balance for a in ACCOUNTS}
+    hours = [8, 9, 10, 10, 11, 13, 14, 14, 15, 15, 16, 16, 17]
+    while day < before - timedelta(days=2):
+        if day.weekday() < 5 and rnd.random() < 0.4:
+            opened = day.replace(hour=rnd.choice(hours), minute=rnd.choice([0, 15, 30, 45]))
+            u = rnd.random()
+            r = (rnd.uniform(1.2, 3.3) if u < 0.47 else
+                 -rnd.uniform(0.9, 1.08) if u < 0.83 else
+                 -rnd.uniform(1.25, 1.5) if u < 0.88 else rnd.uniform(-0.08, 0.02))
+            result = "Win" if r > 0.2 else "Lose" if r < -0.2 else "BE"
+            hold = timedelta(hours=rnd.choice([4, 6, 20, 27, 30, 52, 76]))
+            closed = opened + hold
+            pair = rnd.choice(PAIRS)
+            side = rnd.choice(["long", "short"])
+            style = rnd.choice(["swing", "EMT", "EMT prop"])
+            moved = (opened + hold * rnd.uniform(0.25, 0.6)
+                     if result != "Lose" and rnd.random() < 0.35 else None)
+            accounts = ["broker", "prop-100k"] if rnd.random() < 0.3 else \
+                [rnd.choice(["broker", "prop-100k"])]
+            for account in accounts:
+                risk = rnd.choice([0.85, 0.9, 1.0])
+                pnl = round(r * risk / 100 * balance[account])
+                balance[account] += pnl
+                store.save_trade(root, Trade(
+                    id=store.new_id(root, opened, pair), account=account, pair=pair,
+                    direction=side, style=style, entry_tf=rnd.choice(["H1", "H4"]),
+                    execution=rnd.sample(["Market Entry", "IDM", "SNR", "FVG"], 2),
+                    risk=risk, opened=opened, opened_time=True, result=result,
+                    pnl=float(pnl), closed=closed, closed_time=True,
+                    breakeven=moved.replace(second=0, microsecond=0) if moved else None,
+                    idea=[IdeaBlock(tf="H4", text=rnd.choice(IDEAS))]))
+        day += timedelta(days=1)
+
+
+def build(root, days=40, months=0):
     random.seed(12)
     for account in ACCOUNTS:
         store.save_account(root, account)
@@ -216,6 +263,9 @@ def build(root, days=40):
         sections=[("Math", "Break-even win rate at 2R is 33%. The block is "
                            "reviewed at 40 trades; below 30% the rules are "
                            "rewritten before the next one.")]))
+
+    if months:
+        history(root, start, months)
 
     for i in range(26):
         day = start + timedelta(days=int(i * days / 26), hours=random.randint(-5, 4))
@@ -344,9 +394,49 @@ def build(root, days=40):
         trades=examples))
 
 
+# where each pair of the demo trades, and a stop of a sensible size for it
+PRICE_OF = {"EURUSD": (1.0850, 0.0025), "GBPUSD": (1.2700, 0.0030),
+            "USDJPY": (147.50, 0.40), "AUDUSD": (0.6550, 0.0020),
+            "USDCHF": (0.8850, 0.0025), "EURGBP": (0.8550, 0.0015),
+            "XAUUSD": (2450.0, 12.0), "GER40": (18400.0, 60.0),
+            "US100": (19800.0, 90.0), "UKOUSD": (82.0, 0.8)}
+
+
+def add_prices(root):
+    """Prices for most of the trades, set after the fact so that the exit in
+    R by price is the R the money says: a demo whose two R disagree would
+    look like a bug. Each trade draws from its own id, so the rest of the
+    demo stays what it was."""
+    from plainbook.balances import Journal
+    j = Journal.load(root)
+    for t in j.trades:
+        rnd = random.Random(t.id)
+        if t.pair not in PRICE_OF or rnd.random() < 0.25:
+            continue
+        base, stop = PRICE_OF[t.pair]
+        side = 1 if t.direction == "long" else -1
+        entry = base * rnd.uniform(0.97, 1.03)
+        digits = 5 if base < 10 else 3 if base < 200 else 1
+        t.entry_price = round(entry, digits)
+        t.stop_price = round(entry - side * stop, digits)
+        t.target_price = round(entry + side * stop * rnd.choice([2, 2.5, 3]), digits)
+        r = j.r(t.id)
+        if r is not None:
+            best = max(r, 0.0) + rnd.uniform(0.1, 1.2)
+            worst = -rnd.uniform(0.1, 0.9) if r > -0.9 else r
+            t.exit_price = round(entry + side * stop * r, digits)
+            t.best_price = round(entry + side * stop * best, digits)
+            t.worst_price = round(entry + side * stop * worst, digits)
+        store.save_trade(root, t)
+
+
 if __name__ == "__main__":
-    root = sys.argv[1] if len(sys.argv) > 1 else "/tmp/pb-demo"
+    args = [a for a in sys.argv[1:] if not a.startswith("--months")]
+    months = next((int(a.split("=", 1)[1]) for a in sys.argv[1:]
+                   if a.startswith("--months=")), 0)
+    root = args[0] if args else "/tmp/pb-demo"
     os.makedirs(root, exist_ok=True)
-    build(root)
+    build(root, months=months)
+    add_prices(root)
     print(f"invented journal written to {root}\n"
           f"PLAINBOOK_ROOT={root} PLAINBOOK_PORT=8899 python3 -m plainbook.server")

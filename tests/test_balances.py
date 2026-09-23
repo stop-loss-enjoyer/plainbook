@@ -45,6 +45,55 @@ class Balances(unittest.TestCase):
         self.assertEqual(j.computed["t1"].balance_at_entry, 10000)
         self.assertEqual(j.computed["t1"].r, 5.0)
 
+    def test_balance_at_a_past_entry(self):
+        """A trade written in a week late is sized on the balance of its own
+        day: a win closed after that day is not in it, one closed before is."""
+        j = Journal(self.accounts, [
+            trade("t1", (2025, 6, 2, 9, 0), pnl=1000, result="Win",
+                  closed=(2025, 6, 3, 12, 0)),
+            trade("t2", (2025, 6, 10, 9, 0), pnl=500, result="Win",
+                  closed=(2025, 6, 12, 12, 0)),
+        ], [Adjustment(id="c1", account="broker", kind="deposit", amount=300,
+                       day=datetime(2025, 6, 11))])
+        self.assertEqual(j.balance("broker"), 11800)
+        self.assertEqual(j.balance_at("broker", datetime(2025, 6, 11, 10, 0)), 11300)
+        self.assertEqual(j.balance_at("broker", datetime(2025, 6, 3, 13, 0)), 11000)
+        self.assertEqual(j.balance_at("broker", datetime(2025, 6, 3, 11, 0)), 10000)
+        # a date with no hour does not see a close of that same day
+        self.assertEqual(j.balance_at("broker", datetime(2025, 6, 3), False), 10000)
+        # the trade being edited is not in its own balance
+        self.assertEqual(j.balance_at("broker", datetime(2025, 6, 13), True, "t2"), 11300)
+        self.assertEqual(j.balance_at("broker", datetime(2025, 6, 13), True, "t2"),
+                         j.balance_at("broker", datetime(2025, 6, 13), True) - 500)
+
+    def test_a_deposit_with_its_hour_misses_the_trade_of_that_morning(self):
+        """Money moved at 18:00 is not in the balance of a trade opened at
+        nine the same day; without its hour it counts from the day."""
+        morning = trade("m", (2025, 6, 2, 9, 0))
+        evening = trade("e", (2025, 6, 2, 19, 0))
+        timed = Adjustment(id="d", account="broker", kind="deposit", amount=1000,
+                           day=datetime(2025, 6, 2, 18, 0), day_time=True)
+        j = Journal(self.accounts, [morning, evening], [timed])
+        self.assertEqual(j.computed["m"].balance_at_entry, 10000)
+        self.assertEqual(j.computed["e"].balance_at_entry, 11000)
+        dated = Adjustment(id="d", account="broker", kind="deposit", amount=1000,
+                           day=datetime(2025, 6, 2))
+        j = Journal(self.accounts, [morning, evening], [dated])
+        self.assertEqual(j.computed["m"].balance_at_entry, 11000)
+
+    def test_a_fee_is_in_the_result_of_its_day(self):
+        """The daily loss limit counts a fee charged that day the way the
+        prop firm does; a deposit is not a result."""
+        j = Journal(self.accounts, [
+            trade("t1", (2025, 6, 2, 9, 0), pnl=-200, result="Lose",
+                  closed=(2025, 6, 2, 12, 0)),
+        ], [Adjustment(id="f", account="broker", kind="fee", amount=-30,
+                       day=datetime(2025, 6, 2)),
+            Adjustment(id="d", account="broker", kind="deposit", amount=500,
+                       day=datetime(2025, 6, 2))])
+        self.assertEqual(j.closed_on("broker", datetime(2025, 6, 2, 18, 0)), -230)
+        self.assertEqual(j.closed_on("broker", datetime(2025, 6, 3)), 0)
+
     def test_risk_follows_the_current_balance(self):
         """Risk in dollars is measured against the computed balance, not the start."""
         j = Journal(self.accounts, [
@@ -275,3 +324,104 @@ class StreaksAndPeriods(unittest.TestCase):
               closed=(2026, 8, 5)).check()
         with self.assertRaises(RecordError):
             trade("t", (2026, 8, 5), pnl=1, result="Win", closed=(2026, 8, 4)).check()
+
+
+class Copies(unittest.TestCase):
+    """One position on two accounts is two trades for the money and one
+    decision for the system."""
+
+    def test_the_copies_of_a_position_fold_into_one_idea(self):
+        from plainbook import stats
+        accounts = {"broker": Account(id="broker", start_balance=10000),
+                    "prop": Account(id="prop", start_balance=100000)}
+        trades = [
+            trade("a", (2025, 6, 2, 9, 0), pnl=-100, result="Lose",
+                  closed=(2025, 6, 2, 12, 0)),
+            trade("b", (2025, 6, 2, 9, 0), pnl=-1000, result="Lose",
+                  closed=(2025, 6, 2, 12, 0), account="prop"),
+            trade("c", (2025, 6, 3, 9, 0), pnl=200, result="Win",
+                  closed=(2025, 6, 3, 12, 0)),
+        ]
+        j = Journal(accounts, trades, [])
+        self.assertEqual(stats.copies(j.trades), 1)
+        self.assertEqual(stats.summary(j, j.trades).trades, 3)
+        self.assertAlmostEqual(stats.drawdown_r(j, j.trades), -2.0)
+        view, ideas = stats.ideas(j, j.trades)
+        s = stats.summary(view, ideas)
+        self.assertEqual((s.trades, s.wins, s.losses), (2, 1, 1))
+        self.assertAlmostEqual(s.sum_pnl, -900)               # every copy's money
+        self.assertAlmostEqual(stats.drawdown_r(view, ideas), -1.0)
+        self.assertEqual(stats.copies(ideas), 0)
+        # the journal underneath is untouched
+        self.assertEqual(len(j.trades), 3)
+        self.assertAlmostEqual(j.r("b"), -1.0)
+
+
+class PropRules(unittest.TestCase):
+    """A prop account against the rules of its firm, worked out from the
+    journal and never stored."""
+
+    def prop(self, **rules):
+        return Account(id="prop", kind="prop", start_balance=100000, **rules)
+
+    def closed(self, tid, pnl, opened, closed):
+        return Trade(id=tid, account="prop", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=opened, opened_time=True,
+                     result="Win" if pnl > 0 else "Lose", pnl=pnl,
+                     closed=closed, closed_time=True)
+
+    def test_the_firm_counts_its_day_on_its_own_clock(self):
+        """Midnight in Prague is 01:00 in Moscow in September: a loss closed at
+        00:30 Moscow time belongs to the firm's day before."""
+        a = self.prop(daily_loss_limit=5000, zone="Europe/Prague")
+        j = Journal({"prop": a}, [
+            self.closed("late", -700, datetime(2026, 9, 21, 20, 0), datetime(2026, 9, 22, 0, 30)),
+            self.closed("today", -300, datetime(2026, 9, 22, 9, 0), datetime(2026, 9, 22, 11, 0)),
+        ], [], clock="Europe/Moscow")
+        start, end, found = j.firm_day(a, datetime(2026, 9, 22, 15, 0))
+        self.assertTrue(found)
+        self.assertEqual((start, end), (datetime(2026, 9, 22, 1, 0), datetime(2026, 9, 23, 1, 0)))
+        p = j.prop("prop", datetime(2026, 9, 22, 15, 0))
+        self.assertEqual(p.today, -300)
+        self.assertEqual(p.daily_left, 4700)
+
+    def test_a_day_that_begins_in_the_evening(self):
+        """A firm whose day turns at 17:00 New York time counts a trade closed
+        at 18:00 there in the next day."""
+        a = self.prop(daily_loss_limit=1000, zone="America/New_York", day_start="17:00")
+        j = Journal({"prop": a}, [], [], clock="America/New_York")
+        start, end, _ = j.firm_day(a, datetime(2026, 9, 22, 18, 0))
+        self.assertEqual(start, datetime(2026, 9, 22, 17, 0))
+        start, end, _ = j.firm_day(a, datetime(2026, 9, 22, 16, 0))
+        self.assertEqual(start, datetime(2026, 9, 21, 17, 0))
+
+    def test_an_unknown_clock_falls_back_and_says_so(self):
+        a = self.prop(daily_loss_limit=1000, zone="Mars/Base")
+        j = Journal({"prop": a}, [], [])
+        self.assertFalse(j.prop("prop", datetime(2026, 9, 22, 12, 0)).zone_found)
+
+    def test_the_floor_static_trailing_and_trailing_to_start(self):
+        trades = [
+            self.closed("a", 6000, datetime(2026, 9, 1, 9), datetime(2026, 9, 1, 12)),
+            self.closed("b", 8000, datetime(2026, 9, 2, 9), datetime(2026, 9, 2, 12)),
+            self.closed("c", -3000, datetime(2026, 9, 3, 9), datetime(2026, 9, 3, 12)),
+        ]
+        now = datetime(2026, 9, 4, 12)
+        floors = {}
+        for mode in ("static", "trailing", "trailing to start"):
+            a = self.prop(max_loss=10000, max_loss_mode=mode)
+            p = Journal({"prop": a}, trades, []).prop("prop", now)
+            floors[mode] = p.floor
+            self.assertEqual(p.high, 114000)
+        self.assertEqual(floors, {"static": 90000, "trailing": 104000,
+                                  "trailing to start": 100000})
+
+    def test_the_target_and_the_days_make_a_pass(self):
+        a = self.prop(profit_target=10000, min_days=2, max_loss=10000)
+        now = datetime(2026, 9, 4, 12)
+        one = [self.closed("a", 11000, datetime(2026, 9, 1, 9), datetime(2026, 9, 1, 12))]
+        p = Journal({"prop": a}, one, []).prop("prop", now)
+        self.assertEqual((p.target_left, p.days_left, p.passed), (0, 1, False))
+        two = one + [self.closed("b", 100, datetime(2026, 9, 2, 9), datetime(2026, 9, 2, 12))]
+        self.assertTrue(Journal({"prop": a}, two, []).prop("prop", now).passed)
+

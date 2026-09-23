@@ -140,8 +140,10 @@ data. Each one is followed by what it prevents.
    captions.
    *Prevents:* two numbers on the same screen disagreeing about the same trades.
 5. **The server binds 127.0.0.1 and has no authentication.** Keep it that way,
-   and keep the `Origin` check in `_same_origin`.
-   *Prevents:* a journal with no login ending up reachable from a network.
+   and keep the `Origin` check in `_same_origin` and the `Host` check in
+   `_own_host`. *Prevents:* a journal with no login ending up reachable from
+   a network, and a web page reading it by pointing a name of its own at
+   127.0.0.1 (DNS rebinding), which the `Host` header gives away.
 6. **No dependencies.** The standard library is the whole toolbox. A package
    that looks harmless today is an install failure in five years. PyInstaller
    and setuptools are tools of the release workflow, used on GitHub's
@@ -218,10 +220,10 @@ and the address its pictures are served from, never a trade, so a third kind of
 record with screenshots needs no new code here.
 
 A form that shows **one** zone of a record must not call `apply_shots`: the
-rewrite would take every picture the form does not draw (invariant 2). The
-update form on the plan page is such a form, and it uses `add_shots`, which
-copies the new pictures in under the first free numbers and touches nothing
-else. A picture that lives inside a text is kept there as `![](shots/name.png)`;
+rewrite would take every picture the form does not draw (invariant 2). There
+are two such forms, the update on the plan page and the review on the
+playbook page, and both use `add_shots`, which copies the new pictures in
+under the first free numbers and touches nothing else. A picture that lives inside a text is kept there as `![](shots/name.png)`;
 `place_shots` puts the new names back where the old ones stood after a rewrite,
 and `with_shots` draws them on the page.
 
@@ -241,7 +243,11 @@ coins of a trading symbol; `html.pair()` is what a page calls, and anything that
 prints a pair should call it instead of `esc()`. Class names are English and
 short (`card`, `tile`, `dropzone`, `shot`, `num`). The theme is deliberately
 flat: no gradients, no shadows except the one on the filter popover, no
-animation.
+animation. Depth is drawn with flat colour only: a strip of tiles is three
+surfaces and a lit top edge a pixel thick, and a column of the day by day
+is two sides and a roof in three steps of one colour (`_block`). A figure a picture shows under the pointer rides in a
+`data-tip` attribute (`H.tip`), which the page script puts in the tip box
+at once; a `<title>` waits a second and a half and is not seen.
 
 **Add a statistic.** `stats.py` computes, `server.py` displays. Keep the
 computation free of HTML and the display free of arithmetic; that split is why

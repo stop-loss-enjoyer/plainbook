@@ -5,6 +5,8 @@ Summary figures: WR, R and PnL across slices; the equity curve; R distribution.
 
 Only closed trades count: an open one has neither a result nor an R.
 """
+import copy
+import math
 import re
 import statistics
 from dataclasses import dataclass, field
@@ -30,6 +32,15 @@ class Summary:
     sum_r_win: float = 0.0
     sum_r_lose: float = 0.0
     sum_r_be: float = 0.0
+    gross_won: float = 0.0          # the money of the trades that made money
+    gross_lost: float = 0.0         # the money of the ones that lost it, positive
+
+    @property
+    def profit_factor(self):
+        """The money made for every unit of money lost, or None with nothing
+        lost. The payoff says the same in R, trade by trade; this one is the
+        account's, fees and sizes included."""
+        return self.gross_won / self.gross_lost if self.gross_lost else None
 
     @property
     def decided(self):
@@ -120,6 +131,8 @@ def summary(journal, trades):
         s.sum_r_lose += r if t.result == "Lose" else 0.0
         s.sum_r_be += r if t.result == "BE" else 0.0
         s.sum_pnl += t.pnl or 0.0
+        s.gross_won += max(0.0, t.pnl or 0.0)
+        s.gross_lost += max(0.0, -(t.pnl or 0.0))
     return s
 
 
@@ -138,6 +151,159 @@ def by_values(journal, trades, key):
     rows = [(value, summary(journal, xs)) for value, xs in groups.items()]
     rows.sort(key=lambda x: -x[1].trades)
     return rows
+
+
+# --- prices ------------------------------------------------------------------
+# A trade may carry the prices it was planned and run at. The stop distance
+# is 1 R by price, so every other price reads in R on its own: the target is
+# the RR that was planned, the best price is how far the trade went for you
+# (MFE), the worst how far against (MAE), the exit what was taken. None
+# where a price is missing.
+
+@dataclass
+class Prices:
+    planned: float = None       # the RR of the target
+    taken: float = None         # the exit, in R by price
+    best: float = None          # the furthest the market went for the trade, in R
+    worst: float = None         # the furthest it went against, in R, zero or negative
+
+    @property
+    def left(self):
+        """What the trade gave back from its best: the R it reached and did
+        not take."""
+        if self.best is None or self.taken is None:
+            return None
+        return max(0.0, self.best - self.taken)
+
+    @property
+    def reached(self):
+        """Did the market reach the target, whether or not it was taken."""
+        if self.planned is None:
+            return None
+        far = max(x for x in (self.best, self.taken, -1e9) if x is not None)
+        return far >= self.planned - 1e-9
+
+
+def prices(t):
+    """The prices of a trade in R, or None without an entry and a stop."""
+    if t.entry_price is None or t.stop_price is None:
+        return None
+    side = 1 if t.direction == "long" else -1
+    one_r = (t.entry_price - t.stop_price) * side
+    if one_r <= 0:
+        return None
+    at = lambda price: None if price is None else (price - t.entry_price) * side / one_r
+    worst = at(t.worst_price)
+    return Prices(planned=at(t.target_price), taken=at(t.exit_price),
+                  best=at(t.best_price), worst=None if worst is None else min(0.0, worst))
+
+
+@dataclass
+class PriceSummary:
+    trades: int = 0             # closed trades with an entry and a stop
+    planned: list = field(default_factory=list)
+    reached: int = 0            # of the ones with a target, how many got there
+    best: list = field(default_factory=list)
+    worst: list = field(default_factory=list)
+    left: list = field(default_factory=list)   # given back, of the winners
+
+    @staticmethod
+    def mean(xs):
+        return sum(xs) / len(xs) if xs else None
+
+
+def price_summary(trades):
+    """What the prices of the closed trades say together: the RR planned,
+    how often the target was reached, how far the trades went for and
+    against, and what the winners gave back from their best."""
+    out = PriceSummary()
+    for t in trades:
+        if t.is_open:
+            continue
+        p = prices(t)
+        if p is None:
+            continue
+        out.trades += 1
+        if p.planned is not None:
+            out.planned.append(p.planned)
+            out.reached += bool(p.reached)
+        if p.best is not None:
+            out.best.append(p.best)
+        if p.worst is not None:
+            out.worst.append(p.worst)
+        if t.result == "Win" and p.left is not None:
+            out.left.append(p.left)
+    return out
+
+
+# --- one position on several accounts ----------------------------------------
+# A trade taken on a prop account and on one's own is entered once and written
+# twice, one file per account (the duplicate of the trade form). For the money
+# both are real; for the system they are one decision, and counted twice they
+# double the sample, the streak and the fall in R. The Statistics tab can read
+# them either way; nothing is stored about it, the copies are found the way
+# the trade form finds them: the same pair, side and entry on another account.
+
+def twin_key(t):
+    return (t.pair, t.direction, t.opened)
+
+
+def copies(trades):
+    """How many closed trades of a selection repeat a position already counted
+    on another account."""
+    seen, extra = {}, 0
+    for t in trades:
+        if t.is_open:
+            continue
+        accounts = seen.setdefault(twin_key(t), set())
+        if accounts and t.account not in accounts:
+            extra += 1
+        accounts.add(t.account)
+    return extra
+
+
+class Ideas:
+    """A journal read with the copies of a position folded into one: the R
+    of the idea is the mean R of its copies, each measured against its own
+    account, and everything else is asked of the journal underneath."""
+
+    def __init__(self, journal, r):
+        self._journal, self._r = journal, r
+
+    def r(self, trade_id):
+        return self._r[trade_id] if trade_id in self._r else self._journal.r(trade_id)
+
+    def __getattr__(self, name):
+        return getattr(self._journal, name)
+
+
+def ideas(journal, trades):
+    """(journal, trades) with every position held on several accounts counted
+    once. The trade that stands for it is a copy of the first, carrying the
+    PnL of all of them and the mean R; its result is theirs when they agree
+    and the sign of that R when a fee tipped one of them over."""
+    groups, order = {}, []
+    for t in trades:
+        key = twin_key(t) if not t.is_open else ("open", t.id)
+        if key not in groups:
+            order.append(key)
+        groups.setdefault(key, []).append(t)
+    out, r = [], {}
+    for key in order:
+        group = sorted(groups[key], key=lambda t: t.id)
+        if len(group) == 1 or len({t.account for t in group}) == 1:
+            out.extend(group)
+            continue
+        first = copy.copy(group[0])
+        rs = [journal.r(t.id) or 0.0 for t in group]
+        mean = sum(rs) / len(rs)
+        first.pnl = sum(t.pnl or 0.0 for t in group)
+        results = {t.result for t in group}
+        first.result = (results.pop() if len(results) == 1
+                        else "Win" if mean > 0 else "Lose" if mean < 0 else "BE")
+        r[first.id] = mean
+        out.append(first)
+    return Ideas(journal, r), out
 
 
 # --- playbooks ---------------------------------------------------------------
@@ -286,7 +452,7 @@ def checklist(journal, trades):
 def past_stop(journal, trades):
     """The losses that went deeper than the risk allowed, worst first.
 
-    The edge is the one the rings cut at, so the two agree by construction
+    The edge is the one the buckets cut at, so the two agree by construction
     and not by agreement: a stop that worked costs -1 R, up to the journal's
     stop edge (1.2 R unless the owner set it) once commission and swap are
     paid on top of it. Past that, the loss was larger than the trade was
@@ -305,7 +471,7 @@ def past_stop_over(journal, trade):
     meant to, and commission and swap carry it to the stop edge, which the
     trade was still sized for. Only what lies past that edge was lost to the
     risk being overrun, and it is the part discipline could have kept. The
-    edge is the one the rings cut at, so a loss counted as past the stop and
+    edge is the one the buckets cut at, so a loss counted as past the stop and
     the price put on it are measured by the same number.
     """
     edge = journal.stop_edge
@@ -364,9 +530,10 @@ def breakeven_split(journal, trades):
 
 def _figure(limits, key):
     try:
-        return float(str(limits.get(key, "")).replace(",", "."))
+        x = float(str(limits.get(key, "")).replace(",", "."))
     except ValueError:
         return None
+    return x if math.isfinite(x) else None
 
 
 def frame(journal, playbook, now=None):
@@ -465,13 +632,46 @@ def drawdown(journal, trades):
     return f
 
 
+@dataclass
+class MoneyFall:
+    """The deepest fall of an account's balance, in money and as a share of
+    the high it fell from."""
+    worst: float = 0.0          # zero or negative
+    share: float = 0.0          # of the high, in percent, zero or negative
+    peak_at: datetime = None
+    trough_at: datetime = None
+
+
+def money_fall(journal, account_id):
+    """The deepest fall of one account's balance from a high, its money moved
+    in and out included the way the balance has it: a withdrawal lowers the
+    balance and is not a loss, so money taken out is added back before the
+    fall is measured."""
+    points = equity_events(journal, account_id)
+    f = MoneyFall()
+    peak = peak_at = None
+    out = 0.0
+    for day, balance, what in points:
+        if what is not None and what != "start" and getattr(what, "kind", "") == "withdrawal":
+            out -= what.amount
+        level = balance + out
+        if peak is None or level >= peak:
+            peak, peak_at = level, day
+            continue
+        if level - peak < f.worst:
+            f.worst = level - peak
+            f.share = 100.0 * f.worst / peak if peak else 0.0
+            f.peak_at, f.trough_at = peak_at, day
+    return f
+
+
 def drawdown_r(journal, trades):
     """The deepest fall, in R, zero or negative."""
     return drawdown(journal, trades).worst
 
 
-# The R buckets of the two rings. Coarse at the tails on purpose: a ring is
-# only readable up to about six slices, and the difference between +3R and +4R
+# The R buckets of the distribution. Coarse at the tails on purpose: a legend is
+# only readable up to about six rows, and the difference between +3R and +4R
 # matters less than the difference between a small win and a big one.
 #
 # The losses are cut where a stop actually lands. A trade taken to the stop
@@ -491,7 +691,7 @@ WIN_BUCKETS = [("0…+0.5", 0.5), ("+0.5…+1", 1.0), ("+1…+2", 2.0),
 def loss_buckets(edge):
     """The loss buckets for a stop edge. At an edge of exactly 1 the stop
     bucket would be empty, so there the stop and the overrun share the last
-    bucket and the ring has one slice fewer."""
+    bucket and the legend has one row fewer."""
     buckets = [("0…-0.5", 0.5), ("-0.5…-1", 1.0)]
     if edge > 1.0:
         buckets.append((f"-1…-{edge:g}", edge))
@@ -532,6 +732,59 @@ def r_split(journal, trades):
         piles[t.result][i][2] += r
     return ([tuple(row) for row in piles["Lose"]],
             [tuple(row) for row in piles["Win"]], be)
+
+
+def r_line(journal, trades):
+    """The closed trades on one axis of R: [(trade, r, pile, bucket)], pile
+    being "Lose", "Win" or "BE" and bucket the index into the buckets of that
+    pile, chosen the way `r_split` chooses it, so the dots and the counts of
+    the legend are the same trades. Ordered by R."""
+    losses = loss_buckets(journal.stop_edge)
+    out = []
+    for t in trades:
+        if t.is_open or t.result not in ("Win", "Lose", "BE"):
+            continue
+        r = journal.r(t.id) or 0.0
+        if t.result == "BE":
+            out.append((t, r, "BE", 0))
+            continue
+        i, _ = _bucket(losses if t.result == "Lose" else WIN_BUCKETS, abs(r))
+        out.append((t, r, t.result, i))
+    out.sort(key=lambda x: (x[1], x[0].id))
+    return out
+
+
+def by_exit_day(journal, trades):
+    """{date: Summary} of the closed trades, by the day of the exit: what a
+    day made, the way a report counts its month (invariant 12)."""
+    piles = {}
+    for t in trades:
+        if not t.is_open and t.closed:
+            piles.setdefault(t.closed.date(), []).append(t)
+    return {day: summary(journal, xs) for day, xs in piles.items()}
+
+
+def by_entry_weekday(journal, trades):
+    """{weekday: Summary} of the closed trades by the day of the week they
+    were entered on, Monday 0. By the entry, since the day a trade was taken
+    on is the thing being asked about, and every trade has its date."""
+    piles = {}
+    for t in trades:
+        if not t.is_open and t.opened:
+            piles.setdefault(t.opened.weekday(), []).append(t)
+    return {day: summary(journal, xs) for day, xs in piles.items()}
+
+
+def cumulative_r(journal, trades):
+    """The running sum of R over the closed trades in the order they closed,
+    starting at zero: the path a period took to its total."""
+    closed = sorted((t for t in trades if not t.is_open and t.closed),
+                    key=lambda t: (t.closed, t.id))
+    path, total = [0.0], 0.0
+    for t in closed:
+        total += journal.r(t.id) or 0.0
+        path.append(total)
+    return path
 
 
 def equity(journal, account_id=None, trades=None, since=None):
