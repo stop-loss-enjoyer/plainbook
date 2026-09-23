@@ -1,10 +1,13 @@
 # Plainbook
 
-**A plain-text trading journal that lives on your machine.** Free, local,
-private, and built to be kept by a coding agent. Your trades are markdown
-files and screenshots in a folder you own; there is no account, no cloud and
-no subscription. The whole source is in this repository, and it runs on
-Windows, macOS and Linux, for forex, futures, stocks and crypto alike.
+**A free trading journal that lives on your machine, for forex, futures,
+stocks, crypto and prop firm traders.** Your trades are markdown files and
+screenshots in a folder you own: no account, no cloud, no subscription. Log
+every trade with its idea and its charts, measure it in R with its MFE and
+MAE, hold a prop account against the rules of its firm (daily loss limit,
+max drawdown, profit target, trading days), and read your edge in the
+statistics and in monthly and quarterly reports. It runs on Windows, macOS
+and Linux, and it is built to be kept by a coding agent.
 
 [![tests](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml)
 [![release](https://img.shields.io/github/v/release/stop-loss-enjoyer/plainbook?label=release)](https://github.com/stop-loss-enjoyer/plainbook/releases/latest)
@@ -12,7 +15,7 @@ Windows, macOS and Linux, for forex, futures, stocks and crypto alike.
 [![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](#built-to-be-kept-by-an-agent)
 
-![The journal: account balances, the open positions, the figures of the week and the list of trades](docs/journal.png)
+![Plainbook trading journal: account balances, open positions, the winrate and EV of each style, and the list of trades by week](docs/journal.png)
 
 <p align="center"><i>Every screenshot on this page is made on an invented journal.</i></p>
 
@@ -33,7 +36,8 @@ Contents: [Why](#why-a-journal-on-your-own-machine) ·
 [Opening a trade](#opening-a-trade) · [Closing it](#closing-a-trade) ·
 [Playbooks](#a-playbook-the-trading-system-at-every-trade) · [Plans](#a-plan-before-the-trade) ·
 [Notes](#notes-about-the-market) · [Cards](#the-daily-and-weekly-cards) ·
-[Statistics](#statistics) · [Reports](#reports) · [Accounts](#accounts-and-money) ·
+[Statistics](#statistics) · [Reports](#reports) · [Prop firms](#prop-firm-accounts-and-their-rules) ·
+[Accounts](#accounts-and-money) ·
 [Share](#showing-a-trade-to-another-trader) · [Search](#search) ·
 [Install](#install) · [Your data](#your-data) · [The numbers](#how-the-numbers-work) ·
 [Agents](#built-to-be-kept-by-an-agent) · [FAQ](#faq) · [Documents](#the-documents)
@@ -76,9 +80,11 @@ style and the entry timeframe, and write the risk as a percent of the balance
 or as a sum of money; the line under the field converts one into the other
 against the balance the account has at that moment. If the trade follows a
 plan, you pick the plan; if it is taken under a playbook, you pick the
-playbook, and its rules appear as a checklist with a box each. Then the idea:
-one block per timeframe, a few words and the screenshots, pasted with Ctrl+V
-from TradingView, MetaTrader or a screen capture.
+playbook, and its rules appear as a checklist with a box each. The entry, the
+stop and the target price can go in too, and the form says the RR of the
+trade while you type. Then the idea: one block per timeframe, a few words and
+the screenshots, pasted with Ctrl+V from TradingView, MetaTrader or a screen
+capture, or dragged in as files.
 
 The idea gets written down before the market says who was right. In
 hindsight an idea always looks tidier than it was, which is the reason the
@@ -93,13 +99,22 @@ loss limit stops counting it.
 
 ## Closing a trade
 
-![The page of a closed trade: the fields with R, the checklist as it was ticked, the management rules](docs/trade.png)
+![The page of a closed trade: the fields and prices, the result in R against the risk with the target, the best and the worst price, the time in the market, and the trade on the equity curve of its account](docs/trade.png)
 
 **Close trade** asks for the result, the PnL and the moment of the exit, then
-the exit screenshot and your conclusions. If the trade was opened under a
-playbook, the rules of holding the position are ticked here, the same way the
-entry rules were ticked at the open. R is worked out on the spot from the PnL,
-the risk and the balance the account had at the entry.
+the exit screenshot and your conclusions, and, if you keep them, the exit
+price and the best and worst price the market reached while the trade was
+open. If the trade was opened under a playbook, the rules of holding the
+position are ticked here, the same way the entry rules were ticked at the
+open. R is worked out on the spot from the PnL, the risk and the balance the
+account had at the entry.
+
+Beside the fields every trade carries a **passport**: its result on an axis
+of R against the risk it was sized for, with the target, the best price (MFE)
+and the worst price (MAE) marked and the other trades of the account as
+ticks; its time in the market, with the stretch at risk and the stretch
+after the stop went to the entry; and the equity curve of its account with
+the entry and the exit on it.
 
 The page of a closed trade shows every field, the idea with its screenshots,
 the updates, the exit and the conclusions, and both checklists with a tick or
@@ -175,22 +190,29 @@ trading week, with the progress on the focus and the key lesson of the week.
 
 ## Statistics
 
-![The Statistics tab: the strip of figures, the trades one bar each, the R distribution, the equity per account](docs/statistics.png)
+![The Statistics tab: EV, winrate against the break-even winrate, payoff and profit factor, maximum drawdown, the R result month by month, every trade as a dot on the R distribution, the equity curve per account](docs/statistics.png)
 
 Cut the whole history any way you like, by account, pair, style, direction,
 result or period, and the page opens on what that cut did. The strip leads
 with the **EV** per trade (the expectancy, in R), then the **winrate** beside
 the winrate the cut would need to break even, the **payoff** ratio, the
 **deepest fall from a high** (the maximum drawdown) with the dates and the
-longest losing streak, the **mistakes**, and the best and worst trade. Every
-figure is read against the trades the filter left out.
+longest losing streak, the **mistakes**, and the best and worst trade. The
+payoff carries the **profit factor** in money, and with one account chosen
+the drawdown is given in money and in percent as well. Every figure is read
+against the trades the filter left out. A position copied onto two accounts
+can be counted once, as one idea, so two accounts do not double a streak.
 
 Under the strip every closed trade stands as one bar against the line of the
 stop, or the weeks, months and quarters once there are too many trades to
-tell apart. The R distribution is two rings, losses and wins cut by size, with
-the losses cut where a stop lands, so an overrun of the stop is its own
-bucket. The equity curve is drawn per account, by date or by trade, coloured
-against the balance it started from. Then the playbooks with what each rule
+tell apart. The R distribution puts every trade as a dot on one axis of R,
+losses and wins counted by size underneath, with the losses cut where a stop
+lands, so an overrun of the stop is its own bucket; point at a dot for the
+trade and click it to open it. The equity curve is drawn per account, by
+date or by trade, coloured against the balance it started from. The EV by the
+weekday of entry says which days your trades earn on, and the **Prices** card
+reads the prices you kept: the RR planned, how often the target was reached,
+the average MFE and MAE, and what a winner gave back from its best. Then the playbooks with what each rule
 cost, the stop at breakeven against the stop that stayed, and the tables by
 period, pair, style, account, direction, entry timeframe, execution and time
 in the market. A bar or a row narrows the page to itself; Back steps out one
@@ -198,31 +220,56 @@ click at a time.
 
 ## Reports
 
-![A monthly report: the figures against the month before, trade by trade, the rings, the playbooks and the rules](docs/report.png)
+![A quarterly trading report: the result against the quarter before, trade by trade, the R distribution, and every month day by day as columns of R](docs/report.png)
 
 A month or a quarter opens on its figures, one tile each, with the period
 before in grey under them: the result, the winrate with the EV, the deepest
 fall from a high, the mistakes, the cards written against the days traded,
 the best and the worst trade. Under them every closed trade of the period as
-one bar, the rings, which rules were not met and what they cost, the errors
-you wrote on your cards, and your conclusions, which are kept through every
-rebuild. The Reports tab is a shelf of every month and quarter since the
-first closed trade, with its figures whether a report was built for it or
-not. A pair, a style, an account or a direction in the tables leads back
-to the trades it was counted from.
+one bar, the R distribution, **day by day** (the month as a calendar on
+its back, a column on every day as tall as the R it made or lost), which
+rules were not met and what they cost, the errors you wrote on your cards,
+and your conclusions, which are kept through every rebuild. A pair, a style,
+an account or a direction in the tables leads back to the trades it was
+counted from.
+
+![The Reports tab: every month and quarter with its trades, winrate, R, EV and the path of R, and the year day by day](docs/reports.png)
+
+The Reports tab is a shelf of every month and quarter since the first closed
+trade, with its figures and the path its R took, whether a report was built
+for it or not. Under the shelf stands every year day by day, a square a day,
+green for a day that made R and red for one that lost it.
+
+## Prop firm accounts and their rules
+
+An account is a broker account or a prop account. A prop account holds the
+rules of its firm, and the journal keeps it against them:
+
+- the **daily loss limit**, counted on the firm's own day and clock
+  (midnight in Prague, five in the afternoon in New York, or whatever the
+  firm uses), with the fees of the day and the risk still open at the stops;
+- the **max loss**, static from the start balance, trailing under the
+  highest balance, or trailing until the floor reaches the start;
+- the **profit target** and the **minimum trading days**.
+
+Every firm writes its own rules, and a challenge, a verification and a
+funded account often differ, so the journal ships with none of them: you
+copy yours from the firm's page, as money or as a percent of the start
+balance. The row of the account then says how much of the day is spent, how
+far the balance stands above the floor now and at the stops of the open
+trades, how much of the target is made and how many trading days are done,
+in amber near a limit and in red once one is reached.
 
 ## Accounts and money
 
-![The Accounts tab: the accounts with their balances, money in and out, the trash](docs/accounts.png)
+![The Accounts tab: a broker account and a prop account with its rules and where it stands against them, the journal's clock, money in and out](docs/accounts.png)
 
 Accounts are created with a name, a start balance and a currency, and each
-sum in the journal carries the sign of its account. A prop account gets a
-**daily loss limit**: the tile on the front page adds up what today has
-already cost and what the open trades still put at risk, turns amber at four
-fifths of the limit and red when it is reached.
+sum in the journal carries the sign of its account.
 
 Deposits, withdrawals and fees are written down here, apart from trading, so
-a payout is never mistaken for a loss. When the broker shows a different
+a payout is never mistaken for a loss, each with its date and, when you know
+it, its hour. When the broker shows a different
 balance, you type the real number and the journal records the difference as
 a correction with your comment; history is never edited to make a figure
 agree. The tab also holds the words the trade form offers, the trading
@@ -259,7 +306,8 @@ matches what is on the machine.
 
 **1. A file to download.** The [releases page](https://github.com/stop-loss-enjoyer/plainbook/releases/latest)
 carries one file per system: `Plainbook-<version>-windows.exe`,
-`Plainbook-<version>-macos-arm64.zip` (Apple silicon, unzip it first) and
+`Plainbook-<version>-macos-arm64.zip` (Apple silicon, unzip it first),
+`Plainbook-<version>-macos-x86_64.zip` (a Mac with an Intel processor) and
 `Plainbook-<version>-linux-x86_64` (run `chmod +x` on it once). Inside is
 this same source, unchanged, packed together with a Python interpreter, so
 no Python is needed on the machine. Run it: a small window says where the
@@ -351,6 +399,9 @@ execution:
   - Market Entry
 risk %: 1
 entry: 2026-08-29 14:30
+entry price: 1.0842
+stop price: 1.0822
+target price: 1.0892
 playbook: pullback
 playbook version: 1.0
 setup: B: continuation from an imbalance
@@ -358,6 +409,9 @@ deviations:
 result: Win
 pnl $: 174
 exit: 2026-08-31 16:00
+exit price: 1.0877
+best price: 1.0889
+worst price: 1.0836
 ---
 
 ## Idea
@@ -379,11 +433,12 @@ Held to target, did not move the stop.
 
 An empty `deviations:` key means the rules were ticked and every one was
 met; a missing key means they were never ticked. Keep that difference if you
-edit a file by hand. The rest of the layout:
+edit a file by hand. The prices are optional, and so is every other key a
+trade does not need. The rest of the layout:
 
 ```
 journal/
-  accounts/<id>.md          start balance, currency, archived, the daily loss limit
+  accounts/<id>.md          start balance, currency, kind, the rules of a prop firm
   adjustments/<id>.md       deposit, withdrawal, fee, reconciliation
   trades/<id>/              trade.md and shots/
   plans/<id>/               plan.md and shots/
@@ -394,7 +449,7 @@ journal/
   reports/2026-08.md        a monthly report, 2026-Q3.md a quarterly one
   vocabulary.md             the styles, timeframes and execution formats the form offers
   pairs.md                  the pairs the form offers
-  settings.md               the stop edge
+  settings.md               the stop edge, the journal's clock
 .trash/                     next to journal/: deleted records, until you restore or remove them
 .drafts/                    next to journal/: screenshots of unsubmitted forms, swept daily
 ```
@@ -429,6 +484,13 @@ denominator, because a trade that ended at zero was neither won nor lost. A
 winrate worked out from fewer than five decided trades stands in grey,
 because a percentage of two trades is not a rate.
 
+**R by price** = (exit - entry) / (entry - stop) for a long, the other way
+round for a short. The stop sets 1 R by price, so the target is the RR
+planned, the best price the MFE and the worst the MAE, whatever the pair.
+
+**Profit factor** = the money of the winning trades / the money of the losing
+ones, fees and sizes included; the payoff says the same in R.
+
 **EV** = Σ R / closed trades: the expectancy, what a trade brought on average,
 in R. Unlike the winrate, it counts the break-evens: a trade closed at zero
 still paid its commission and never comes back at exactly zero R. It stands
@@ -451,13 +513,13 @@ Most software tolerates a coding agent. This one is arranged for it, and the
 arrangement is the same one that makes the journal private and durable: plain
 files, no dependencies, a small surface. There is no package manager, no
 lockfile and no build step, so an agent that can run `python3` can run the
-whole project. The tests, about three hundred of them with no fixtures and no
-network, finish in a few seconds. [AGENTS.md](AGENTS.md) holds the map of
+whole project. The tests, more than three hundred of them with no fixtures
+and no network, finish in a few seconds. [AGENTS.md](AGENTS.md) holds the map of
 the code, the invariants that must not be broken, recipes for the usual tasks,
 and the traps that have already bitten this project, each with the reason it
 exists. A guard, `tools/check_public.py`, refuses a push that would carry
 trade records or anything else it recognises as yours; it runs as a pre-push
-hook and in CI. The whole program is about 13 400 lines of Python, so it fits
+hook and in CI. The whole program is about 15 000 lines of Python, so it fits
 in a context window and an agent reasons about the real thing.
 
 `CLAUDE.md` points at the same guide, so Claude Code picks it up unprompted;
@@ -476,13 +538,26 @@ that is sold; if that is what open source means to you, this is not it.
 
 **Is it a replacement for TradeZella, Edgewonk or TraderSync?** For keeping
 and reading a journal, yes: trades with screenshots, playbooks with their
-checklist, plans, notes, daily and weekly cards, statistics, monthly and
-quarterly reports. What it lacks is what those have by being online: broker
-sync and, for most of them, a mobile app.
+checklist, plans, notes, daily and weekly cards, R-multiple statistics, MFE
+and MAE, prop firm rules, monthly and quarterly reports. What it lacks is
+what those have by being online: broker sync and, for most of them, a
+mobile app.
+
+**Does it track prop firm rules, for FTMO or another firm?** Yes, for any
+firm: a prop account holds the daily loss limit, the max loss (static or
+trailing), the profit target, the minimum trading days and the hour and
+time zone of the firm's day, typed from your firm's own rules. The journal
+says where the account stands against each.
+
+**Does it track MFE and MAE?** Yes, when you write the prices: with the entry
+and the stop on a trade, the best and the worst price it reached read as MFE
+and MAE in R, and the Statistics tab averages them with the RR planned and
+what the winners gave back.
 
 **Does it need the internet?** No. It runs on your machine, reads and writes
 a folder, and makes no network request at all. The server binds `127.0.0.1`,
-refuses requests whose origin is not itself, and has no authentication, so
+refuses requests under a host name or from an origin that is not its own,
+and has no authentication, so
 it is for your own machine and should never be put behind a public address.
 
 **Does it connect to my broker or to MetaTrader?** No, on purpose. Trades are

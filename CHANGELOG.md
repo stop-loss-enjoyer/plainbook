@@ -2,6 +2,103 @@
 
 What changed and why. Newest first.
 
+## v1.8.0, 23.09.2026
+
+A trade now says more about itself, a prop account is held against the
+rules of its own firm, and the statistics and the reports draw what used to
+be read off tables. Under it, a round of fixes to how money, risk and time
+are counted, and a journal that is safer with your files.
+
+### Pictures
+
+- **The trade page has a passport** beside its fields. The result against
+  the risk the trade was sized for, with the other trades of the account as
+  ticks and its place among them by R. The time in the market, with the
+  stretch at risk and the stretch after the stop went to the entry. The
+  curve of the account with the scale of the balance and the dates, the
+  entry and the exit marked on it.
+- **The R distribution is one line.** Every closed trade is a dot at its R,
+  the trades of one R stacked, so a loss and a win of the same size stand
+  the same distance from zero and a loss past the stop is seen where it
+  lies. Point at a dot for the trade, click it to open it. The Losses and
+  Wins tables under the line count the buckets the two rings used to.
+- **Day by day in the reports.** A month lies as a calendar on its back, a
+  column on every day that closed a trade, as tall as the R the day made or
+  lost. A quarter shows its three months side by side on one scale.
+- **The Reports tab draws the path of R** of every month and quarter, and
+  every year day by day under the shelf.
+- **By weekday** on the Statistics tab: the EV of the trades by the day of
+  the week they were entered on.
+- Every picture says its figures under the pointer at once, and the tiles
+  of a strip have depth without a shadow.
+
+### Prop firms
+
+- **An account is a broker account or a prop account**, and a prop account
+  holds the rules of its firm: the daily loss limit, the max loss (static,
+  trailing, or trailing to the start balance), the profit target, the
+  minimum trading days, and the hour and the clock the firm's day begins
+  on. A sum is typed as money or as a percent of the start. Every firm
+  writes its own rules, so the journal carries none of them; they are
+  copied from the firm's page.
+- The row of a prop account on the Accounts tab says where it stands
+  against each rule, the open trades at their stops included, in amber near
+  a limit and in red once one is reached. The front page keeps the balance
+  alone.
+- **The journal's clock**: the clock the times of the trades are written
+  in, so the day of a firm on another clock is cut in the right place.
+- Fees count in the daily loss limit, as a firm counts them.
+
+### Prices and statistics
+
+- **Prices on a trade**, all optional: the entry, the stop and the target
+  when it is opened, the exit and the best and worst price when it is
+  closed. The stop is 1 R by price, so they read in R whatever the pair:
+  the RR planned, the exit, how far the trade went for you (MFE) and
+  against you (MAE), what a winner gave back from its best. A Prices card on
+  the Statistics tab sums them up, and the least RR of a playbook is checked
+  against the target typed.
+- **Trades or ideas.** A position taken on two accounts at once is two
+  trades and one decision. A switch on the Statistics tab counts it once,
+  with the mean R of its copies, so the winrate, the EV and the deepest fall
+  describe your decisions and not the number of accounts you ran them on.
+- **Profit factor** in money beside the payoff, and the deepest fall of the
+  balance in money and percent when one account is chosen.
+
+### Forms
+
+- **Screenshots** open over the page on a click and zoom to their own size
+  on a second. They can be dragged in from a folder or picked with Choose a
+  file as well as pasted, and Save pressed while one is still on its way
+  waits for it.
+- **Hour not known**: a box under the entry and the exit. Midnight is a
+  time like any other; the box is what says the hour is unknown.
+- A deposit, a withdrawal or a fee can carry its hour, and then stays out
+  of the balance of a trade opened earlier that day.
+- A form with text or screenshots in it asks before the page is left.
+- The fields of money take a figure the way a terminal prints it, with a
+  space between the thousands, and refuse `nan` and `inf` with the name of
+  the field.
+
+### Fixes
+
+- A risk typed in money is measured against the balance of the entry date,
+  so a trade written in a week late keeps the R it had.
+- The journal refuses a request made under a foreign host name, which
+  closes the way a web page could read it through DNS rebinding.
+- Saving screenshots is safe against a crash and against a file held open
+  on Windows, a record is on the disk before it replaces the old file, and
+  two pictures pasted at once no longer take one name.
+- Long journals open faster: the balances are replayed in one pass, and a
+  screenshot the browser already holds is not sent again.
+- A month under a quarter on the Reports tab keeps the colour of its Σ R.
+
+### Downloads
+
+- A file for Macs with an Intel processor joins the Apple silicon one, and
+  the Linux file is built on Ubuntu 22.04 so it starts there and on every
+  newer system. The files know the clocks of every prop firm by name.
+
 ## v1.7.2, 23.09.2026
 
 Bug fixes and tidying after an audit of the whole journal: a record that does
