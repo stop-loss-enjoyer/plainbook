@@ -2,6 +2,61 @@
 
 What changed and why. Newest first.
 
+## v1.8.1, 02.10.2026
+
+Bug fixes and speed after a check of everything 1.8.0 added: no number is
+rounded by a save any more, a hand edit and a heading typed into a text
+survive the next save, a file that does not read is named instead of taking
+pages down, and the Reports tab opens at once on a journal of several years.
+
+- **The Reports tab is fast on a long journal.** Every month and quarter on
+  the shelf read every daily card from the disk again, so five years of cards
+  took seven seconds to open; the cards are read once now and the shelf opens
+  in a fraction of a second, with the same figures.
+- **A save no longer rounds a number.** The PnL of a trade, of a daily and a
+  weekly card, the risk, and the rules of a prop account went back into their
+  forms with six digits, so saving a form for a word in the idea turned
+  12 345.67 into 12 345.7 and a million into exponent notation. The forms and
+  the CSV export carry the figure exactly as the file holds it.
+- **A line typed as `## ` stays where it was typed.** A heading inside the
+  conclusions, an update or a plan's review was read back as a section of its
+  own, and the text under it was lost or put in the place of another section
+  on the next save. A trade file edited by hand also keeps the text above its
+  idea, under its exit and under a heading of your own when it is saved from
+  the interface.
+- **A settings, vocabulary or pairs file that does not read is named** at the
+  top of every page, and the journal goes on with its defaults until the file
+  is fixed, refusing to save over it; it used to leave every page blank. `tools/check_journal.py`
+  reports those files too. One plan that does not read no longer keeps the
+  New trade and Edit trade forms from opening, and a plan or a report whose
+  files do not all read can still be shared.
+- **Changing the date or the pair of a trade** carries its new address into
+  the notes that hold it as an example and the daily and weekly cards that
+  graded it, so they keep showing it.
+- **Removing one update picture** in the edit form of a trade or a plan no
+  longer moves the next picture under the wrong update.
+- **The fall of an account in money** on the Statistics tab is no longer
+  hidden by a deposit made during it, and its percent is of the real balance
+  at the high. The figure at the end of the equity curve counts the fees, so
+  it agrees with the result of the account.
+- **Trades | Ideas pairs copies one to one.** A re-entry on one account on
+  the day a copy was taken on another used to be folded into that copy and
+  disappear from the winrate and the EV.
+- **The Prices card** no longer counts a target as missed when the trade has
+  neither a best price nor an exit price to judge it by.
+- **Management rules ticked only at the close** hold the version of the
+  playbook, so the trade counts in what a rule costs and the rules cannot be
+  reordered under it.
+- A risk typed with a minus is refused instead of being saved as a tiny
+  percent. A save the journal refuses offers the way back to the form and
+  says that pasted pictures have to be pasted again. A form saved while a
+  screenshot is still uploading stays guarded if the upload fails.
+- The payoff tile leaves out the profit factor when the selection spans
+  accounts in different currencies. A weekday whose EV is zero is drawn amber.
+  The list of trades in a shared document scrolls inside its card on a phone.
+- An account name or a word of your lists with a quote, an apostrophe or
+  `</script>` in it no longer breaks the charts or the note form.
+
 ## v1.8.0, 23.09.2026
 
 A trade now says more about itself, a prop account is held against the
