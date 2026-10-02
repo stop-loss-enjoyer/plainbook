@@ -59,7 +59,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 | trade commentary while open, updates, journaling during the trade | **The page of an open trade, Update**: a dated line with a screenshot, kept after the close. |
 | breakeven, stop moved to entry, risk-free | **Breakeven** on an open position: frees its risk in the daily loss limit, and Statistics says what moving the stop was worth. |
 | stop overrun, slippage, losses past the stop, what a stop costs | **Statistics, Past the stop** with the stop edge slider, and the losses of the R distribution cut where a stop lands. |
-| prop firm rules, FTMO, challenge, max loss, trailing drawdown, profit target, trading days | **Accounts, Rules**: an account is broker or prop; a prop account holds the rules of its firm (daily loss limit, max loss static or trailing, profit target, min trading days, the firm's day and clock), and its tile on the front page says where it stands against each. |
+| prop firm rules, FTMO, challenge, max loss, trailing drawdown, profit target, trading days | **Accounts, Rules**: an account is broker or prop; a prop account holds the rules of its firm (daily loss limit, max loss static or trailing, profit target, min trading days, the firm's day and clock), and its row on the Accounts tab says where it stands against each. |
 | entry price, stop loss, take profit, RR, MFE, MAE, left on the table | **The Prices fold** of the trade form and of the closing form; the trade page reads them in R, Statistics has a **Prices** card. |
 | several accounts, prop firm and broker, the same trade on two accounts | **Accounts**: any number, each in its own currency, archive for the closed ones; the trade form has Duplicate on other accounts, a copy per ticked account with a risk of its own; **Statistics** counts the copies once with its Trades \| Ideas switch. |
 | deposits, withdrawals, payouts, fees, balance does not match the broker | **Accounts, money**: deposits, withdrawals and fees written apart from trading, withdrawals with a running total; a correction records the difference to the broker without editing history. |
@@ -76,8 +76,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 ## The tabs, one by one
 
 **Journal**, the front page. Account tiles with the computed balance, the
-daily loss limit where one is set, the open positions with Breakeven and
-Close, the summary tiles of the current period, the list of trades grouped by
+open positions with Breakeven and Close, the summary tiles of the current period, the list of trades grouped by
 weeks, months or quarters with filters, CSV and Share. **+ Trade** opens a
 position: account, pair, direction, style, timeframes, risk as a percent or as
 money, the plan and the playbook it is taken under, the checklist, the idea

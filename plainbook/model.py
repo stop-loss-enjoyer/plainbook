@@ -115,6 +115,8 @@ class Trade:
     notion_id: str = ""
     idea: list = field(default_factory=list)        # list of IdeaBlock
     exit_images: list = field(default_factory=list)
+    exit_text: str = ""                             # written under Exit by hand
+    preamble: str = ""                              # written above Idea by hand
     conclusions: str = ""
     updates: str = ""                               # dated lines added while it runs
     extra: dict = field(default_factory=dict)       # unknown header keys
@@ -427,6 +429,7 @@ class Card:
     best: str = ""
     overview: str = ""
     assessment: list = field(default_factory=list)   # [Graded]
+    preamble: str = ""                # written above the sections by hand
     extra: dict = field(default_factory=dict)
 
     @property
@@ -462,7 +465,7 @@ WEEK_SECTIONS = [
     ("lesson", "Key lesson", "key lesson of the week"),
 ]
 
-_WEEK_ID = re.compile(r"^\d{4}-W\d{2}$")
+_WEEK_ID = re.compile(r"^\d{4}-W\d{2}\Z")
 
 
 @dataclass
@@ -482,6 +485,7 @@ class Week:
     missed: str = ""
     lesson: str = ""
     assessment: list = field(default_factory=list)   # [Graded]
+    preamble: str = ""                # written above the sections by hand
     extra: dict = field(default_factory=dict)
 
     @property
@@ -503,6 +507,10 @@ class Week:
             raise RecordError(f"bad week {self.week!r}: expected YYYY-Www")
         if not 1 <= self.number <= 53:
             raise RecordError(f"no week {self.number} in a year")
+        # the card of a week reaches to the Monday after it, which for the
+        # last year a date can hold is past the end of the calendar
+        if int(self.week[:4]) > 9998:
+            raise RecordError(f"{self.week}: the year is past the calendar")
         if self.progress is not None and not 1 <= self.progress <= 10:
             raise RecordError(f"{self.week}: progress is 1 to 10")
         try:

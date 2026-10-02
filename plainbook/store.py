@@ -20,7 +20,8 @@ server was given (PLAINBOOK_ROOT, or the project folder):
 
 A trade body has four sections: "Idea" (sub-sections per timeframe, text and
 screenshots), "Exit" (screenshots), "Conclusions" and "Updates" (free
-markdown, kept as is).
+markdown, kept as is). Text written by hand above the first of them, or
+under "Exit", is kept as it is too.
 """
 import math
 import os
@@ -60,7 +61,7 @@ def record_path(name):
 _IMAGE = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)\s*$")
 # a day and a week share the cards folder, and the name of the file says which
 # one a file is: 2026-08-30.md against 2026-W36.md
-_WEEK_FILE = re.compile(r"^\d{4}-W\d{2}\.md$")
+_WEEK_FILE = re.compile(r"^\d{4}-W\d{2}\.md\Z")
 
 
 # --- small conversions -----------------------------------------------------
@@ -182,23 +183,28 @@ def trade_to_text(t):
         head["notion id"] = t.notion_id
     head.update(t.extra)
 
+    known = TRADE_HEADINGS
     parts = []
+    if t.preamble.strip():
+        parts.append(_escape(t.preamble.strip(), known))
     if t.idea:
         parts.append("## Idea")
         for block in t.idea:
             parts.append(f"### {block.tf}" if block.tf else "###")
             if block.text.strip():
-                parts.append(block.text.strip())
+                parts.append(_escape(block.text.strip(), known))
             parts.extend(f"![]({src})" for src in block.images)
     if t.updates.strip():
         parts.append("## Updates")
-        parts.append(t.updates.strip())
-    if t.exit_images:
+        parts.append(_escape(t.updates.strip(), known))
+    if t.exit_images or t.exit_text.strip():
         parts.append("## Exit")
+        if t.exit_text.strip():
+            parts.append(_escape(t.exit_text.strip(), known))
         parts.extend(f"![]({src})" for src in t.exit_images)
     if t.conclusions.strip():
         parts.append("## Conclusions")
-        parts.append(t.conclusions.strip())
+        parts.append(_escape(t.conclusions.strip(), known))
     return mdfile.dump(head, "\n\n".join(parts))
 
 
@@ -243,12 +249,64 @@ def text_to_trade(text):
         notion_id=_text(head.get("notion id")),
         extra={k: v for k, v in head.items() if k not in known},
     )
-    sections = _split_sections(body)
+    t.preamble, sections = _cut(body, TRADE_HEADINGS)
     t.idea = _parse_idea(sections.get("Idea", ""))
-    _, t.exit_images = _text_and_images(sections.get("Exit", ""))
+    t.exit_text, t.exit_images = _text_and_images(sections.get("Exit", ""))
     t.conclusions = sections.get("Conclusions", "").strip()
     t.updates = sections.get("Updates", "").strip()
     return t
+
+
+# The sections of a trade, a plan and the cards are typed in the interface,
+# and a typed line starting with `## ` used to read back as a heading of its
+# own: the text under it went into another section, or nowhere, and the next
+# save wrote the loss to the disk. So such a record is cut only at the
+# headings it writes itself, and any other `## ` line is text of the section
+# it stands in. A typed line that is one of those very headings goes to the
+# disk with a space in front, which markdown still draws as a heading and the
+# reader takes off again.
+TRADE_HEADINGS = ("Idea", "Updates", "Exit", "Conclusions")
+PLAN_HEADINGS = ("Analysis", "Plan", "Updates", "Review")
+CARD_HEADINGS = tuple(h for _, h, _ in CARD_SECTIONS) + ("Trades",)
+WEEK_HEADINGS = tuple(h for _, h, _ in WEEK_SECTIONS) + ("Trades",)
+
+
+def _is_heading(line, known):
+    return line.startswith("## ") and line[3:].strip() in known
+
+
+# Every line that is a heading behind any number of spaces gets one more on
+# the way out and loses one on the way in, so a line typed with a space in
+# front of it already comes back as it was typed.
+def _escape(text, known):
+    return "\n".join(" " + line if _is_heading(line.lstrip(" "), known) else line
+                     for line in text.split("\n"))
+
+
+def _unescape(text, known):
+    return "\n".join(line[1:] if line[:1] == " " and _is_heading(line.lstrip(" "), known)
+                     else line for line in text.split("\n"))
+
+
+def _cut(body, known):
+    """Body -> (the text above the first heading, {heading: the text under
+    it}), cut only at the `## ` lines named in `known`."""
+    sections, name, buf, preamble = {}, None, [], ""
+    for line in body.split("\n"):
+        if _is_heading(line, known):
+            if name is None:
+                preamble = "\n".join(buf).strip()
+            else:
+                sections[name] = "\n".join(buf).strip()
+            name, buf = line[3:].strip(), []
+        else:
+            buf.append(line)
+    if name is None:
+        preamble = "\n".join(buf).strip()
+    else:
+        sections[name] = "\n".join(buf).strip()
+    return (_unescape(preamble, known),
+            {k: _unescape(v, known) for k, v in sections.items()})
 
 
 def _split_sections(body):
@@ -402,12 +460,12 @@ def plan_to_text(k):
         for block in k.analysis:
             parts.append(f"### {block.tf}" if block.tf else "###")
             if block.text.strip():
-                parts.append(block.text.strip())
+                parts.append(_escape(block.text.strip(), PLAN_HEADINGS))
             parts.extend(f"![]({src})" for src in block.images)
     for heading, text in (("Plan", k.plan), ("Updates", k.updates),
                           ("Review", k.review)):
         if text.strip():
-            parts += [f"## {heading}", text.strip()]
+            parts += [f"## {heading}", _escape(text.strip(), PLAN_HEADINGS)]
     return mdfile.dump(head, "\n\n".join(parts))
 
 
@@ -427,7 +485,7 @@ def text_to_plan(text):
         voided=voided,
         extra={kk: v for kk, v in head.items() if kk not in known},
     )
-    sections = _split_sections(body)
+    _, sections = _cut(body, PLAN_HEADINGS)
     k.analysis = _parse_idea(sections.get("Analysis", ""))
     k.plan = sections.get("Plan", "").strip()
     k.updates = sections.get("Updates", "").strip()
@@ -675,11 +733,11 @@ def card_to_text(k):
     if k.quality:
         head["opportunity quality"] = k.quality
     head.update(k.extra)
-    parts = []
+    parts = [_escape(k.preamble.strip(), CARD_HEADINGS)] if k.preamble.strip() else []
     for name, heading, _ in CARD_SECTIONS:
         text = getattr(k, name).strip()
         if text:
-            parts += [f"## {heading}", text]
+            parts += [f"## {heading}", _escape(text, CARD_HEADINGS)]
     if k.assessment:
         parts += ["## Trades", assessment_to_text(k.assessment)]
     return mdfile.dump(head, "\n\n".join(parts))
@@ -696,7 +754,7 @@ def text_to_card(text):
         quality=_text(head.get("opportunity quality")),
         extra={kk: v for kk, v in head.items() if kk not in known},
     )
-    sections = _split_sections(body)
+    k.preamble, sections = _cut(body, CARD_HEADINGS)
     for name, heading, _ in CARD_SECTIONS:
         setattr(k, name, sections.get(heading, "").strip())
     k.assessment = text_to_assessment(sections.get("Trades", ""))
@@ -718,11 +776,11 @@ def week_to_text(k):
     if k.progress is not None:
         head["progress"] = str(k.progress)
     head.update(k.extra)
-    parts = []
+    parts = [_escape(k.preamble.strip(), WEEK_HEADINGS)] if k.preamble.strip() else []
     for name, heading, _ in WEEK_SECTIONS:
         text = getattr(k, name).strip()
         if text:
-            parts += [f"## {heading}", text]
+            parts += [f"## {heading}", _escape(text, WEEK_HEADINGS)]
     if k.assessment:
         parts += ["## Trades", assessment_to_text(k.assessment)]
     return mdfile.dump(head, "\n\n".join(parts))
@@ -742,7 +800,7 @@ def text_to_week(text):
         progress=None if progress is None else int(progress),
         extra={kk: v for kk, v in head.items() if kk not in known},
     )
-    sections = _split_sections(body)
+    k.preamble, sections = _cut(body, WEEK_HEADINGS)
     for name, heading, _ in WEEK_SECTIONS:
         setattr(k, name, sections.get(heading, "").strip())
     k.assessment = text_to_assessment(sections.get("Trades", ""))
@@ -900,6 +958,27 @@ def rename_trade(root, t, new_id):
     os.rename(src, dst)
     t.id = new_id
     return t
+
+
+def retarget_trade(root, old_id, new_id):
+    """Points the notes and the cards that name a trade at its new id after
+    `rename_trade`. They hold the id as text, and one left on the old id
+    stops matching anything without a word: the example drops off the note,
+    the line of a card loses its result. A note or a card that does not
+    read is left as it is; the rename has already happened on the disk."""
+    if old_id == new_id:
+        return
+    for n in all_notes(root, []):
+        if old_id in n.trades:
+            n.trades = [new_id if x == old_id else x for x in n.trades]
+            save_note(root, n)
+    for k, save in ([(c, save_card) for c in all_cards(root, [])]
+                    + [(w, save_week) for w in all_weeks(root, [])]):
+        rows = [row for row in k.assessment if row.id == old_id]
+        for row in rows:
+            row.id = new_id
+        if rows:
+            save(root, k)
 
 
 def save_plan(root, k):
@@ -1288,15 +1367,53 @@ def pairs_file(root):
     return os.path.join(root, JOURNAL, PAIRS_FILE)
 
 
-def all_pairs(root):
-    path = pairs_file(root)
+# The pairs, the vocabulary and the settings are read on every page, by the
+# replay of every balance and by every form, so one of them that does not
+# parse used to leave the server answering nothing at all. Such a file reads
+# as empty, the journal's own lists and settings stand in for it, and
+# `Journal.load` names it through `unread_lists`, so every page says which
+# file it is. A save refuses such a file (`_writable`) instead of writing it
+# anew: the defaults that stand in for it are not the owner's lists, and a
+# rewrite from them would take every word the typo hid along with it.
+def _owner_head(path, problems=None, root=None):
     if not os.path.isfile(path):
-        return []
-    head, _ = mdfile.parse(_read(path))
+        return {}
+    try:
+        head, _ = mdfile.parse(_read(path))
+        return head
+    except BROKEN as e:
+        if problems is not None:
+            shown = os.path.relpath(path, root).replace(os.sep, "/") if root else path
+            problems.append((shown, str(e) or type(e).__name__))
+        return {}
+
+
+def _writable(path):
+    """Raises when the owner's file is there and does not parse."""
+    if not os.path.isfile(path):
+        return
+    try:
+        mdfile.parse(_read(path))
+    except BROKEN as e:
+        raise RecordError(f"{os.path.basename(path)} does not read "
+                          f"({str(e) or type(e).__name__}); fix it by hand first, "
+                          f"so the save does not write over it")
+
+
+def unread_lists(root, problems):
+    """Names in `problems` each of the owner's files that does not parse."""
+    for path in (settings_file(root), vocabulary_file(root), pairs_file(root)):
+        _owner_head(path, problems, root)
+    return problems
+
+
+def all_pairs(root):
+    head = _owner_head(pairs_file(root))
     return [str(p) for p in _list(head.get("pairs"))]
 
 
 def save_pairs(root, pairs):
+    _writable(pairs_file(root))
     clean = sorted({str(p).strip().upper() for p in pairs if str(p).strip()})
     _write(pairs_file(root), mdfile.dump({"pairs": clean},
            "Pairs suggested in the trade form. Edited in the interface."))
@@ -1322,10 +1439,7 @@ def all_words(root, kind):
 
     A list the owner emptied stays empty; only a key that was never written
     falls back to the defaults."""
-    head = {}
-    path = vocabulary_file(root)
-    if os.path.isfile(path):
-        head, _ = mdfile.parse(_read(path))
+    head = _owner_head(vocabulary_file(root))
     if kind not in head:
         return list(VOCABULARY[kind])
     return [str(w) for w in _list(head.get(kind))]
@@ -1335,6 +1449,7 @@ def save_words(root, kind, words):
     """Writes one list back, keeping the other two as they are."""
     if kind not in VOCABULARY:
         raise KeyError(kind)
+    _writable(vocabulary_file(root))
     lists = {k: all_words(root, k) for k in VOCABULARY}
     clean, seen = [], set()
     for word in words:
@@ -1365,11 +1480,7 @@ def settings_file(root):
 
 
 def _settings(root):
-    path = settings_file(root)
-    if not os.path.isfile(path):
-        return {}
-    head, _ = mdfile.parse(_read(path))
-    return head
+    return _owner_head(settings_file(root))
 
 
 def clean_stop_edge(value):
@@ -1394,6 +1505,7 @@ def stop_edge(root):
 
 
 def save_stop_edge(root, value):
+    _writable(settings_file(root))
     head = _settings(root)
     head["stop_edge"] = f"{clean_stop_edge(value):g}"
     _write(settings_file(root), mdfile.dump(
@@ -1426,6 +1538,7 @@ def save_clock(root, name):
     if name and zone(name) is None:
         raise RecordError(f"no time zone {name!r} on this computer: "
                           f"a name like Europe/Prague or America/New_York")
+    _writable(settings_file(root))
     head = _settings(root)
     if name:
         head["clock"] = name

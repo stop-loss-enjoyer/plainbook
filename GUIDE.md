@@ -666,7 +666,9 @@ top right. Trades counts every copy, the way the reports and the front page
 do. Ideas counts each position once: its R is the mean R of its copies, its
 money is the money of all of them, so the winrate, the EV, the streaks and
 the deepest fall in R describe your decisions and not how many accounts you
-ran them on. The equity curves stay in money and carry every copy in both
+ran them on. Copies are paired one to one: two trades of one account on the
+same day are two decisions, so a re-entry stays a trade of its own beside the
+copy. The equity curves stay in money and carry every copy in both
 modes.
 
 **The cut is written out at the top.** Under the word Statistics stands the
@@ -708,7 +710,8 @@ has no month before it, but it always has a rest.
   went under its own high, between which dates, whether it has been made back or how far under it still
   stands, and the longest run of losses. With one account chosen, the tile
   also says the deepest fall of its balance in money and in percent of the
-  high it fell from, money you took out not counted as a fall. The figure is
+  balance at the high it fell from, money you put in or took out not
+  counted as a rise or a fall. The figure is
   never painted red, because a fall is negative by definition and a colour
   would say nothing.
 - **Mistakes**, counted the way a report counts them: a rule ticked as not
@@ -798,7 +801,7 @@ monthly or quarterly report is cut the same way, on the trades of that period.
 
 **By weekday.** Among the tables: a tile for every day of the week with the
 EV of the closed trades entered on it and how many there were, green above
-zero and red under it, pale under three trades. Point at a tile for its
+zero, red under it and amber at zero, pale under three trades. Point at a tile for its
 winrate and its R. Saturday and Sunday stand only when something was entered
 on them.
 
@@ -818,9 +821,10 @@ opening balance of the account, or the balance it entered the cut with. The
 wash under the curve is green above that line and red below it, so which side
 of the start the account is on is read before a single number is. A hollow dot
 on the curve is money that moved outside a trade: a deposit, a withdrawal, a
-fee. The dashed line steps with it, up at a deposit and down at a withdrawal,
+fee. The dashed line steps with a deposit and a withdrawal, up and down,
 so the wash stays what the trading did and taking money out does not paint the
-account red. The numbers at the end of the line are the balance the curve ends
+account red; a fee stays under the line as the cost of trading it is, so the
+figure at the end agrees with the result of the account. The numbers at the end of the line are the balance the curve ends
 at, which is the balance now unless the page is cut to a period, and how far it
 is from that line.
 
@@ -870,7 +874,8 @@ the edge it was written with in its text; rebuild it to read it at the new one.
 
 **Prices.** Among the tables, once closed trades carry an entry and a stop:
 how many do, the RR planned on average, how often the market reached the
-target whether it was taken or not, how far the trades went for you (MFE) and
+target whether it was taken or not (counted on the trades with a best price or
+an exit price to judge it by), how far the trades went for you (MFE) and
 against you (MAE) on average, and what a winner gave back on average from its
 best to its exit. Every figure is in R by price, so pairs of any size stand
 together.
@@ -1265,9 +1270,16 @@ the program's repository. A copy on an external drive is worth having too.
   A file was edited by hand and something in it does not parse: a date written
   the wrong way round, a letter in a number, a header without its closing
   line. The box names the file and the reason; everything else keeps working
-  and the figures simply leave that record out until it is fixed. From the
+  and the figures simply leave that record out until it is fixed. A
+  `settings.md`, `vocabulary.md` or `pairs.md` that does not parse is named the
+  same way, and the journal uses its defaults until the file is fixed by hand;
+  a save over it is refused, so nothing the mistake hid is written over. From the
   terminal, `python3 tools/check_journal.py` prints the same list, for the
   folder that holds `journal/` given as an argument, or for `PLAINBOOK_ROOT`
   when none is given.
+- **A save says Not saved.** A field held something the journal cannot
+  read, a letter in a number or a minus in the risk; the page says which.
+  **Back to the form** returns with what you typed; a screenshot pasted into
+  the form has to be pasted again.
 - **Deleted the wrong thing.** The Trash card on the Accounts tab, **Restore**.
 - **Port 8778 is taken.** Set another one through `PLAINBOOK_PORT`.

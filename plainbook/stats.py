@@ -180,6 +180,10 @@ class Prices:
         """Did the market reach the target, whether or not it was taken."""
         if self.planned is None:
             return None
+        # without a best price or an exit there is nothing to judge it by,
+        # and a target never judged is not a target missed
+        if self.best is None and self.taken is None:
+            return None
         far = max(x for x in (self.best, self.taken, -1e9) if x is not None)
         return far >= self.planned - 1e-9
 
@@ -202,7 +206,8 @@ def prices(t):
 class PriceSummary:
     trades: int = 0             # closed trades with an entry and a stop
     planned: list = field(default_factory=list)
-    reached: int = 0            # of the ones with a target, how many got there
+    reached: int = 0            # of the judged targets, how many got there
+    judged: int = 0             # targets with a best price or an exit to judge them by
     best: list = field(default_factory=list)
     worst: list = field(default_factory=list)
     left: list = field(default_factory=list)   # given back, of the winners
@@ -226,7 +231,9 @@ def price_summary(trades):
         out.trades += 1
         if p.planned is not None:
             out.planned.append(p.planned)
-            out.reached += bool(p.reached)
+            if p.reached is not None:
+                out.judged += 1
+                out.reached += p.reached
         if p.best is not None:
             out.best.append(p.best)
         if p.worst is not None:
@@ -248,18 +255,29 @@ def twin_key(t):
     return (t.pair, t.direction, t.opened)
 
 
+def twin_rows(group):
+    """The trades of one twin key paired one to one across the accounts: the
+    k-th trade of every account that has one, by id. A re-entry on one
+    account is a decision of its own and is copied, if at all, by the k-th
+    trade of another; folding every trade of the key into one idea would
+    erase it."""
+    by_account = {}
+    for t in sorted(group, key=lambda t: t.id):
+        by_account.setdefault(t.account, []).append(t)
+    depth = max(len(ts) for ts in by_account.values())
+    return [sorted((ts[k] for ts in by_account.values() if k < len(ts)),
+                   key=lambda t: t.id)
+            for k in range(depth)]
+
+
 def copies(trades):
     """How many closed trades of a selection repeat a position already counted
-    on another account."""
-    seen, extra = {}, 0
+    on another account, paired the way `ideas` folds them."""
+    groups = {}
     for t in trades:
-        if t.is_open:
-            continue
-        accounts = seen.setdefault(twin_key(t), set())
-        if accounts and t.account not in accounts:
-            extra += 1
-        accounts.add(t.account)
-    return extra
+        if not t.is_open:
+            groups.setdefault(twin_key(t), []).append(t)
+    return sum(len(row) - 1 for group in groups.values() for row in twin_rows(group))
 
 
 class Ideas:
@@ -290,20 +308,25 @@ def ideas(journal, trades):
         groups.setdefault(key, []).append(t)
     out, r = [], {}
     for key in order:
-        group = sorted(groups[key], key=lambda t: t.id)
-        if len(group) == 1 or len({t.account for t in group}) == 1:
-            out.extend(group)
-            continue
-        first = copy.copy(group[0])
-        rs = [journal.r(t.id) or 0.0 for t in group]
-        mean = sum(rs) / len(rs)
-        first.pnl = sum(t.pnl or 0.0 for t in group)
-        results = {t.result for t in group}
-        first.result = (results.pop() if len(results) == 1
-                        else "Win" if mean > 0 else "Lose" if mean < 0 else "BE")
-        r[first.id] = mean
-        out.append(first)
+        for group in twin_rows(groups[key]):
+            if len(group) == 1:
+                out.extend(group)
+            else:
+                out.append(_fold(journal, group, r))
     return Ideas(journal, r), out
+
+
+def _fold(journal, group, r):
+    """One idea standing for the copies of a position, its mean R put in `r`."""
+    first = copy.copy(group[0])
+    rs = [journal.r(t.id) or 0.0 for t in group]
+    mean = sum(rs) / len(rs)
+    first.pnl = sum(t.pnl or 0.0 for t in group)
+    results = {t.result for t in group}
+    first.result = (results.pop() if len(results) == 1
+                    else "Win" if mean > 0 else "Lose" if mean < 0 else "BE")
+    r[first.id] = mean
+    return first
 
 
 # --- playbooks ---------------------------------------------------------------
@@ -643,24 +666,27 @@ class MoneyFall:
 
 
 def money_fall(journal, account_id):
-    """The deepest fall of one account's balance from a high, its money moved
-    in and out included the way the balance has it: a withdrawal lowers the
-    balance and is not a loss, so money taken out is added back before the
-    fall is measured."""
+    """The deepest fall of one account's balance from a high. Money moved in
+    or out is neither a gain nor a loss, so deposits and withdrawals are taken
+    out of the level the fall is measured on: a deposit made inside a fall
+    would otherwise hide the losses after it. Fees and reconciliations stay
+    in, as the account result has them. The share is of the real balance on
+    the day of the high, since a level stripped of deposits is no base for a
+    percentage."""
     points = equity_events(journal, account_id)
     f = MoneyFall()
-    peak = peak_at = None
+    peak = peak_at = peak_balance = None
     out = 0.0
     for day, balance, what in points:
-        if what is not None and what != "start" and getattr(what, "kind", "") == "withdrawal":
+        if getattr(what, "kind", "") in ("deposit", "withdrawal"):
             out -= what.amount
         level = balance + out
         if peak is None or level >= peak:
-            peak, peak_at = level, day
+            peak, peak_at, peak_balance = level, day, balance
             continue
         if level - peak < f.worst:
             f.worst = level - peak
-            f.share = 100.0 * f.worst / peak if peak else 0.0
+            f.share = 100.0 * f.worst / peak_balance if peak_balance else 0.0
             f.peak_at, f.trough_at = peak_at, day
     return f
 
@@ -923,7 +949,9 @@ def period_key(day, group):
     return f"{day:%Y-%m}"
 
 
-_PERIOD_KEY = re.compile(r"^\d{4}-(?:W\d{2}|\d{2}|Q[1-4])$")
+# \Z and not $: $ lets a newline at the end through, and a key taken from
+# the address wrote a second file of the same month beside the first
+_PERIOD_KEY = re.compile(r"^\d{4}-(?:W\d{2}|\d{2}|Q[1-4])\Z")
 
 
 def grain_of(key):

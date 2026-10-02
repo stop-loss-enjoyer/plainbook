@@ -79,7 +79,7 @@ def period_months(period):
     return f"{start:%Y-%m}", f"{last:%Y-%m}"
 
 
-def trades_of_period(journal, period):
+def trades_of_period(journal, period, shelf=None):
     """The trades that closed in the period.
 
     A period is measured by the exit, the way a broker states a month and the
@@ -89,6 +89,8 @@ def trades_of_period(journal, period):
     The list on the front page groups by the entry, so a trade that crossed a
     boundary stands in one month there and in the other here."""
     parse_period(period)                   # a bad period is refused here
+    if shelf is not None:
+        return list(shelf.closed.get(period, ()))
     return stats.closed_in(journal.trades, period)
 
 
@@ -165,12 +167,55 @@ class Report:
     order: list = field(default_factory=list)      # the closed trades, by the exit
 
 
-def compose(root, journal, period, problems=None):
-    """The report of a period, from the journal as it stands."""
+class Shelf:
+    """What every period of the shelf of reports reads alike, read once.
+
+    The shelf composes every month and quarter of the journal, and each
+    compose read the cards, the weeks and the playbooks off the disk again,
+    scanned every trade for its period and summed every trade at both edges:
+    five years of daily cards took seconds. The figures are the same either
+    way: the lists keep the order the journal has them in, and a balance is
+    added up in the order balance_at adds it."""
+
+    def __init__(self, root, journal, problems=None):
+        self.journal = journal
+        self.cards = store.all_cards(root, problems)
+        self.weeks = store.all_weeks(root, problems)
+        self.playbooks = store.all_playbooks(root, problems)
+        self.closed = {}
+        for t in journal.trades:
+            if not t.is_open and t.closed:
+                for kind in ("month", "quarter"):
+                    self.closed.setdefault(period_of(t.closed, kind), []).append(t)
+        # the money of each account in the order balance_at adds it up, so
+        # that a balance comes out the same to the last digit
+        self._moved, self._closed = {}, {}
+        for c in journal.adjustments:
+            self._moved.setdefault(c.account, []).append((c.day, c.amount))
+        for t in journal.trades:
+            if not t.is_open and t.closed:
+                self._closed.setdefault(t.account, []).append((t.closed, t.pnl or 0.0))
+        self._balances = {}
+
+    def balance(self, account, moment):
+        """balance_at, over the account's own money and once for an edge."""
+        if (account, moment) not in self._balances:
+            acc = self.journal.accounts.get(account)
+            b = acc.start_balance if acc else 0.0
+            b += sum(x for day, x in self._moved.get(account, ()) if day < moment)
+            b += sum(x for day, x in self._closed.get(account, ()) if day < moment)
+            self._balances[account, moment] = b
+        return self._balances[account, moment]
+
+
+def compose(root, journal, period, problems=None, shelf=None):
+    """The report of a period, from the journal as it stands. `shelf` is what
+    the page of every report passes so that the folders are read once; a
+    report alone reads them itself."""
     start, end, name = parse_period(period)
-    trades = trades_of_period(journal, period)
+    trades = trades_of_period(journal, period, shelf)
     earlier = previous_period(period)
-    was_trades = trades_of_period(journal, earlier)
+    was_trades = trades_of_period(journal, earlier, shelf)
     r = Report(period=period, kind=kind_of(period), name=name, start=start, end=end,
                earlier=earlier, earlier_name=parse_period(earlier)[2],
                trades=trades, was_trades=was_trades,
@@ -179,10 +224,12 @@ def compose(root, journal, period, problems=None):
                fall=stats.drawdown_r(journal, trades),
                was_fall=stats.drawdown_r(journal, was_trades))
     r.held = still_open(journal, period)
-    r.playbooks = playbook_rows(root, journal, trades, problems)
+    playbooks = shelf.playbooks if shelf else None
+    r.playbooks = playbook_rows(root, journal, trades, problems, playbooks)
     r.slices = [(heading, stats.by_values(journal, trades, key))
                 for heading, key in SLICES]
-    r.balances = [(a, balance_at(journal, a, start), balance_at(journal, a, end))
+    balance = shelf.balance if shelf else (lambda a, moment: balance_at(journal, a, moment))
+    r.balances = [(a, balance(a, start), balance(a, end))
                   for a in sorted(journal.accounts)
                   if not journal.accounts[a].archived
                   or any(t.account == a for t in trades)]
@@ -190,10 +237,10 @@ def compose(root, journal, period, problems=None):
     # a card that does not read is named through `problems` and left out,
     # the way every other page treats such a file (invariant 10); without
     # the list it raises, which is what the tests want
-    r.cards = [k for k in store.all_cards(root, problems)
-               if k.day and start <= k.day < end]
-    r.weeks = [k for k in store.all_weeks(root, problems)
-               if k.week and start <= k.monday < end]
+    cards = shelf.cards if shelf else store.all_cards(root, problems)
+    weeks = shelf.weeks if shelf else store.all_weeks(root, problems)
+    r.cards = [k for k in cards if k.day and start <= k.day < end]
+    r.weeks = [k for k in weeks if k.week and start <= k.monday < end]
     # A day counted here is a day worked, and work is an entry: the morning
     # the owner sat down, took the trades and wrote the card for. A position
     # that closed on its own a week later did not make that day a working
@@ -208,7 +255,7 @@ def compose(root, journal, period, problems=None):
         grades[k.grade or "not graded"] = grades.get(k.grade or "not graded", 0) + 1
     r.grades = sorted(grades.items())
     r.breakeven = stats.breakeven_split(journal, trades)
-    d = discipline(root, journal, trades, problems)
+    d = discipline(root, journal, trades, problems, playbooks)
     for f in fields(Discipline):
         setattr(r, f.name, getattr(d, f.name))
     # the order the account felt them: by the exit, the way the tape draws them
@@ -216,13 +263,15 @@ def compose(root, journal, period, problems=None):
     return r
 
 
-def playbook_rows(root, journal, trades, problems=None):
+def playbook_rows(root, journal, trades, problems=None, playbooks=None):
     """The trades by the playbook they were opened under, its setups beneath
     it, the ones under none last. Empty when no trade names one."""
     rows = stats.by_playbook(journal, trades)
     if not any(pid != stats.NO_PLAYBOOK for pid, _, _ in rows):
         return []
-    names = {b.id: b.name or b.id for b in store.all_playbooks(root, problems)}
+    if playbooks is None:
+        playbooks = store.all_playbooks(root, problems)
+    names = {b.id: b.name or b.id for b in playbooks}
     out = []
     for pid, s, c in rows:
         if pid == stats.NO_PLAYBOOK:
@@ -253,7 +302,7 @@ class Discipline:
     mistakes_sum: stats.Summary = None
 
 
-def discipline(root, journal, trades, problems=None):
+def discipline(root, journal, trades, problems=None, playbooks=None):
     """How the trades went through their checklists, and which rules were
     broken at what cost.
 
@@ -274,7 +323,9 @@ def discipline(root, journal, trades, problems=None):
     ticked = [t for t in trades if stats.ticked(t)]
     r = Discipline(ticked=c.ticked, unticked=c.unticked, kept=c.kept, broke=c.broke)
     rows = []
-    for p in store.all_playbooks(root, problems):
+    if playbooks is None:
+        playbooks = store.all_playbooks(root, problems)
+    for p in playbooks:
         same = [t for t in trades
                 if t.playbook == p.id and t.playbook_version == p.version]
         if not same:

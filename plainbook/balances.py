@@ -53,7 +53,7 @@ class Journal:
     def load(cls, root="."):
         """Reads the journal. A file that does not load is left out and named
         in `problems`, so that one broken record does not take the rest down."""
-        problems = []
+        problems = store.unread_lists(root, [])
         return cls(store.all_accounts(root, problems),
                    store.all_trades(root, problems),
                    store.all_adjustments(root, problems), problems,

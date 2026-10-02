@@ -5,6 +5,7 @@ import os
 import sys
 import unittest
 from datetime import datetime, timedelta
+from html import unescape
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -119,7 +120,7 @@ class EquityTipCase(unittest.TestCase):
         from plainbook.html import equity_svg
         pts = [(datetime(2026, 7, 1), 100.0), (datetime(2026, 7, 2), 110.0)]
         svg = equity_svg([("acc", "#fff", pts)], sign="€")
-        self.assertIn('"sign": "€"', svg)
+        self.assertIn('"sign": "€"', unescape(svg))
 
 
 class EquityAxesCase(unittest.TestCase):
@@ -149,15 +150,15 @@ class EquityAxesCase(unittest.TestCase):
                (datetime(2026, 7, 3), 150.0, None)]
         svg = equity_svg([("acc", "#fff", pts)], base=100.0, axis="trade")
         # the deposit shares the x of the trade before it and is marked
-        self.assertIn('"trade 1 ', svg)
+        self.assertIn('"trade 1 ', unescape(svg))
         self.assertIn("deposit +50", svg)
         self.assertIn('r="3.5"', svg)
         # the end label: 150, and the deposit is not a result, so +0 from 150
         self.assertIn("+0</text>", svg)
         self.assertIn('stroke-dasharray="3 4"', svg)
         # the tip: 110 is +10 from the start, 160 is +10 from the raised base
-        self.assertIn("110, '', 10]".replace("'", '"'), svg)
-        self.assertIn('160, "deposit +50", 10]', svg)
+        self.assertIn("110, '', 10]".replace("'", '"'), unescape(svg))
+        self.assertIn('160, "deposit +50", 10]', unescape(svg))
 
 
 class RSplitCase(unittest.TestCase):

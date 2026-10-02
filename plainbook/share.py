@@ -243,9 +243,9 @@ def doc_trades_table(j, trades, linked=False):
                  f'<td>{esc(t.style)}</td>'
                  f'<td>{esc(t.result or "open")}</td>'
                  f'<td class="num {r_class(r)}">{r_or_dash(r)}</td></tr>')
-    return (f'<table class="list"><thead><tr><th>entry</th><th>exit</th>'
-            f'<th>pair</th><th>side</th><th>style</th><th>result</th>'
-            f'<th class="num">R</th></tr></thead><tbody>{rows}</tbody></table>'
+    return (f'<div class="wide"><table class="list"><thead><tr><th>entry</th>'
+            f'<th>exit</th><th>pair</th><th>side</th><th>style</th><th>result</th>'
+            f'<th class="num">R</th></tr></thead><tbody>{rows}</tbody></table></div>'
             + (GO_SCRIPT if linked else ""))
 
 
@@ -791,6 +791,9 @@ ul{{margin:0 0 10px;padding-left:18px}}
  .twin{{grid-template-columns:1fr}}
  .sheet{{padding:20px 14px 40px}}
  table.list td,table.list th{{white-space:normal}}
+ /* seven columns are wider than a phone even wrapped: the list scrolls
+    inside its card, and the R column is not cut off at the page's edge */
+ .wide{{overflow-x:auto}}
 }}
 
 /* Paper. The journal is dark because a screen at night is looked at for

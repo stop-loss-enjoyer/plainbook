@@ -1015,12 +1015,15 @@ def equity_svg(series, width=980, height=260, cid="equity", sign="$",
         base = drawn[0][2][0][1]
 
     # the base of every point: the start, plus what was put in or taken out
-    # by then, so that the distance from it is what the trading did
+    # by then, so that the distance from it is what the trading did. A fee
+    # or a reconciliation is earned or lost like the account result has it,
+    # so only deposits and withdrawals move the base
     bases = []
     for _, _, pts, _ in drawn:
         b, per_point = base, []
         for _, _, what in pts:
-            b += getattr(what, "amount", 0.0) if _what(what) else 0.0
+            moved = getattr(what, "kind", "") in ("deposit", "withdrawal")
+            b += what.amount if moved else 0.0
             per_point.append(b)
         bases.append(per_point)
 
@@ -1194,7 +1197,7 @@ def equity_svg(series, width=980, height=260, cid="equity", sign="$",
                  f'width="{pw}" height="{ph}" fill="transparent"/>')
     svg = (f'<svg id="{cid}" viewBox="0 0 {width} {height}" width="100%" '
            f'preserveAspectRatio="xMidYMid meet" role="img" '
-           f'data-series=\'{json.dumps(data, ensure_ascii=False)}\'>'
+           f'data-series="{esc(json.dumps(data, ensure_ascii=False))}">'
            + "".join(parts) + "</svg>")
     return svg + f'<script>hover_chart("{cid}");</script>'
 
@@ -1535,6 +1538,10 @@ WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def _ev_fill(ev):
+    # a day that came out at zero, as its printed +0.00 says, is amber like
+    # a zero day of the month, not the deepest red of a loss
+    if abs(ev) < 0.005:
+        return WARN
     steps = WIN_STEPS if ev > 0 else LOSS_STEPS
     return steps[min(len(steps) - 1, int(abs(ev) / 0.35))]
 

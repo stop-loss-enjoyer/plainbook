@@ -165,7 +165,10 @@ data. Each one is followed by what it prevents.
     list, and `server.page` shows it on every page. Without the list the error
     is raised, which is what the tests and the checking tool want.
     *Prevents:* one mistyped date leaving every page blank with the reason only
-    in the log, which is what happened before 1.4.3.
+    in the log, which is what happened before 1.4.3. The owner's own files,
+    `settings.md`, `vocabulary.md` and `pairs.md`, read as the defaults when
+    they do not parse, and a save over one of them is refused (`store._writable`):
+    a rewrite from the defaults would take every word the mistake hid.
 11. **What leaves the journal is built in `share.py`, and it names every
     field it shows.** The module holds no money at all: it never imports
     `html.money` and never reads `pnl`, `risk_money` or a balance, and a
@@ -225,7 +228,9 @@ are two such forms, the update on the plan page and the review on the
 playbook page, and both use `add_shots`, which copies the new pictures in
 under the first free numbers and touches nothing else. A picture that lives inside a text is kept there as `![](shots/name.png)`;
 `place_shots` puts the new names back where the old ones stood after a rewrite,
-and `with_shots` draws them on the page.
+matching each link by the picture it names and never by its place, so a
+picture removed from the middle takes its own link with it; `with_shots` draws
+them on the page.
 
 **Add a page.** A function returning `H.page(title, body, tab, header_right)`,
 one `if` in `do_GET`, and a tab in the `links` list in `html.page` if it belongs

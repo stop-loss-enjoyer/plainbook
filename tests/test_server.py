@@ -1947,7 +1947,7 @@ class ServerCase(unittest.TestCase):
         self.assertTrue(all("USDJPY" in line for line in lines[1:]))
 
     def test_56_the_daily_limit_warns_on_the_front_page(self):
-        self.post("/account/limit", {"id": "broker", "limit": "50"})
+        self.post("/account/broker/rules", {"kind": "broker", "daily": "50"})
         self.assertEqual(store.all_accounts(self.root)["broker"].daily_loss_limit, 50)
         now = datetime.now().strftime("%Y-%m-%dT%H:%M")
         trade_id = self.open_trade(entry=now, risk="1")     # 1% of ~10 000 at risk
@@ -1957,7 +1957,7 @@ class ServerCase(unittest.TestCase):
         self.assertIn('class="rules-state lose"', html)
         self.assertIn("daily loss limit reached", html)
         self.assertIn("limit 50 $", html)
-        self.post("/account/limit", {"id": "broker", "limit": ""})
+        self.post("/account/broker/rules", {"kind": "broker", "daily": ""})
         self.assertIsNone(store.all_accounts(self.root)["broker"].daily_loss_limit)
         self.assertNotIn("daily loss limit reached", self.get("/accounts")[1])
         self.post(f"/trade/{urllib.parse.quote(trade_id)}/delete", {})
@@ -3017,7 +3017,7 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(sm.be, 0)
         self.assertIsNone(sm.payoff)
         self.assertGreater(sm.needed_wr, 100)
-        self.assertIn("a win came back at", S.payoff_tile(sm, None))
+        self.assertIn("a win came back at", S.payoff_tile(j, trades, sm, None))
         self.assertIn("a win brought less than nothing on average",
                       S.wr_tile(j, trades, sm, None))
         # a hole still open where the selection ends: "now" only when the
@@ -3223,7 +3223,7 @@ class ServerCase(unittest.TestCase):
         # the account back under it
         j = self.S.journal(True)
         used = max(0.0, -j.closed_on("broker", datetime.now())) + j.open_risk("broker")
-        self.post("/account/limit", {"id": "broker", "limit": f"{used - 50:.2f}"})
+        self.post("/account/broker/rules", {"kind": "broker", "daily": f"{used - 50:.2f}"})
         self.assertIn("daily loss limit reached", self.get("/accounts")[1])
         _, html = self.get("/")
         self.assertIn(f'action="/trade/{q}/breakeven"', html)
@@ -3262,7 +3262,7 @@ class ServerCase(unittest.TestCase):
                   {"token": self.form_token(form), "result": "Win", "pnl": "50",
                    "exit": now, "conclusions": ""})
         self.refused(f"/trade/{urllib.parse.quote(second)}/breakeven", {})
-        self.post("/account/limit", {"id": "broker", "limit": ""})
+        self.post("/account/broker/rules", {"kind": "broker", "daily": ""})
         self.post(f"/trade/{q}/delete", {})
         self.post(f"/trade/{urllib.parse.quote(second)}/delete", {})
 

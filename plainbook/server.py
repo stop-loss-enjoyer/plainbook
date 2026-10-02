@@ -69,6 +69,13 @@ esc = H.esc
 Safe = H.Safe
 
 
+def js(x):
+    """A value written into a <script>. JSON leaves `</script>` as it is, and
+    the page would end the script there: a style word holding it cut the
+    note form's script, and saving the note dropped every example."""
+    return json.dumps(x).replace("<", "\\u003c")
+
+
 def amount(j, x, account=None, signed=False):
     """A sum of money with its currency: the account's own, or the one every
     account shares when the figure spans accounts. When they share none the
@@ -120,7 +127,7 @@ def said_box():
         return ""
     return (f'<div class="toast" role="status">{esc(text)}</div>'
             f'<script>history.replaceState({{}}, "", '
-            f'{json.dumps(getattr(SAID, "url", "/"))})</script>')
+            f'{js(getattr(SAID, "url", "/"))})</script>')
 
 
 def page(title, body, tab="journal", header_right="", problems=(), home="/"):
@@ -670,9 +677,9 @@ def export_csv(j, trades):
         c = j.computed[t.id]
         r = j.r(t.id)
         w.writerow([t.id, t.account, t.pair, t.direction, t.style, t.entry_tf,
-                    "; ".join(t.execution), f"{t.risk:g}",
+                    "; ".join(t.execution), as_stored(t.risk),
                     store._date_to_text(t.opened, t.opened_time),
-                    t.result or "", "" if t.pnl is None else f"{t.pnl:g}",
+                    t.result or "", as_stored(t.pnl),
                     store._date_to_text(t.closed, t.closed_time),
                     store._date_to_text(t.breakeven, True),
                     t.note, t.plan,
@@ -1082,7 +1089,7 @@ def updates_card(t, keep=""):
             f'</form>')
     card = f'<div class="card" id="updates"><h2>Updates</h2>{lines}{form}</div>'
     scripts = (f'<script>{FORM_SCRIPT}</script>'
-               f'<script>document.body.dataset.token = {json.dumps(token)};'
+               f'<script>document.body.dataset.token = {js(token)};'
                f'init_zones();</script>')
     return card, scripts
 
@@ -1485,7 +1492,7 @@ def wr_tile(j, trades, s, rest):
         rest_clause(rest, f"{rest.wr:.1f}%" if rest and rest.decided else "-")) if x))
 
 
-def payoff_tile(s, rest):
+def payoff_tile(j, trades, s, rest, money=None):
     """How many R a win brings for every R a loss costs. A ratio carries no
     sign: whether it is enough is what the winrate needed beside it says."""
     if s.payoff is None:
@@ -1502,8 +1509,13 @@ def payoff_tile(s, rest):
                     f'{won} · <span class="muted">too few trades to '
                     f'weigh</span>', "muted")
     was = rest.payoff if rest else None
+    # euros won against yen lost is no ratio at all, so the factor in money
+    # is left out when the trades sit on accounts of different currencies.
+    # `money` is the selection before Ideas folded it: a folded idea sums the
+    # money of its copies under the account of the first one
+    currencies = {j.currency(t.account) for t in (money or trades) if not t.is_open}
     factor = (f'profit factor {s.profit_factor:.2f} in money'
-              if s.profit_factor is not None else "")
+              if s.profit_factor is not None and len(currencies) == 1 else "")
     return tile("payoff", f"{s.payoff:.1f} : 1", " · ".join(x for x in (
         won, factor, rest_clause(rest, f"{was:.1f} : 1" if was else "-")) if x))
 
@@ -1542,7 +1554,7 @@ def fall_tile(j, trades, s, fall, ends_now, account=""):
                 " · ".join(x for x in (when, back, run, money) if x))
 
 
-def stats_tiles(j, q, trades, rest, d, fall, ends_now):
+def stats_tiles(j, q, trades, rest, d, fall, ends_now, money=None):
     """The headline strip: six figures that say what this selection did, each
     read against the trades the filter left out. The last two are the
     report's own tiles, so the two pages are read the same way."""
@@ -1550,7 +1562,7 @@ def stats_tiles(j, q, trades, rest, d, fall, ends_now):
     best, worst = reports.extremes(j, trades)
     return ('<div class="tiles strip">'
             + ev_tile(s, rest) + wr_tile(j, trades, s, rest)
-            + payoff_tile(s, rest)
+            + payoff_tile(j, trades, s, rest, money)
             + fall_tile(j, trades, s, fall, ends_now, (q.get("account") or [""])[0])
             + mistakes_tile(d, s)
             + extremes_tile(j, best, worst, s.trades, stats_way(q))
@@ -2102,7 +2114,8 @@ def stats_page(q):
                          caption="Whole days between the entry and the exit: an "
                                  "exit is often written without an hour.")]
     body = (stats_head(j, q, trades, rest, count)
-            + stats_tiles(j, q, trades, rest, d, stats.drawdown(j, trades), ends_now)
+            + stats_tiles(j, q, trades, rest, d, stats.drawdown(j, trades), ends_now,
+                          money_trades)
             + f'<div class="pictures">{periods_card(j, q, trades, grain)}'
             f'{r_distribution(j, trades)}</div>'
             + equity_card(money_j, q, money_trades, (q.get("account") or [""])[0],
@@ -2266,8 +2279,9 @@ def search_page(q):
 
 # --- forms -----------------------------------------------------------------
 
-_FILE_NAME = re.compile(r"^[a-z0-9_-]+\.(png|jpg|jpeg|gif|webp)$")
-_TOKEN = re.compile(r"^[0-9a-f]{16}$")
+# \Z and not $, here and on the ids below: $ lets a newline at the end through
+_FILE_NAME = re.compile(r"^[a-z0-9_-]+\.(png|jpg|jpeg|gif|webp)\Z")
+_TOKEN = re.compile(r"^[0-9a-f]{16}\Z")
 
 FORM_SCRIPT = """
 // the token is set by a script further down the page, so read it when sending
@@ -2390,6 +2404,9 @@ let uploading = 0, waiting = null;
 document.addEventListener('submit', e => {
   if (!uploading) return;
   e.preventDefault();
+  // the page script let the form go as saved when the submit began; it is
+  // not saved yet, and a failed upload leaves it with the owner
+  window.form_changed && window.form_changed(e.target);
   const button = e.submitter || null;
   if (!waiting) waiting = [e.target, button, button ? button.textContent : ''];
   if (button) button.textContent = 'Waiting for the screenshot…';
@@ -2547,7 +2564,7 @@ def duplicate_block(accounts, risks, names, taken=(), editing=False):
             f'<input type="checkbox" name="dup" value="{esc(a)}"> '
             f'{esc(names.get(a) or a)}</label></td>'
             f'<td class="num"><input type="text" name="dup_risk_{esc(a)}" inputmode="decimal" '
-            f'style="width:110px" value="{risks.get(a, 1.0):g}"></td>'
+            f'style="width:110px" value="{as_stored(risks.get(a, 1.0))}"></td>'
             f'<td class="caption risk-hint"></td></tr>')
     verb = "Save writes" if editing else "the journal writes"
     return f"""
@@ -2757,7 +2774,7 @@ def trade_form(t=None, token="", keep=""):
 
     # the plans are offered newest first: a trade is nearly always taken under
     # the plan just written, and an old one is still there to be picked
-    plans = store.all_plans(ROOT)
+    plans = store.all_plans(ROOT, [])
     if editing and t.plan and t.plan not in {k.id for k in plans}:
         plans = plans + [Plan(id=t.plan, day=t.opened)]
     plan_ids = [k.id for k in plans]
@@ -2852,7 +2869,7 @@ def trade_form(t=None, token="", keep=""):
         t.entry_tf if editing else "", empty="-")}</div>
 <div class="field"><label>risk, % or money</label>
 <input type="text" name="risk" inputmode="decimal" style="width:110px"
- value="{risk:g}" placeholder="1 or 100$" required>
+ value="{as_stored(risk)}" placeholder="1 or 100$" required>
 <div class="caption risk-hint"></div></div>
 <div class="field"><label>entry</label>
 <input type="datetime-local" name="entry" value="{entry}"
@@ -2882,7 +2899,7 @@ def trade_form(t=None, token="", keep=""):
 <a class="btn" href="{f"/trade/{U(t.id)}{keep}" if editing else "/"}">Cancel</a></div>
 </form>
 <script>{FORM_SCRIPT}</script>
-<script>document.body.dataset.token = {json.dumps(token)};
+<script>document.body.dataset.token = {js(token)};
 init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}{f"<script>{DUP_SCRIPT}</script>" if duplicate else ""}
 <script>{RISK_HINT_SCRIPT}</script>
 <script>{PRICE_SCRIPT}</script>
@@ -2921,6 +2938,7 @@ function risk_parts(text){
     .match(/^([^\\d.]*)(\\d+(?:\\.\\d+)?|\\.\\d+)([^\\d.]*)$/);
   if (!m) return null;
   const unit = m[1] + m[3];
+  if (/[-\u2212]/.test(unit)) return null;
   return {number: parseFloat(m[2]), money: unit !== '' && unit !== '%'};
 }
 function risk_percent(input, account){
@@ -3142,7 +3160,7 @@ def outcome_fields(t):
 {select("result", RESULTS, t.result or "", empty="pick one", required=True)}</div>
 <div class="field"><label>PnL, {H.sign(journal().currency(t.account))}</label>
 <input type="text" name="pnl" inputmode="decimal" style="width:130px"
- value="{f"{t.pnl:g}" if t.pnl is not None else ""}" required></div>
+ value="{as_stored(t.pnl)}" required></div>
 <div class="field"><label>exit</label>
 <input type="datetime-local" name="exit" value="{exit_at}"
  onclick="this.showPicker && this.showPicker()">
@@ -3175,7 +3193,7 @@ R is calculated automatically.</p></div>
 <a class="btn" href="/trade/{U(t.id)}{keep}">Cancel</a></div>
 </form>
 <script>{FORM_SCRIPT}</script>
-<script>document.body.dataset.token = {json.dumps(token)};init_zones();</script>
+<script>document.body.dataset.token = {js(token)};init_zones();</script>
 <script>{EXIT_SCRIPT}</script>
 <script>{PRICE_SCRIPT}</script>"""
 
@@ -3241,11 +3259,12 @@ ZONE_PREFIX = {"exit": "exit", "concl": "conclusions", "review": "review",
                "plan": "plan", "update": "update", "note": "note"}
 
 
-def apply_shots(record, zones):
+def apply_shots(record, zones, moved=None):
     """Rewrites the shots folder whole, so no leftovers from editing stay behind.
 
     `record` is the folder of the trade or of the plan; the pictures live in
-    its `shots` subfolder."""
+    its `shots` subfolder. `moved`, when given, is filled with the new name
+    of every source, for `place_shots`."""
     folder = os.path.join(record, store.SHOTS)
     fresh = folder + ".new"
     shutil.rmtree(fresh, ignore_errors=True)
@@ -3261,6 +3280,8 @@ def apply_shots(record, zones):
             name = f"{prefix}-{i:02d}{os.path.splitext(src)[1] or '.png'}"
             shutil.copyfile(src, os.path.join(fresh, name))
             names.append(store.record_path(name))
+            if moved is not None:
+                moved[os.path.normpath(src)] = names[-1]
         result[zone] = names
     swap_folder(fresh, folder)
     return result
@@ -3302,15 +3323,27 @@ def add_shots(record, prefix, sources):
     return names
 
 
-def place_shots(text, images):
+def place_shots(text, images, folder, moved):
     """The new file names put back where the old ones stood, the rest at the end.
 
-    The pictures of a text keep their place in it, and a picture just pasted
-    has no place yet, so it goes after the last line."""
-    queue = list(images)
-    kept = _IMAGE_IN_TEXT.sub(
-        lambda m: f"![]({queue.pop(0)})" if queue else "", text).strip()
-    return "\n\n".join([kept] + [f"![]({s})" for s in queue]).strip()
+    A link is matched by the picture it names, not by its place among the
+    links: with the first of two pictures removed, the second used to slide
+    up under the line of the first. `folder` is where the links of the text
+    lead from, `moved` what `apply_shots` renamed. A link whose picture was
+    removed goes; a picture just pasted has no place yet, so it goes after
+    the last line."""
+    used = set()
+
+    def swap(m):
+        name = moved.get(os.path.normpath(os.path.join(folder, m.group(1))))
+        if name is None:
+            return ""
+        used.add(name)
+        return f"![]({name})"
+
+    kept = _IMAGE_IN_TEXT.sub(swap, text or "").strip()
+    rest = [s for s in images if s not in used]
+    return "\n\n".join([kept] + [f"![]({s})" for s in rest]).strip()
 
 
 def drop_draft(token):
@@ -3433,6 +3466,9 @@ def apply_management(t, data, editing):
         except ValueError:
             pass
     t.exit_deviations = [r.number for r in p.management if r.number not in held]
+    # the boxes were read against these rules, so the trade is ticked and
+    # names the version (invariant 13); a version named at the entry stays
+    t.playbook_version = t.playbook_version or p.version
     keep_reasons(t, data, p.id, t.exit_deviations,
                  {r.number for r in p.checklist(t.setup)})
 
@@ -3492,6 +3528,13 @@ def figure(text, what="the number"):
     return x
 
 
+def as_stored(x):
+    """A stored number put back into an input or the CSV, as the file holds
+    it. `:g` keeps six digits, and a form saved back untouched would write
+    the rounded figure over the owner's: 12345.67 came back as 12345.7."""
+    return store._number_to_text(x)
+
+
 _RISK = re.compile(r"^([^\d.]*)(\d+(?:\.\d+)?|\.\d+)([^\d.]*)$")
 
 
@@ -3505,6 +3548,10 @@ def parse_risk(text, balance):
     if not m:
         raise RecordError(f"the risk {text!r} is not a number")
     number, unit = float(m.group(2)), m.group(1) + m.group(3)
+    # a minus is not a unit: taken as one, -1 was read as a sum of money and
+    # saved as a tiny percent, and R came out a hundred times too large
+    if "-" in unit or "\u2212" in unit:
+        raise RecordError(f"the risk {text!r} is not a number above zero")
     if unit in ("", "%"):
         return number
     if balance <= 0:
@@ -3613,12 +3660,15 @@ def copy_trade(t, account, risk):
     zones["exit"] = [own.format(s) for s in t.exit_images]
     zones["concl"] = [own.format(s) for s in conclusion_images(t.conclusions)]
     zones["update"] = [own.format(s) for s in conclusion_images(t.updates)]
-    names = apply_shots(store.trade_dir(ROOT, twin.id), zones)
+    moved = {}
+    names = apply_shots(store.trade_dir(ROOT, twin.id), zones, moved)
     for i, block in enumerate(twin.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     twin.exit_images = names.get("exit", [])
-    twin.conclusions = rewrite_conclusions(twin.conclusions, names.get("concl", []))
-    twin.updates = place_shots(twin.updates, names.get("update", []))
+    source = store.trade_dir(ROOT, t.id)
+    twin.conclusions = place_shots(twin.conclusions, names.get("concl", []),
+                                   source, moved)
+    twin.updates = place_shots(twin.updates, names.get("update", []), source, moved)
     store.save_trade(ROOT, twin)
     return twin
 
@@ -3643,11 +3693,13 @@ def edit_trade(t, data):
     t.check()
     # the folder is named after the day and the pair, so it follows them
     if not store.id_fits(t):
+        old_id = t.id
         try:
             store.rename_trade(ROOT, t, store.new_id(ROOT, t.opened, t.pair,
                                                      keep=t.id))
         except OSError as e:
             raise RecordError(str(e))
+        store.retarget_trade(ROOT, old_id, t.id)
     folder = store.trade_dir(ROOT, t.id)
     zones, kept = {}, []
     for n, block in blocks_from_form(data):
@@ -3676,15 +3728,17 @@ def edit_trade(t, data):
         zones["update"] = [os.path.join(folder, src)
                            for src in conclusion_images(t.updates)]
     t.idea = kept
-    names = apply_shots(folder, zones)
+    moved = {}
+    names = apply_shots(folder, zones, moved)
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     t.exit_images = names.get("exit", [])
     t.conclusions = (build_conclusions(one(data, "conclusions"),
                                        names.get("concl", []))
                      if editing_close
-                     else rewrite_conclusions(t.conclusions, names.get("concl", [])))
-    t.updates = place_shots(t.updates, names.get("update", []))
+                     else place_shots(t.conclusions, names.get("concl", []),
+                                      folder, moved))
+    t.updates = place_shots(t.updates, names.get("update", []), folder, moved)
     store.save_trade(ROOT, t)
     copies = [copy_trade(t, a, dup_risk(data, a, t))
               for a in twins if t.is_open]
@@ -3708,13 +3762,6 @@ def conclusions_text(text):
 
 def build_conclusions(text, images):
     return "\n\n".join([text.strip()] + [f"![]({s})" for s in images]).strip()
-
-
-def rewrite_conclusions(text, images):
-    """Swaps the image paths inside the conclusions for the new file names."""
-    queue = list(images)
-    return _IMAGE_IN_TEXT.sub(
-        lambda m: f"![]({queue.pop(0)})" if queue else "", text).strip()
 
 
 def apply_outcome(t, data):
@@ -3767,12 +3814,13 @@ def close_trade(t, data):
     zones["update"] = [os.path.join(folder, src)
                        for src in conclusion_images(t.updates)]
     t.check()
-    names = apply_shots(folder, zones)
+    moved = {}
+    names = apply_shots(folder, zones, moved)
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     t.exit_images = names.get("exit", [])
     t.conclusions = build_conclusions(conclusions, names.get("concl", []))
-    t.updates = place_shots(t.updates, names.get("update", []))
+    t.updates = place_shots(t.updates, names.get("update", []), folder, moved)
     store.save_trade(ROOT, t)
     drop_draft(token)
     drop_cache()
@@ -3998,7 +4046,7 @@ def plan_page(plan_id):
             + trades_card
             + void_card
             + f'<script>{FORM_SCRIPT}</script>'
-            + f'<script>document.body.dataset.token = {json.dumps(token)};'
+            + f'<script>document.body.dataset.token = {js(token)};'
               f'init_zones();</script>')
     return page(k.label, body, "plans", buttons)
 
@@ -4077,7 +4125,7 @@ under.</p></div>
 <a class="btn" href="{f"/plan/{U(k.id)}" if editing else "/plans"}">Cancel</a></div>
 </form>
 <script>{FORM_SCRIPT}</script>
-<script>document.body.dataset.token = {json.dumps(token)};
+<script>document.body.dataset.token = {js(token)};
 init_zones();</script>"""
 
 
@@ -4141,12 +4189,14 @@ def edit_plan(k, data):
     zones["update"] = zone_sources(data, "update", folder, token)
     k.updates = one(data, "updates")
     k.check()
-    names = apply_shots(folder, zones)
+    moved = {}
+    names = apply_shots(folder, zones, moved)
     for i, block in enumerate(k.analysis, 1):
         block.images = names.get(f"idea-{i}", [])
     k.review = build_conclusions(one(data, "review"), names.get("review", []))
     k.plan = build_conclusions(one(data, "plan_text"), names.get("plan", []))
-    k.updates = place_shots(one(data, "updates"), names.get("update", []))
+    k.updates = place_shots(one(data, "updates"), names.get("update", []),
+                            folder, moved)
     store.save_plan(ROOT, k)
     drop_draft(token)
     return k
@@ -4367,7 +4417,7 @@ def examples_block(j, n=None):
     """The examples card of the note form."""
     options = "".join(f'<option value="{esc(t.id)}">{esc(example_label(t))}</option>'
                       for t in reversed(j.trades))
-    picked = "".join(f"add_example({json.dumps(t.id)}, {json.dumps(example_label(t))});"
+    picked = "".join(f"add_example({js(t.id)}, {js(example_label(t))});"
                      for t in (note_examples(j, n) if n is not None else []))
     return (f'<div class="card"><h2>Examples</h2>'
             f'<div id="examples"></div>'
@@ -4417,7 +4467,7 @@ def note_form(n=None, token=""):
 <a class="btn" href="{f"/note/{U(n.id)}" if editing else "/notes"}">Cancel</a></div>
 </form>
 <script>{FORM_SCRIPT}</script>
-<script>document.body.dataset.token = {json.dumps(token)};
+<script>document.body.dataset.token = {js(token)};
 init_zones();</script>"""
 
 
@@ -4807,7 +4857,7 @@ def playbook_page(playbook_id):
                    f'</form>')
     review = (f'<div class="card"><h2>Review</h2>{entries}{review_form}</div>'
               f'<script>{FORM_SCRIPT}</script>'
-              f'<script>document.body.dataset.token = {json.dumps(token)};'
+              f'<script>document.body.dataset.token = {js(token)};'
               f'init_zones();</script>')
     kept = store.playbook_versions(ROOT, p.id)
     versions = ""
@@ -5199,11 +5249,12 @@ def create_playbook(data):
 
 
 def trades_under(j, playbook_id, version):
-    """The trades ticked against that version of the playbook. A trade tied
-    to it later, with no ticks, holds nothing: there was no checklist."""
+    """The trades ticked against that version of the playbook, at the entry
+    or at the close. A trade tied to it later, with no ticks, holds nothing:
+    there was no checklist."""
     return [t for t in j.trades
             if t.playbook == playbook_id and t.playbook_version == version
-            and t.deviations is not None]
+            and stats.ticked(t)]
 
 
 def edit_playbook(before, data):
@@ -5637,7 +5688,7 @@ def card_page(day):
  placeholder="A" style="width:110px"><datalist id="grades">{options}</datalist></div>
 <div class="field"><label>PnL, {H.sign(j.currency())}</label>
 <input type="text" name="pnl" inputmode="decimal" style="width:130px"
- value="{"" if k.pnl is None else f"{k.pnl:g}"}"></div>
+ value="{as_stored(k.pnl)}"></div>
 <div class="field"><label>opportunity quality</label>
 <input type="text" name="quality" list="grades" value="{esc(k.quality)}"
  placeholder="B" style="width:150px"></div>
@@ -5677,7 +5728,7 @@ def save_card(data):
         raise RecordError(f"there is a card for {k.id} already: open that one "
                           f"instead of moving this one onto it")
     if old is not None:
-        k.extra = old.extra
+        k.extra, k.preamble = old.extra, old.preamble
     store.save_card(ROOT, k)
     # the date was changed in the form, which is a rename, not a second card
     if previous and previous != k.id:
@@ -5769,7 +5820,7 @@ def week_page(key):
  placeholder="A" style="width:110px"><datalist id="grades">{options}</datalist></div>
 <div class="field"><label>PnL, {H.sign(j.currency())}</label>
 <input type="text" name="pnl" inputmode="decimal" style="width:130px"
- value="{"" if k.pnl is None else f"{k.pnl:g}"}"></div>
+ value="{as_stored(k.pnl)}"></div>
 <div class="field"><label>trades</label>
 <input type="number" name="trades" step="1" min="0" style="width:90px"
  value="{"" if k.trades is None else k.trades}">
@@ -5810,7 +5861,7 @@ def save_week(data):
         raise RecordError(f"there is a card for {k.week} already: open that one "
                           f"instead of moving this one onto it")
     if old is not None:
-        k.extra = old.extra
+        k.extra, k.preamble = old.extra, old.preamble
     store.save_week(ROOT, k)
     # the week was changed in the form, which is a rename, not a second card
     if previous and previous != k.week:
@@ -6120,7 +6171,8 @@ def prices_card(trades):
     if ps.planned:
         rows += row("RR planned, on average", f"{mean(ps.planned):.2f}",
                     f"over {plural(len(ps.planned), 'trade')} with a target")
-        rows += row("the target reached", f"{ps.reached} of {len(ps.planned)}",
+    if ps.judged:
+        rows += row("the target reached", f"{ps.reached} of {ps.judged}",
                     "by the best price or the exit, taken or not")
     if ps.best:
         rows += row("went for you, on average", f"{mean(ps.best):+.2f} R",
@@ -6154,7 +6206,7 @@ def weekday_card(j, trades):
     return (f'<div class="card"><h2>By weekday</h2>{H.weekday_svg(cells, days)}'
             f'<p class="caption">The EV of the closed trades by the day they were '
             f'entered on, with how many there were; green above zero, red under it, '
-            f'pale under three trades. Saturday and Sunday stand only when something '
+            f'amber at zero, pale under three trades. Saturday and Sunday stand only when something '
             f'was entered on them.</p></div>')
 
 
@@ -6457,7 +6509,8 @@ def reports_page():
     # every period reads the same cards folder: a card that does not read is
     # named once, not once per period
     problems = []
-    composed = {p: reports.compose(ROOT, j, p, problems) for p in months | quarters}
+    shelf = reports.Shelf(ROOT, j, problems)
+    composed = {p: reports.compose(ROOT, j, p, problems, shelf) for p in months | quarters}
     problems = sorted(set(problems))
     this_month, this_quarter = reports.period_of(now, "month"), reports.period_of(now, "quarter")
     # the one Build that is primary: the newest finished period with trades
@@ -6531,7 +6584,7 @@ def reports_page():
 
 # --- accounts and pairs ----------------------------------------------------
 
-_ACCOUNT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")
+_ACCOUNT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}\Z")
 
 
 def accounts_page(message=""):
@@ -6818,14 +6871,12 @@ def create_account(data):
         raise RecordError("account id: latin letters, digits and dashes only")
     if account_id in journal(True).accounts:
         raise RecordError(f"account {account_id} already exists")
-    limit = one(data, "limit")
     kind = one(data, "kind") or "broker"
     store.save_account(ROOT, Account(
         id=account_id, name=one(data, "name") or account_id,
         kind=kind if kind in ACCOUNT_KINDS else "broker", firm=one(data, "firm"),
         start_balance=figure(one(data, "start", "0"), "start balance"),
-        currency=(one(data, "currency", "USD") or "USD").upper(),
-        daily_loss_limit=figure(limit, "daily loss limit") if limit else None).check())
+        currency=(one(data, "currency", "USD") or "USD").upper()).check())
     drop_cache()
     return f"Account {account_id} created."
 
@@ -6884,7 +6935,7 @@ def rules_page(account_id):
     start = account.start_balance
 
     def money_field(name, label, value, hint):
-        shown = "" if value is None else f"{value:g}"
+        shown = as_stored(value)
         share = (f' <span class="caption">{100.0 * value / start:.2f}% of the start</span>'
                  if value is not None and start else "")
         return (f'<div class="field"><label>{label}</label><input type="text" '
@@ -6979,22 +7030,6 @@ def save_clock(data):
     name = store.save_clock(ROOT, one(data, "clock"))
     drop_cache()
     return f"The journal's clock: {name or 'this computer'}."
-
-
-def set_limit(data):
-    account_id = one(data, "id")
-    j = journal(True)
-    if account_id not in j.accounts:
-        raise RecordError("no such account")
-    account = j.accounts[account_id]
-    limit = one(data, "limit")
-    account.daily_loss_limit = figure(limit, "daily loss limit") if limit else None
-    store.save_account(ROOT, account)
-    drop_cache()
-    if account.daily_loss_limit is None:
-        return f"{account_id}: no daily loss limit."
-    return (f"{account_id}: the daily loss limit is "
-            f"{amount(j, account.daily_loss_limit, account_id)}.")
 
 
 def restore_record(data):
@@ -7127,7 +7162,7 @@ def remove_pair(data):
 
 
 # a word of a list: no line breaks, no header trouble, short enough for a select
-_WORD = re.compile(r"^[^\s][^\n\r:]{0,23}$")
+_WORD = re.compile(r"^[^\s][^\n\r:]{0,23}\Z")
 
 
 def _kind(data):
@@ -7407,7 +7442,7 @@ def share_report(period, q):
     if body is None:
         return None
     j = journal()
-    r = reports.compose(ROOT, j, period)
+    r = reports.compose(ROOT, j, period, [])
     carry, shots = share_wanted(q, r.trades)
     name = share_name(period)
     note = ""
@@ -7509,6 +7544,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if made is None:
             return self._send("nothing to share", 404,
                               "text/plain; charset=utf-8")
+        if isinstance(made, str):
+            return self._send(made)         # the page of a file that does not read
         name, text = made
         if (q.get("file") or [""])[0] != "1":
             return self._send(text)
@@ -7886,7 +7923,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   ("/settings/clock", save_clock),
                                   ("/account/archive", toggle_archive),
                                   ("/account/delete", delete_account),
-                                  ("/account/limit", set_limit),
                                   ("/trash/restore", restore_record),
                                   ("/money/new", record_money),
                                   ("/money/correct", correct_balance),
@@ -7923,11 +7959,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "Conclusions saved" if conclusions
                                 else "Conclusions cleared" if had else "Report rebuilt")
         except (RecordError, ValueError) as e:
-            return self._send(page("Error", f'<div class="card">'
-                                     f'<h2>Not saved</h2><p>{esc(e)}</p>'
-                                     f'<p><a href="/">Back to journal</a></p></div>'),
-                              400)
+            return self._send(page("Error", refused_page(e, data)), 400)
         return self._gone("no such page")
+
+
+def refused_page(reason, data):
+    """A save the journal refused. Back in the browser brings the typed text
+    back, but not the pictures the form's script put in: they stood in the
+    form as fields of their own, and the owner has to know before saving
+    again without them."""
+    pasted = any(k.startswith("file_") and any(v) for k, v in data.items())
+    shots = ("<p>The pictures pasted into the form are not kept: "
+             "paste them again after going back.</p>" if pasted else "")
+    back = ('<a href="/" onclick="history.back(); return false">Back to the form</a>'
+            ' · <a href="/">Back to journal</a>')
+    return (f'<div class="card"><h2>Not saved</h2><p>{esc(reason)}</p>'
+            f'{shots}<p>{back}</p></div>')
 
 
 class Server(http.server.ThreadingHTTPServer):

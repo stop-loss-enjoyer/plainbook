@@ -8,9 +8,9 @@ whenever the interface says a file could not be read:
     python3 tools/check_journal.py ~/plainbook-data
 
 Every trade, plan, playbook, note, card, week, account and adjustment is loaded the
-way the server loads it, and each one that fails is named with the reason. Nothing is
-written and nothing from the records is printed but the path of the file and
-the error.
+way the server loads it, and so are the settings, the vocabulary and the pairs;
+each one that fails is named with the reason. Nothing is written and nothing
+from the records is printed but the path of the file and the error.
 Exits non-zero when a record does not read.
 """
 import os
@@ -22,7 +22,9 @@ from plainbook import store
 
 
 def check(root):
-    problems = []
+    # the settings and the owner's lists first: the server reads them on
+    # every page, and one that does not parse is named there too
+    problems = store.unread_lists(root, [])
     counts = {}
     for name, reader in (("trades", store.all_trades), ("plans", store.all_plans),
                          ("playbooks", store.all_playbooks), ("notes", store.all_notes),
