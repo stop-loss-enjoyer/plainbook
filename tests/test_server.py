@@ -3165,6 +3165,57 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn("The trades", html)
 
+    def test_92b_a_selection_is_cut_to_a_stretch(self):
+        """Share over the list offers the latest trades and the last days,
+        and two dates of its own; a stretch with nothing in it keeps the
+        strip so that another can be picked, and makes no file."""
+        _, html = self.get("/share/journal?shots=0")
+        self.assertIn('class="stretch"', html)
+        # the choice of screenshots stays as it was set
+        self.assertIn('href="/share/journal?shots=0&amp;last=10"', html)
+        self.assertIn('name="start"', html)
+        _, html = self.get("/share/journal?last=1")
+        self.assertIn("1 trade,", html)
+        self.assertIn('class="on" href="/share/journal?last=1&amp;shots=1"', html)
+        self.assertIn("the last 1 trades", html)
+        self.assertIn('<div class="trades">', html)
+        _, html = self.get("/share/journal?start=1990-01-01&end=1990-01-02")
+        self.assertIn('class="stretch"', html)
+        self.assertNotIn('class="primary"', html)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.get("/share/journal?start=1990-01-01&end=1990-01-02&file=1")
+        self.assertEqual(caught.exception.code, 404)
+        with urllib.request.urlopen(
+                self.url("/share/journal?last=2&file=1")) as r:
+            said = r.headers.get("Content-Disposition") or ""
+            text = r.read().decode("utf-8")
+        self.assertIn("plainbook-trades-last-2.html", said)
+        self.assertNotIn('class="stretch"', text)
+        self.assertIn('<section class="trade" id=', text)
+
+    def test_92c_the_statistics_are_shared_with_their_stretch(self):
+        """Share on the Statistics tab carries the cut, offers the same
+        stretch, and the file holds closed trades only, the ones the figures
+        counted, each opening from the list."""
+        _, html = self.get("/stats")
+        self.assertIn('href="/share/stats"', html)
+        _, html = self.get("/stats?style=swing")
+        self.assertIn('href="/share/stats?style=swing"', html)
+        code, html = self.get("/share/stats?shots=0")
+        self.assertEqual(code, 200)
+        self.assertIn('class="stretch"', html)
+        self.assertIn('href="/share/stats?shots=0&amp;last=10"', html)
+        self.assertIn('action="/share/stats"', html)
+        self.assertIn('<h1>Statistics</h1>', html)
+        self.assertIn('<div class="trades">', html)
+        self.assertNotIn("<td>open</td>", html)
+        _, html = self.get("/share/stats?last=1")
+        self.assertIn("1 trade,", html)
+        with urllib.request.urlopen(
+                self.url("/share/stats?last=2&file=1")) as r:
+            said = r.headers.get("Content-Disposition") or ""
+        self.assertIn("plainbook-statistics-last-2.html", said)
+
     def test_93_a_selection_with_nothing_in_it_is_refused(self):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             self.get("/share/journal?pair=NOTHING")

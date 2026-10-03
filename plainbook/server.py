@@ -1431,7 +1431,10 @@ def stats_head(j, q, trades, rest, count=""):
              'every closed trade">Reset</a>' if active_filters(q) else "")
     right = (count + back + filters_box(j, q, "/stats") + reset + listed
              + f'<a class="btn" href="{cut_only(q, "/export.csv")}" '
-             f'title="the selection as CSV">CSV</a>')
+             f'title="the selection as CSV">CSV</a>'
+             f'<a class="btn" href="{esc(cut_only(q, "/share/stats"))}" '
+             f'title="these figures and their trades as one file, to show '
+             f'another trader">Share</a>')
     return (f'<div class="page-head"><div><h2>Statistics</h2>'
             f'<h1 class="pb-name">{title}</h1>'
             f'<p class="pb-meta">{" · ".join(bits)}</p></div>'
@@ -7229,11 +7232,12 @@ def share_switch(where, q, shots):
     """Whether the screenshots go with the file.
 
     They are the reason to send a trade at all, and they are nearly all of the
-    weight, so a long selection is offered as a list of figures instead."""
+    weight, so a long selection is offered without them: every trade still
+    stands in the file and opens from the list, in text."""
     here = '<a class="on" href="{href}">{word}</a>'
     there = '<a href="{href}">{word}</a>'
     parts = []
-    for value, word in (("1", "With screenshots"), ("0", "Figures only")):
+    for value, word in (("1", "With screenshots"), ("0", "Without screenshots")):
         shape = here if (value == "1") == bool(shots) else there
         parts.append(shape.format(href=esc(share_href(where, q, shots=value)),
                                   word=word))
@@ -7298,41 +7302,120 @@ async function share_save(link){
 """
 
 
-def share_bar(where, q, back, size, shots=None, name=""):
+def share_bar(where, q, back, size, shots=None, name="", stretch=""):
     """The strip above a preview: what the file will weigh, whether the
-    screenshots go with it, and the button that saves it.
+    screenshots go with it, the button that saves it, and for a selection
+    the stretch of the journal it is cut to.
 
     It is added to the preview by the server and never to the document, so
     what is sent carries no buttons and no addresses of this machine."""
-    word = (f'This is what leaves the journal, about '
-            f'{esc(share.size_text(size))} as a file.')
+    if size is None:
+        word = "Nothing in this stretch: pick another one."
+        save = ""
+    else:
+        word = (f'This is what leaves the journal, about '
+                f'{esc(share.size_text(size))} as a file.')
+        save = (f'<a class="primary" href="{esc(share_href(where, q, file="1"))}" '
+                f'data-name="{esc(name)}" '
+                f'onclick="share_save(this); return false">Download</a>')
     switch = share_switch(where, q, shots) if shots is not None else ""
-    save = esc(share_href(where, q, file="1"))
     return (f'<script>{SHARE_SCRIPT}</script>'
-            f'<div class="bar"><span class="word">{word}</span>{switch}'
-            f'<a class="primary" href="{save}" data-name="{esc(name)}" '
-            f'onclick="share_save(this); return false">Download</a>'
-            f'<a href="{esc(back)}">Back</a></div>')
+            f'<div class="bar"><span class="word">{word}</span>{switch}{save}'
+            f'<a href="{esc(back)}">Back</a>{stretch}</div>')
 
 
-# how long a selection may be before it is offered without its screenshots.
-# A dozen trades with their charts is a few megabytes and worth sending whole;
-# a year of them is a hundred, and nobody sends that
-SHOTS_UP_TO = 15
+# The stretch a selection is cut to before it leaves, counted back from today.
+# Pressed from the front page, Share would otherwise offer the whole journal,
+# and what is shown to another trader is nearly always the last trades. The
+# fields are the share's own: `from` and `to` of the front page are months and
+# are read that way by every tab, so a day does not go into them.
+STRETCH_FIELDS = ("start", "end", "last")
+DAY = re.compile(r"\d{4}-\d{2}-\d{2}$")
+
+
+def share_stretch(q):
+    """The stretch read off the address: the first day, the last day, and
+    the count of the latest trades, each empty when not asked for."""
+    start = (q.get("start") or [""])[0]
+    end = (q.get("end") or [""])[0]
+    last = (q.get("last") or [""])[0]
+    return (start if DAY.match(start) else "",
+            end if DAY.match(end) else "",
+            int(last) if last.isdigit() and int(last) > 0 else 0)
+
+
+def cut_to_stretch(trades, q, by_exit=False):
+    """The trades of the stretch: by the entry, as the list goes, or by the
+    exit, as the figures of the Statistics tab go (invariant 12)."""
+    start, end, last = share_stretch(q)
+    if by_exit:
+        trades = [t for t in trades if t.closed]
+    day = (lambda t: t.closed) if by_exit else (lambda t: t.opened)
+    if start:
+        trades = [t for t in trades if f"{day(t):%Y-%m-%d}" >= start]
+    if end:
+        trades = [t for t in trades if f"{day(t):%Y-%m-%d}" <= end]
+    if last:
+        trades = sorted(trades, key=day)[-last:]
+    return trades
+
+
+def stretch_row(q, where="/share/journal"):
+    """The ways to cut the selection: the latest trades by count, the last
+    days by the calendar, everything, and two dates of your own.
+
+    A choice here replaces the months of the front page, a period of the
+    Statistics tab and any other stretch; whether the screenshots go stays
+    as it was set."""
+    today = datetime.now().date()
+    def back(days):
+        return (today - timedelta(days=days)).isoformat()
+    clear = {name: None for name in
+             STRETCH_FIELDS + ("from", "to", "closed", "file")}
+    choices = [("Last 10 trades", {"last": "10"}),
+               ("Last 25 trades", {"last": "25"}),
+               ("Week", {"start": back(7)}),
+               ("Month", {"start": back(30)}),
+               ("3 months", {"start": back(91)}),
+               ("Year", {"start": back(365)}),
+               ("Everything", {})]
+    start, end, last = share_stretch(q)
+    now = {"last": str(last)} if last else {}
+    if start and not end and not last:
+        now = {"start": start}
+    elif end:
+        now = None
+    whole = not (start or end or last or any(
+        (q.get(name) or [""])[0] for name in ("from", "to", "closed")))
+    links = ""
+    for word, changes in choices:
+        lit = ' class="on"' if changes == now and (changes or whole) else ""
+        href = share_href(where, q, **{**clear, **changes})
+        links += f'<a{lit} href="{esc(href)}">{word}</a>'
+    kept = "".join(
+        f'<input type="hidden" name="{esc(name)}" value="{esc(value)}">'
+        for name, values in q.items() if name not in clear for value in values)
+    return (f'<div class="stretch"><span class="word">Stretch</span>{links}'
+            f'<form method="get" action="{where}">{kept}'
+            f'<input type="date" name="start" value="{esc(start)}" '
+            f'aria-label="from the day">'
+            f'<span class="word">to</span>'
+            f'<input type="date" name="end" value="{esc(end)}" '
+            f'aria-label="to the day">'
+            f'<button type="submit">Show</button></form></div>')
 
 
 def share_wanted(q, trades=None):
     """The two things read off the address: the file itself, and the pictures.
 
-    A single trade always carries them, since they are the reason to show it.
-    A selection carries them while it is short, because a year of trades with
-    every screenshot in it is a file nobody can send; the strip over the
-    preview switches them back on either way."""
+    They go with every document unless the strip over the preview leaves
+    them out: they are what a trade is shown for, and a selection that
+    dropped them on its own past a count read as a file that had lost them.
+    The weight is said in the strip, so a long stretch is a choice made with
+    the figure in sight."""
     asked = (q.get("shots") or [""])[0]
     carry = (q.get("file") or [""])[0] == "1"
-    if asked:
-        return carry, asked == "1"
-    return carry, trades is None or len(trades) <= SHOTS_UP_TO
+    return carry, asked != "0"
 
 
 def share_books():
@@ -7401,35 +7484,64 @@ def share_filters(j, q):
             said.append(f"{label} {value}")
     since = (q.get("from") or [""])[0]
     until = (q.get("to") or [""])[0]
+    start, end, last = share_stretch(q)
+    since, until = start or since, end or until
     if since and until:
         said.append(f"{since} to {until}")
     elif since:
         said.append(f"from {since}")
     elif until:
         said.append(f"to {until}")
+    period = (q.get("closed") or [""])[0]
+    if stats.grain_of(period):
+        said.append(period_name(period, stats.grain_of(period)))
+    if last:
+        said.append(f"the last {last} trades")
     return " · ".join(said)
 
 
-def share_selection(q):
+def share_selection(q, figures=False):
     """The journal as it is filtered right now: the figures, the list, and
-    every trade under them when the screenshots are asked for."""
+    every trade under them.
+
+    `figures` is the same file sent from the Statistics tab: the closed
+    trades its figures count, a period of it and the stretch taken by the
+    exit, and the way back is to the tab."""
     j = journal()
-    trades = apply_filters(j, q)
-    if not trades:
-        return None
+    if figures:
+        where, back_to, title, word = ("/share/stats", "/stats", "Statistics",
+                                       "statistics-")
+        trades = [t for t in stats.closed_in(apply_filters(j, q),
+                                             (q.get("closed") or [""])[0])
+                  if not t.is_open]
+    else:
+        where, back_to, title, word = "/share/journal", "/", "Trades", "trades-"
+        trades = apply_filters(j, q)
+    trades = cut_to_stretch(trades, q, by_exit=figures)
     carry, shots = share_wanted(q, trades)
     said = share_filters(j, q)
-    span = [(q.get("from") or [""])[0], (q.get("to") or [""])[0]]
+    back = share_href(back_to, q, file=None, shots=None,
+                      **{name: None for name in STRETCH_FIELDS})
+    if not trades:
+        # a stretch with nothing in it keeps the strip, so that another one
+        # can be picked; a file of nothing is not made
+        if carry or not any(share_stretch(q)):
+            return None
+        note = share_bar(where, q, back, None, stretch=stretch_row(q, where))
+        return "", share.document(title, esc(said), "", note)
+    start, end, last = share_stretch(q)
+    span = ([start or (q.get("from") or [""])[0], end or (q.get("to") or [""])[0]]
+            if not last else [f"last-{last}"])
     stem = "-".join(x for x in span if x) or datetime.now().strftime("%Y-%m-%d")
-    name = share_name("trades-" + stem)
+    name = share_name(word + stem)
     note = ""
     if not carry:
-        note = share_bar("/share/journal", q, share_href("/", q, file=None,
-                                                         shots=None),
-                         share.weigh(ROOT, trades, shots), shots, name)
+        note = share_bar(where, q, back,
+                         share.weigh(ROOT, trades, shots), shots, name,
+                         stretch_row(q, where))
     return (name,
             share.selection_document(
-                ROOT, j, trades, "Trades",
+                ROOT, j, trades, title,
                 esc(said or "the whole journal"), share_books(), shots,
                 carry, note))
 
@@ -7541,6 +7653,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             made = share_plan(parts[2], q)
         elif len(parts) == 2 and parts[1] == "journal":
             made = share_selection(q)
+        elif len(parts) == 2 and parts[1] == "stats":
+            made = share_selection(q, figures=True)
         if made is None:
             return self._send("nothing to share", 404,
                               "text/plain; charset=utf-8")

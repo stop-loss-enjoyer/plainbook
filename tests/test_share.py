@@ -230,9 +230,10 @@ class ShareCase(unittest.TestCase):
         self.assertNotIn(f"{PNL:,.0f}".replace(",", " "), text)
 
     def test_a_line_of_the_list_leads_to_its_trade(self):
-        """With the trades in full under the list, a line points at its
-        trade and the trade points back; without them there is nothing to
-        point at, and the list is plain."""
+        """The trades stand in full under the list, a line points at its
+        trade and the trade points back. Without the screenshots it is the
+        same file with the pictures left out, so a long stretch sent light
+        still opens trade by trade."""
         full = share.selection_document(self.root, self.j, self.j.trades,
                                         "Trades", "the whole journal")
         at = share.anchor(self.t)
@@ -244,18 +245,22 @@ class ShareCase(unittest.TestCase):
         plain = share.selection_document(self.root, self.j, self.j.trades,
                                          "Trades", "the whole journal",
                                          shots=False)
-        self.assertNotIn(f'href="#{at}"', plain)
-        self.assertNotIn(share.GO_SCRIPT, plain)
-        self.assertNotIn(share.HOW_TO_OPEN, plain)
+        self.assertIn(f'href="#{at}"', plain)
+        self.assertIn(f'<section class="trade" id="{at}"', plain)
+        self.assertIn(share.GO_SCRIPT, plain)
+        self.assertIn(share.HOW_TO_OPEN, plain)
+        self.assertNotIn("<img", plain.split('<div class="trades">')[1])
 
     def test_the_pages_of_a_file_lead_to_each_other(self):
-        """Two trades in a file: the first leads on to the second, the second
-        back to the first, and neither pretends to a neighbour it lacks."""
+        """Two trades in a file, the latest on top: it leads on to the
+        earlier one, the earlier one back to it, and neither pretends to a
+        neighbour it lacks."""
         later = replace(self.t, id="2026-08-15-01-eurusd",
                         opened=datetime(2026, 8, 15, 9), closed=datetime(2026, 8, 16),
                         idea=[], exit_images=[], conclusions="")
         pages = share.trade_pages(self.root, self.j, [later, self.t], None, True)
-        first, second = share.anchor(self.t), share.anchor(later)
+        first, second = share.anchor(later), share.anchor(self.t)
+        self.assertLess(pages.index(f'id="{first}"'), pages.index(f'id="{second}"'))
         self.assertIn(f'href="#{second}">next', pages)
         self.assertIn(f'href="#{first}">&larr; previous', pages)
         self.assertNotIn(f'href="#{first}">next', pages)

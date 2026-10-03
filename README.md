@@ -280,13 +280,16 @@ Restore button.
 
 ![The document of a trade: one file, with a strip that says what it weighs before it leaves](docs/share.png)
 
-**Share** on a trade, on a plan, over the filtered list or on a report writes
-one HTML file with the screenshots carried inside it. It opens on any
-machine, offline, with no journal running, and prints to a PDF that reads
-like the journal. No money travels in it: the PnL, the risk in money, the
-balances, the size and even the name of the account stay home. What travels
-is R, the percent the risk was written as, and the words you wrote. You see
-the document, and what it will weigh, before you send it.
+**Share** on a trade, on a plan, over the filtered list, on the Statistics
+tab or on a report writes one HTML file with the screenshots carried inside
+it. Over the list and on Statistics a row called Stretch cuts it first: the
+last 10 or 25 trades, the last week, month, three months or year, everything,
+or two dates of your own. Each line of that file opens its trade. It opens
+on any machine, offline, with no journal running, and prints to a PDF that
+reads like the journal. No money travels in it: the PnL, the risk in money,
+the balances, the size and even the name of the account stay home. What
+travels is R, the percent the risk was written as, and the words you wrote.
+You see the document, and what it will weigh, before you send it.
 
 ## Search
 

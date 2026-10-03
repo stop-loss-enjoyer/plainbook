@@ -1152,7 +1152,7 @@ screenshots inside itself. It opens in any browser on
 any computer, with no journal running and no network, and it can be sent the
 way any file is sent.
 
-**Share stands in four places.** On a trade, next to Edit: the trade whole,
+**Share stands in five places.** On a trade, next to Edit: the trade whole,
 the plan it followed and the setup it was taken under, the idea with its
 screenshots by timeframe, the checklist with what was met and what was not and
 why, the exit screenshot and your conclusions. On a plan, next to Edit as well: the
@@ -1161,20 +1161,33 @@ to be done, the updates written while it ran, the review, and the trades tied
 to the plan with their R, so that the reader sees what was expected and what
 came of it. Over the list on the front page, next to CSV: whatever the
 filters are showing right now, with the figures of that selection above it.
+Its preview has a row called **Stretch** to cut the selection before it
+leaves, counted back from today: the last 10 or the last 25 trades, the last
+week, month, three months or year, everything, or two dates of your own and
+**Show**. A choice there replaces the months set on the front page and keeps
+the other filters; the trades are taken by the entry, as the list goes.
+On the Statistics tab, next to CSV: the figures of the cut you are reading
+and the closed trades they were counted on, with the same Stretch row. There
+the stretch goes by the exit, the way the figures of the tab do, and a
+choice in it replaces a period picked on the picture.
 And on a report: the month or the quarter with its figures, your conclusions
 and every trade it closed.
 
 **You see what leaves before it leaves.** Share opens the document itself, with
 one strip across the top: how much the file will weigh, whether the screenshots
 go with it, and the **Download** button. The strip is not part of the file. On
-a selection and a report you can drop the screenshots and send the figures
-alone, which turns a file of forty megabytes into one of forty kilobytes; a
+a selection and a report you can leave the screenshots out, which turns a
+file of forty megabytes into a few hundred kilobytes. The screenshots go
+unless you press **Without screenshots**, whatever the length, and the
+weight in the strip tells you first what that comes to. A
 single trade or a plan always carries them, since they are the reason to show
 it at all.
-When the trades go in full, the file reads as pages: it opens on the report,
-a line of the list opens its trade alone, and the head of the trade leads to
-the list and to the trades before and after it. The browser's Back works
-too. Printed, every page goes to paper, one trade a sheet.
+The file reads as pages either way: it opens on the figures and the list,
+the latest trade on top, a line of the list opens its trade alone, and the head of the trade leads to
+the list and to the trades before and after it. Without the screenshots a
+trade is all its text, the checklist, the idea, the updates and the
+conclusions, only the pictures stay home. The browser's Back works too.
+Printed, every page goes to paper, one trade a sheet.
 
 **Download says what it is doing.** The file is put together the moment you
 press it, and a big one takes a moment, so the button counts itself up

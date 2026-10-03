@@ -62,14 +62,21 @@ class Shots:
     pictures, which is what gets sent, or one that points at the journal
     serving them, which is what the preview draws. The preview stays light
     that way, and it is the same markup either way, so what is previewed is
-    what is sent."""
+    what is sent.
 
-    def __init__(self, folder, base, carry=True):
+    `pictures` off leaves every picture out and keeps the rest: the trades of
+    a long stretch still stand in full, so that the list leads to them, in a
+    file light enough to send."""
+
+    def __init__(self, folder, base, carry=True, pictures=True):
         self.folder = folder
         self.base = base.rstrip("/")
         self.carry = carry
+        self.pictures = pictures
 
     def src(self, name):
+        if not self.pictures:
+            return ""
         name = os.path.basename(name)
         if not self.carry:
             return f"{self.base}/{name}"
@@ -93,9 +100,9 @@ class Shots:
         return int(total * INFLATION)
 
 
-def trade_shots(root, trade_id, carry=True):
+def trade_shots(root, trade_id, carry=True, pictures=True):
     return Shots(os.path.join(store.trade_dir(root, trade_id), store.SHOTS),
-                 f"/shot/{trade_id}", carry)
+                 f"/shot/{trade_id}", carry, pictures)
 
 
 def shot_names(t):
@@ -129,10 +136,10 @@ def weigh(root, trades, shots=True):
     """What the finished file will weigh, in bytes: the pictures plus the text
     around them. Said in the preview, because a file of five megabytes and one
     of a hundred are sent in different ways."""
-    text = empty_weight() + LINE * len(trades)
+    text = empty_weight() + (LINE + CARD) * len(trades)
     if not shots:
         return text
-    return (text + CARD * len(trades)
+    return (text
             + sum(trade_shots(root, t.id).weight(shot_names(t))
                   for t in trades))
 
@@ -225,12 +232,19 @@ def anchor(t):
     return "t-" + re.sub(r"[^A-Za-z0-9_-]", "-", t.id)
 
 
+def latest_first(trades):
+    """The order of a file: the latest exit on top, since the last trades are
+    what is read first, and the pages turn in the same order as the list."""
+    return sorted(trades, key=lambda x: (x.closed or x.opened, x.opened),
+                  reverse=True)
+
+
 def doc_trades_table(j, trades, linked=False):
     """The selection as a list: one line a trade, R the last word on it.
     When the trades stand in full further down the file, a line is the way
     to its trade: the pair is the link, and the whole line answers a click."""
     rows = ""
-    for t in sorted(trades, key=lambda x: (x.closed or x.opened, x.opened)):
+    for t in latest_first(trades):
         r = j.r(t.id)
         name = pair(t.pair)
         at = ""
@@ -359,13 +373,13 @@ def ways_strip(near, place):
 
 
 def trade_card(root, j, t, book=None, carry=True, heading=None, near=None,
-               place=None):
+               place=None, pictures=True):
     """One trade whole: the facts, the checklist, the idea with its
     screenshots, the updates, the exit, the conclusions. In a file of many trades it is
     headed and stands as a page of its own, with the ways out above and
     below it: to the list, and to the trades on either side, `near` being
     the pair of them and `place` this trade's number and the count."""
-    shots = trade_shots(root, t.id, carry)
+    shots = trade_shots(root, t.id, carry, pictures)
     idea = ""
     for block in t.idea:
         pictures = "".join(shots.img(n, "idea screenshot") for n in block.images)
@@ -596,11 +610,11 @@ def plan_document(root, j, k, trades, carry=True, note=""):
                     note)
 
 
-def trade_pages(root, j, trades, book_of, carry):
+def trade_pages(root, j, trades, book_of, carry, pictures=True):
     """Every trade in full, each a page of its own that opens from the list:
     the file shows one at a time, and the heading of each leads to the list
     and to the trades on either side."""
-    order = sorted(trades, key=lambda x: (x.closed or x.opened, x.opened))
+    order = latest_first(trades)
     cards = ""
     for i, t in enumerate(order):
         near = (order[i - 1] if i else None,
@@ -608,7 +622,8 @@ def trade_pages(root, j, trades, book_of, carry):
         cards += trade_card(root, j, t, book_of(t) if book_of else None, carry,
                             heading=f"{t.pair} {t.direction} · "
                                     f"{day_text(t.opened, False)}",
-                            near=near, place=(i + 1, len(order)))
+                            near=near, place=(i + 1, len(order)),
+                            pictures=pictures)
     return f'<div class="trades">{cards}</div>'
 
 
@@ -618,18 +633,18 @@ HOW_TO_OPEN = " Press a line to open the trade."
 def selection_document(root, j, trades, title, lead, book_of=None,
                        shots=True, carry=True, note=""):
     """A stretch of the journal: the figures, the list, then every trade in
-    full when the pictures are asked for."""
+    full, a page each that opens from the list. `shots` says whether the
+    pictures go with them."""
     closed = [t for t in trades if not t.is_open]
     s = stats.summary(j, closed)
     body = ('<div class="report">' + summary_tiles(s)
             + f'<div class="card" id="trades"><h2>The trades</h2>'
-            f'{doc_trades_table(j, trades, linked=shots)}'
+            f'{doc_trades_table(j, trades, linked=True)}'
             f'<p class="caption">{len(trades)} trade'
-            f'{"" if len(trades) == 1 else "s"}, ordered by the exit.'
-            f'{HOW_TO_OPEN if shots else ""}</p></div>'
+            f'{"" if len(trades) == 1 else "s"}, latest exit first.'
+            f'{HOW_TO_OPEN}</p></div>'
             + slices(j, closed) + "</div>")
-    if shots:
-        body += trade_pages(root, j, trades, book_of, carry)
+    body += trade_pages(root, j, trades, book_of, carry, shots)
     return document(title, lead, body, note)
 
 
@@ -648,12 +663,11 @@ def report_document(root, j, r, text="", book_of=None, shots=False,
                f'<div class="text">{prose(text)}</div></div>' if text.strip() else "")
             + slices(j, closed)
             + f'<div class="card" id="trades"><h2>The trades</h2>'
-            f'{doc_trades_table(j, r.trades, linked=shots)}'
+            f'{doc_trades_table(j, r.trades, linked=bool(r.trades))}'
             f'<p class="caption">Every trade that closed inside the period, '
-            f'ordered by the exit.{HOW_TO_OPEN if shots else ""}</p></div>'
+            f'latest exit first.{HOW_TO_OPEN if r.trades else ""}</p></div>'
             "</div>")
-    if shots:
-        body += trade_pages(root, j, r.trades, book_of, carry)
+    body += trade_pages(root, j, r.trades, book_of, carry, shots)
     return document(r.name, esc(lead), body, note)
 
 
@@ -717,7 +731,7 @@ a.to{{color:{INK};text-decoration:none;border-bottom:1px solid {AXIS}}}
 tr.go{{cursor:pointer}}
 tr.go:hover td{{background:{RAISED}}}
 tr.go:hover a.to{{border-color:{DIM}}}
-.trade[id]{{display:none}}
+.trade[id]{{display:none;scroll-margin-top:190px}}
 .trade[id]:target{{display:block}}
 .sheet:has(.trade[id]:target) .report{{display:none}}
 .ways{{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
@@ -782,6 +796,17 @@ ul{{margin:0 0 10px;padding-left:18px}}
 .bar a.primary{{background:{ACCENT};border-color:{ACCENT};color:#07080c;
  font-weight:600}}
 .bar a.on{{border-color:{ACCENT};color:{INK}}}
+/* the stretch of a selection: a row of its own under the rest of the bar */
+.bar .stretch{{flex-basis:100%;display:flex;flex-wrap:wrap;gap:9px;
+ align-items:center;padding-top:9px;border-top:1px solid {AXIS}}}
+.bar .stretch .word{{margin-right:2px}}
+.bar form{{display:flex;flex-wrap:wrap;gap:7px;align-items:center;
+ margin:0 0 0 auto}}
+.bar input[type=date]{{background:{SURFACE};color:{INK};border:1px solid {AXIS};
+ border-radius:4px;padding:4px 7px;font:12px {MONO};color-scheme:dark}}
+.bar button{{background:transparent;border:1px solid {AXIS};border-radius:4px;
+ padding:5px 11px;color:{INK2};font-size:12px;cursor:pointer}}
+.bar button:hover{{border-color:{DIM};color:{INK}}}
 /* the button while the file is being built: still the button, visibly not
    waiting for another press */
 .bar a.busy,.bar a.busy:hover{{background:{RAISED};border-color:{ACCENT};

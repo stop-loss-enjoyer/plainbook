@@ -66,7 +66,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 | custom fields, my own words in the form, styles, entry formats | **Accounts, vocabularies**: styles, entry timeframes, execution formats are lists you edit; a word taken out stops being offered and stays on the trades that carry it. |
 | screenshots, charts, pictures | Paste with Ctrl+V into any drop zone: the idea and the exit of a trade, its updates, a plan and its updates, a note, a playbook review. |
 | export, spreadsheet, CSV, backup | **CSV** next to the filters of the list; the records themselves are markdown and PNG files in `journal/`, a copy of that folder is the backup. |
-| share with a mentor, send a trade, send a plan, print a report, PDF | **Share** on a trade, on a plan, on the filtered list and on a report: one HTML file with the screenshots inside and no money in it, opens offline, prints to PDF. |
+| share with a mentor, send a trade, send a plan, print a report, PDF | **Share** on a trade, on a plan, on the filtered list, on the Statistics tab and on a report: one HTML file with the screenshots inside and no money in it, opens offline, prints to PDF. Over the list it is cut to a stretch first: the last 10 or 25 trades, the last week to year, or two dates. Each line of the file opens its trade, with or without the screenshots. |
 | search | **Search**: every idea, conclusion, update, note, plan, playbook, review and card. |
 | delete, undo, restore | Nothing is shredded: a deleted record goes to `.trash` and the **Trash** card on Accounts restores it. |
 | import old trades, history from Notion or a spreadsheet | `tools/import_csv.py` writes trades the way the interface does. |
