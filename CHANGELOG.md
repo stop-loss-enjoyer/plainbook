@@ -2,6 +2,32 @@
 
 What changed and why. Newest first.
 
+## v1.8.2, 03.10.2026
+
+Share over the list and on Statistics can be a stretch of the journal, and
+every trade in the file opens. The screenshots stay unless you leave them out.
+
+- **Share over the list picks its stretch.** The strip over the preview has
+  a row of its own: the last 10 or 25 trades, the last week, month, three
+  months or year, everything, or two dates of your own. Pressed from the
+  front page, Share no longer has to mean the whole journal since its first
+  trade.
+- **Every trade of a shared file opens from the list, screenshots or not.**
+  A long selection or a report sent without its screenshots used to be a
+  flat list; now each line opens its trade in text, with the way back to the
+  list and to the trades either side, in a file still light enough to send.
+  The switch is called *Without screenshots* now.
+- **The screenshots go with every shared file unless you leave them out.**
+  A selection or a report of more than fifteen trades used to drop them on
+  its own; now only *Without screenshots* does, and the strip says the
+  weight before the file is built.
+- **Share on the Statistics tab.** Next to CSV: the figures of the cut and
+  the closed trades they were counted on, as one file, with the same choice
+  of stretch. Here the stretch goes by the exit, as the figures of the tab
+  do.
+- **The latest trade is on top of a shared file.** The list of a selection
+  and of a report goes from the last exit back, and next leads down it.
+
 ## v1.8.1, 02.10.2026
 
 Bug fixes and speed after a check of everything 1.8.0 added: no number is
