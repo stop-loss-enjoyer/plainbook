@@ -3433,6 +3433,8 @@ class ServerCase(unittest.TestCase):
         self.assertIn(f'href="/note/{note_id}"', html)
         ServerCase.note_id, ServerCase.note_trade = note_id, tid
 
+    @unittest.skipUnless(store.zone("Pacific/Kiritimati"),
+                         "no time zone data here: Python on Windows needs tzdata")
     def test_97b_the_stop_moved_stamps_the_clock_of_the_journal(self):
         """A journal written on a clock far from the computer's: the moment
         the stop went to the entry is read on the journal's clock, so it can
