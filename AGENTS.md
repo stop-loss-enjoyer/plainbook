@@ -95,6 +95,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `tools/screenshots.py` | retakes the pictures of README.md in `docs/` on the demo journal; run it after a release |
 | `tests/` | the suite: `test_server.py` walks the routes on one shared journal, the others take the modules one by one |
 | `docs/` | the screenshots of README.md, taken on the demo journal |
+| `desktop/` | the user unit for Linux, the window toggle and the bar widget for Omarchy; see its README |
 | `.githooks/pre-push` | runs `check_public.py` before a push; turned on once with `git config core.hooksPath .githooks` |
 | `.github/workflows/tests.yml` | the suite and the guard on every push, on Python 3.10 and 3.13, three systems |
 | `pyproject.toml` | the package for pipx: the `plainbook` command; nothing in it is needed to run from source |
