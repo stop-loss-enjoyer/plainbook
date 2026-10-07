@@ -2,7 +2,11 @@
 
 What changed and why. Newest first.
 
-## Unreleased
+## v1.8.3, 07.10.2026
+
+What you write is kept as written: no figure is rounded on a save, a file
+from Windows reads right, and hand-written text in the files survives the
+forms. The times the journal fills in follow its own clock.
 
 - **Copper has a coin of its own.** COPPER, COPPER-C and XCUUSD get a
   copper coin marked Cu next to gold and silver, in place of a plain coin
