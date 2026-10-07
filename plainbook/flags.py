@@ -261,6 +261,7 @@ FLAGS = {
     "xag": _disc("#b8bdc4", "#2b2f34", "Ag"),
     "xpt": _disc("#8f9aa5", "#14181c", "Pt"),
     "xpd": _disc("#9aa08c", "#1a1c15", "Pd"),
+    "xcu": _disc("#b87333", "#2e1a08", "Cu"),
     "btc": _disc("#f7931a", "#fff", "₿", 13),
     "eth": _disc("#627eea", "#fff", "Ξ", 13),
     "usdt": _disc("#26a17b", "#fff", "₮", 12),
@@ -277,7 +278,7 @@ CURRENCIES = {
     "CZK": "cz", "HUF": "hu", "RUB": "ru", "TRY": "tr", "ZAR": "za",
     "MXN": "mx", "SGD": "sg", "HKD": "hk", "INR": "in", "BRL": "br",
     "KRW": "kr", "ILS": "il", "THB": "th",
-    "XAU": "xau", "XAG": "xag", "XPT": "xpt", "XPD": "xpd",
+    "XAU": "xau", "XAG": "xag", "XPT": "xpt", "XPD": "xpd", "XCU": "xcu",
     "BTC": "btc", "XBT": "btc", "ETH": "eth", "USDT": "usdt", "USDC": "usdc",
     "WTI": "oil", "BRENT": "oil", "XTI": "oil", "XBR": "oil",
     # brokers write the oils as pairs too: UKOUSD is Brent, USOUSD is WTI
@@ -297,7 +298,7 @@ INDICES = {
     "ITA40": "it", "NETH25": "nl", "SWI20": "ch", "AUS200": "au",
     "HK50": "hk", "CHINA50": "cn", "IND50": "in",
     "EU50": "eu", "EUSTX50": "eu", "STOXX50": "eu", "ESX50": "eu",
-    "GOLD": "xau", "SILVER": "xag",
+    "GOLD": "xau", "SILVER": "xag", "COPPER": "xcu",
 }
 
 _CLEAN = re.compile(r"[^A-Z0-9]")

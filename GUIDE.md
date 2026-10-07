@@ -1004,7 +1004,7 @@ The **Accounts** tab.
 - **Pairs** are the suggestions for the form. Taking a pair out of the list does
   not touch the trades already recorded with it. Every pair is shown with its
   flags: two round ones for a currency pair, one for an index, a lettered coin
-  for gold, silver or a crypto coin. A symbol the journal does not recognise
+  for gold, silver, copper or a crypto coin. A symbol the journal does not recognise
   gets a plain coin with its first letters, and is written out in full as
   before, so nothing depends on the icon.
 

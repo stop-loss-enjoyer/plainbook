@@ -28,6 +28,13 @@ class Parsing(unittest.TestCase):
         self.assertEqual(flags.parts("US30"), ["us"])
         self.assertEqual(flags.parts("GER40"), ["de"])
 
+    def test_copper_is_its_own_coin(self):
+        # Bybit writes it COPPER-C, other brokers XCUUSD
+        self.assertEqual(flags.parts("COPPER-C"), ["xcu"])
+        self.assertEqual(flags.parts("COPPER"), ["xcu"])
+        self.assertEqual(flags.parts("XCUUSD"), ["xcu", "us"])
+        self.assertEqual(flags.parts("XCU/USD"), ["xcu", "us"])
+
     def test_four_letter_quote(self):
         self.assertEqual(flags.parts("BTCUSDT"), ["btc", "usdt"])
 

@@ -2,6 +2,12 @@
 
 What changed and why. Newest first.
 
+## Unreleased
+
+- **Copper has a coin of its own.** COPPER, COPPER-C and XCUUSD get a
+  copper coin marked Cu next to gold and silver, in place of a plain coin
+  with the letters COP.
+
 ## v1.8.2, 03.10.2026
 
 Share over the list and on Statistics can be a stretch of the journal, and
