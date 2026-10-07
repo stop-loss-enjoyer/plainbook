@@ -53,8 +53,9 @@ steps.
    trades do not commit themselves).
 5. Start the server (see your OS below) and open http://localhost:8778.
 6. Create their account together, on the **Accounts** tab, *Create account*:
-   name and start balance. **The start balance is the real balance of the
-   account today**, then the computed balance is right from the first minute.
+   an id, a name and the start balance. **The start balance is the real
+   balance of the account today**, then the computed balance is right from
+   the first minute.
    Add their trading pairs on the same tab.
 7. Check it together: create a test trade, close it, see that the balance and R
    were worked out, then delete the test trade and show them where it landed,

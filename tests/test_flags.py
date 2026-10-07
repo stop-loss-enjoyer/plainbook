@@ -38,6 +38,13 @@ class Parsing(unittest.TestCase):
     def test_four_letter_quote(self):
         self.assertEqual(flags.parts("BTCUSDT"), ["btc", "usdt"])
 
+    def test_broker_suffix_after_a_known_quote(self):
+        self.assertEqual(flags.parts("USDCHFm"), ["us", "ch"])
+        self.assertEqual(flags.parts("USDCADc"), ["us", "ca"])
+        self.assertEqual(flags.parts("USDTRYm"), ["us", "tr"])
+        self.assertEqual(flags.parts("BTCUSDTm"), ["btc", "usdt"])
+        self.assertEqual(flags.parts("EURUSDm"), ["eu", "us"])
+
     def test_unknown_symbol_keeps_its_letters(self):
         self.assertEqual(flags.parts("TSLA"), ["TSL"])
         self.assertEqual(flags.parts("SOLUSDT"), ["SOL", "usdt"])

@@ -2,7 +2,7 @@
 
 This project is meant to be kept by a coding agent. Not tolerated by one, but
 built for it: no dependencies to resolve, no build step to wait for, a test
-suite that finishes in a couple of seconds, and every rule that matters written
+suite that finishes in under twenty seconds, and every rule that matters written
 down here instead of living in someone's head.
 
 Read this before you touch anything. It is short on purpose.
@@ -42,7 +42,7 @@ records.
 ## 2. Running it
 
 ```bash
-python3 -m unittest discover -s tests    # the whole suite, a few seconds
+python3 -m unittest discover -s tests    # the whole suite, under twenty seconds
 python3 tools/check_public.py            # nothing private in the tree
 python3 tools/check_journal.py [root]    # does every record read
 python3 -m plainbook.server              # http://localhost:8778
@@ -97,7 +97,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `docs/` | the screenshots of README.md, taken on the demo journal |
 | `desktop/` | the user unit for Linux, the window toggle and the bar widget for Omarchy; see its README |
 | `.githooks/pre-push` | runs `check_public.py` before a push; turned on once with `git config core.hooksPath .githooks` |
-| `.github/workflows/tests.yml` | the suite and the guard on every push, on Python 3.10 and 3.13, three systems |
+| `.github/workflows/tests.yml` | the suite and the guard on every push, on Python 3.10 and 3.14, three systems |
 | `pyproject.toml` | the package for pipx: the `plainbook` command; nothing in it is needed to run from source |
 | `.github/workflows/release.yml` | builds one file per system from a published release, attests it, attaches it |
 
@@ -134,11 +134,12 @@ data. Each one is followed by what it prevents.
    through `store._text`, and never write an empty value into a header.
    *Prevents:* `float('[]')` killing the page, and `"[]"` showing up in the
    interface.
-4. **Win rate = wins / (wins + losses)**, break-evens excluded; "trades" and
-   the EV, which is Σ R over every closed trade, count all of them. The EV is
-   `Summary.average_r` and goes by the name EV everywhere on the screen. Both
-   are defined in `stats.Summary` and repeated in the reports and in the
-   captions.
+4. **Win rate = wins / (wins + losses)**, break-evens excluded; "trades"
+   counts every closed trade. The EV is Σ R over the trades whose R could be
+   measured (a balance at entry above zero), break-evens included, and its
+   captions print `Summary.measured`, not `trades`. `Summary.average_r` is the
+   EV and goes by the name EV everywhere on the screen. All are defined in
+   `stats.Summary` and repeated in the reports and in the captions.
    *Prevents:* two numbers on the same screen disagreeing about the same trades.
 5. **The server binds 127.0.0.1 and has no authentication.** Keep it that way,
    and keep the `Origin` check in `_same_origin` and the `Host` check in
@@ -248,8 +249,11 @@ the top, then one `CSS` string. The one exception is `flags.py`, which draws the
 coins of a trading symbol; `html.pair()` is what a page calls, and anything that
 prints a pair should call it instead of `esc()`. Class names are English and
 short (`card`, `tile`, `dropzone`, `shot`, `num`). The theme is deliberately
-flat: no gradients, no shadows except the one on the filter popover, no
-animation. Depth is drawn with flat colour only: a strip of tiles is three
+flat: no gradients; drop shadows only on what floats over the page (the filter
+popover, the pair list, the toast); motion only in the toast that answers a
+form, the short (.12s) colour change on hover and focus, and the fade of an
+opened popover or fold, and all of it is off under prefers-reduced-motion.
+Depth is drawn with flat colour only: a strip of tiles is three
 surfaces and a lit top edge a pixel thick, and a column of the day by day
 is two sides and a roof in three steps of one colour (`_block`). A figure a picture shows under the pointer rides in a
 `data-tip` attribute (`H.tip`), which the page script puts in the tip box

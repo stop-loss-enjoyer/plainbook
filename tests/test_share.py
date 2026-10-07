@@ -286,6 +286,36 @@ class ShareCase(unittest.TestCase):
         finally:
             os.remove(path)
 
+    def test_print_keeps_the_hash_target_and_breaks_between_trades(self):
+        text = self.document()
+        printed = text[text.index("@media print"):]
+        self.assertIn(".sheet:has(.trade[id]:target) .report{display:block}",
+                      printed)
+        self.assertIn(".report + .trades > .trade:first-child{break-before:page",
+                      printed)
+        self.assertIn(".onscreen{display:none}", printed)
+        self.assertIn(".bar,.ways{display:none}", printed)
+        self.assertIn('<span class="onscreen">Press a line', share.HOW_TO_OPEN)
+
+    def test_preview_and_file_draw_the_same_pictures(self):
+        t = replace(self.t, exit_images=["shots/evil.svg"],
+                    updates="stop moved\n![](shots/missing.png)")
+        folder = os.path.join(store.trade_dir(self.root, t.id), store.SHOTS)
+        path = os.path.join(folder, "evil.svg")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("<svg/>")
+        try:
+            kept = []
+            for carry in (False, True):
+                text = share.trade_document(self.root, self.j, t, self.book,
+                                            carry=carry)
+                self.assertNotIn("evil.svg", text)
+                self.assertNotIn("missing.png", text)
+                kept.append(text.count("<img"))
+            self.assertEqual(kept[0], kept[1])
+        finally:
+            os.remove(path)
+
 
 if __name__ == "__main__":
     unittest.main()

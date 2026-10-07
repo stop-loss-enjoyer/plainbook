@@ -8,7 +8,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from plainbook import store
+from plainbook import stats, store
 from plainbook.balances import Journal
 from plainbook.model import Trade, Account, Adjustment
 
@@ -227,6 +227,112 @@ class Balances(unittest.TestCase):
         self.assertEqual(j.computed["t1"].risk_money, 80)
 
 
+class AdjustmentSignCase(unittest.TestCase):
+    def test_a_withdrawal_with_a_plus_is_a_problem_not_money(self):
+        import tempfile
+        from datetime import date
+        root = tempfile.mkdtemp()
+        store.make_layout(root)
+        store.save_account(root, Account(id="broker", name="B", start_balance=1000))
+        c = Adjustment(id="w1", account="broker", kind="withdrawal", amount=-500,
+                       day=date(2026, 1, 5))
+        store.save_adjustment(root, c)
+        path = os.path.join(root, store.JOURNAL, store.ADJUSTMENTS, "w1.md")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("-500", text)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text.replace("-500", "500"))
+        j = Journal.load(root)
+        self.assertTrue(any("w1" in p and "minus sign" in why for p, why in j.problems))
+        self.assertEqual(j.balance("broker"), 1000)
+        with self.assertRaises(Exception):
+            Adjustment(id="d", account="broker", kind="deposit", amount=-1,
+                       day=date(2026, 1, 5)).check()
+        Adjustment(id="f", account="broker", kind="fee", amount=2,
+                   day=date(2026, 1, 5)).check()
+
+class FirmDays(unittest.TestCase):
+    """Days of a prop firm that turns at 17:00 and money read on a balance of
+    nothing."""
+
+    def prop(self, **rules):
+        return Account(id="prop", kind="prop", start_balance=100000, **rules)
+
+    def test_min_days_count_the_firms_days_not_the_calendar(self):
+        a = self.prop(min_days=2, day_start="17:00", profit_target=100)
+        trades = [
+            Trade(id="a", account="prop", pair="EURUSD", direction="long",
+                  style="swing", risk=1.0, opened=datetime(2025, 10, 6, 18, 0),
+                  opened_time=True, result="Win", pnl=500,
+                  closed=datetime(2025, 10, 6, 19, 0), closed_time=True),
+            Trade(id="b", account="prop", pair="EURUSD", direction="long",
+                  style="swing", risk=1.0, opened=datetime(2025, 10, 7, 10, 0),
+                  opened_time=True, result="Win", pnl=500,
+                  closed=datetime(2025, 10, 7, 11, 0), closed_time=True)]
+        p = Journal({"prop": a}, trades, []).prop("prop", datetime(2025, 10, 8, 12))
+        # 18:00 on the 6th and 10:00 on the 7th are one day of the firm
+        self.assertEqual(p.days, 1)
+        self.assertFalse(p.passed)
+        # a midnight account counts the calendar as before
+        mid = self.prop(min_days=2, profit_target=100)
+        p = Journal({"prop": mid}, trades, []).prop("prop", datetime(2025, 10, 8, 12))
+        self.assertEqual(p.days, 2)
+        self.assertTrue(p.passed)
+
+    def test_a_loss_with_no_hour_stays_in_the_day_of_the_firm(self):
+        a = self.prop(day_start="17:00", daily_loss_limit=1000)
+        loss = Trade(id="a", account="prop", pair="EURUSD", direction="long",
+                     style="swing", risk=1.0, opened=datetime(2025, 10, 7),
+                     result="Lose", pnl=-400, closed=datetime(2025, 10, 7))
+        j = Journal({"prop": a}, [loss], [])
+        # the day that began the evening of the 6th is the one dated the 7th
+        self.assertEqual(j.prop("prop", datetime(2025, 10, 7, 10)).today, -400)
+        # once the evening of the 7th has begun a new day, it is no longer today
+        # and the morning after it is the same day, so the figure does not jump
+        late = j.prop("prop", datetime(2025, 10, 7, 20)).today
+        self.assertEqual(late, j.prop("prop", datetime(2025, 10, 8, 9)).today)
+        self.assertEqual(late, 0)
+        # a midnight account behaves as before
+        mid = Journal({"prop": self.prop()}, [loss], [])
+        self.assertEqual(mid.prop("prop", datetime(2025, 10, 7, 20)).today, -400)
+        self.assertEqual(mid.prop("prop", datetime(2025, 10, 8, 9)).today, 0)
+
+    def test_r_is_not_measured_on_a_balance_of_nothing(self):
+        accounts = {"broker": Account(id="broker", start_balance=0)}
+        early = trade("t1", (2025, 6, 2), pnl=100, result="Win", closed=(2025, 6, 3))
+        j = Journal(accounts, [
+            early,
+            trade("t2", (2025, 6, 10), pnl=200, result="Win", closed=(2025, 6, 11)),
+        ], [Adjustment(id="c1", account="broker", kind="deposit", amount=10000,
+                       day=datetime(2025, 6, 5))])
+        self.assertIsNone(j.r("t1"))
+        self.assertAlmostEqual(j.r("t2"), 200 / 101.0)
+        self.assertTrue(any(p[0] == "t1" and "R cannot be measured" in p[1]
+                            for p in j.problems))
+        self.assertFalse(any(p[0] == "t2" for p in j.problems))
+        s = stats.summary(j, j.trades)
+        self.assertAlmostEqual(s.sum_r, j.r("t2"))
+        self.assertEqual((s.trades, s.measured), (2, 1))
+        self.assertAlmostEqual(s.average_r, j.r("t2"))
+        self.assertEqual(s.sum_pnl, 300)
+
+    def test_a_win_after_the_account_went_under_zero_has_no_r(self):
+        accounts = {"broker": Account(id="broker", start_balance=1000)}
+        j = Journal(accounts, [
+            trade("t1", (2025, 6, 2), pnl=-1500, result="Lose", closed=(2025, 6, 3)),
+            trade("t2", (2025, 6, 10), pnl=50, result="Win", closed=(2025, 6, 11)),
+        ], [])
+        self.assertIsNone(j.r("t2"))
+        self.assertTrue(any(p[0] == "t2" for p in j.problems))
+        lose, win, be = stats.r_split(j, j.trades)
+        self.assertEqual(sum(row[1] for row in win), 0)
+        self.assertEqual(win[-1][1], 0)
+        self.assertEqual(stats.cumulative_r(j, j.trades)[-1], j.r("t1"))
+        self.assertEqual([x[0].id for x in stats.r_line(j, j.trades)], ["t1"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -427,4 +533,3 @@ class PropRules(unittest.TestCase):
         self.assertEqual((p.target_left, p.days_left, p.passed), (0, 1, False))
         two = one + [self.closed("b", 100, datetime(2026, 9, 2, 9), datetime(2026, 9, 2, 12))]
         self.assertTrue(Journal({"prop": a}, two, []).prop("prop", now).passed)
-

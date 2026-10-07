@@ -21,7 +21,7 @@ SURFACE = "#121214"        # cards and tables
 RAISED = "#191a1d"         # table head, group rows
 INK = "#ececee"
 INK2 = "#a3a3a9"
-DIM = "#6a6a71"
+DIM = "#7a7a82"
 GRID = "#1e1f22"
 AXIS = "#2b2c30"
 EDGE = "rgba(255,255,255,0.07)"
@@ -75,12 +75,13 @@ body{{margin:0;background:{GROUND};color:{INK};
 a{{color:{ACCENT};text-decoration:none}}
 a:hover{{color:#9ab9ff}}
 .wrap{{max-width:1460px;margin:0 auto;padding:0 20px 56px}}
-/* the header is sticky and 49px tall, so an address ending in an anchor would
-   otherwise land with the heading it names hidden underneath it */
-html{{scroll-padding-top:57px}}
+/* the header is sticky and 49px tall when it stays on one line (the script
+   writes its real height into --head when the tabs wrap), so an address ending
+   in an anchor would otherwise land with the heading it names hidden underneath */
+html{{scroll-padding-top:calc(var(--head,49px) + 8px)}}
 
-/* header: the sign, the name, the tabs; 48px tall, and the table heads
-   below know that number */
+/* header: the sign, the name, the tabs; 49px tall on one line, and the table
+   heads below follow its real height through --head */
 header{{display:flex;align-items:stretch;gap:18px;flex-wrap:wrap;
  position:sticky;top:0;z-index:8;background:{GROUND};
  border-bottom:1px solid {EDGE};min-height:49px;margin-bottom:18px}}
@@ -127,7 +128,7 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 .filters-box > summary{{list-style:none;display:inline-flex;align-items:center;gap:6px}}
 .filters-box > summary::-webkit-details-marker{{display:none}}
 .filters-box > summary::marker{{content:""}}
-.btn.icon{{padding:5px 9px;line-height:0}}
+.btn.icon{{padding:7px 9px;line-height:0}}
 .btn.active,.filters-box[open] > summary{{border-color:{ACCENT};color:{INK}}}
 .badge{{font:600 10px/1 {MONO};color:#07080c;background:{ACCENT};
  border-radius:7px;padding:2px 5px}}
@@ -144,7 +145,7 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 .switch a{{padding:4px 12px;font-size:12px;color:{DIM};
  border-right:1px solid {AXIS};letter-spacing:.02em}}
 .switch a:last-child{{border-right:none}}
-.switch a:hover{{color:{INK};background:{SURFACE}}}
+.switch a:hover{{color:{INK};background:rgba(255,255,255,.028)}}
 .switch a.current{{color:{INK};background:{RAISED};font-weight:600}}
 
 /* tiles. Three surfaces, no shadow: the page, the frame of the strip, and
@@ -172,8 +173,10 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 /* a figure and its R move to the next line together, never parted */
 .tile .sub .rest{{white-space:nowrap}}
 /* the EV shares the line with the winrate, a size down, and says by colour
-   which side of zero it is on; it drops to its own line if the tile is narrow */
-.tile .value .ev{{font-size:13px;margin-left:8px;white-space:nowrap}}
+   which side of zero it is on; if the tile is narrow it drops to its own line,
+   flush left */
+.tile .value .ev{{font-size:13px;white-space:nowrap}}
+.tile .value:has(.ev){{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:10px}}
 /* a tile that asks for attention: the daily limit of a prop account is close */
 .tile.warn{{box-shadow:inset 3px 0 0 {WARN}}}
 .tile.warn .value{{color:{WARN}}}
@@ -194,18 +197,18 @@ h2{{font-size:10px;margin:0 0 12px;color:{DIM};font-weight:600;
  text-transform:uppercase;letter-spacing:.11em}}
 h3{{font-size:10px;margin:16px 0 6px;color:{DIM};font-weight:600;
  text-transform:uppercase;letter-spacing:.09em}}
-.card > h3:first-child{{margin-top:0}}
+.card > h3:first-child,.card.twin > div > h3:first-child{{margin-top:0}}
 .card-head{{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
  margin-bottom:12px;position:relative}}
 .card-head h2{{margin:0}}
-.card-head .right{{margin-left:auto}}
+.card-head .right{{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap}}
 
 /* tables */
 table{{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}}
 th{{text-align:left;color:{DIM};font-weight:500;font-size:10px;
  text-transform:uppercase;letter-spacing:.09em;padding:7px 10px;
  background:{SURFACE};border-bottom:1px solid {AXIS};
- position:sticky;top:49px;z-index:2}}
+ position:sticky;top:var(--head,49px);z-index:2}}
 td{{padding:6px 10px;border-bottom:1px solid {GRID}}}
 /* there are many links in the table, so they are painted as text and the accent
    is kept for hovering */
@@ -241,11 +244,16 @@ form.filters{{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end}}
 label{{display:block;color:{DIM};font-size:10px;margin-bottom:4px;
  text-transform:uppercase;letter-spacing:.09em}}
 select,input[type=text],input[type=number],input[type=date],
-input[type=week],input[type=datetime-local],textarea{{background:{GROUND};color:{INK};
+input[type=week],input[type=datetime-local],input[type=time],textarea{{background:{GROUND};color:{INK};
  border:1px solid {AXIS};border-radius:4px;padding:6px 8px;
  font:13px system-ui,sans-serif}}
 input[type=number],input[type=date],input[type=week],
-input[type=datetime-local]{{font-family:{MONO};font-size:12px}}
+input[type=datetime-local],input[type=time]{{font-family:{MONO};font-size:12px}}
+/* one height for every field in a row, so a select, a date and a button
+   beside them share a line (textarea keeps its own) */
+select,input[type=text],input[type=number],input[type=date],input[type=week],
+input[type=datetime-local],input[type=time]{{height:31px}}
+form.filters .btn{{height:31px}}
 select:hover,input:hover{{border-color:{DIM}}}
 input[type=checkbox]{{accent-color:{ACCENT};vertical-align:-2px}}
 /* the stop edge slider in the head of Past the stop: the figure beside it is
@@ -255,6 +263,22 @@ input[type=checkbox]{{accent-color:{ACCENT};vertical-align:-2px}}
 .edge output{{font:600 12px/1 {MONO};color:{INK};min-width:44px}}
 select:focus,input:focus,textarea:focus{{outline:none;border-color:{ACCENT};
  box-shadow:0 0 0 2px rgba(111,157,255,.18)}}
+/* keyboard focus is drawn on what is pressed, not on text fields (they have
+   the border above); inside a clipped frame the ring is drawn inward */
+a:focus-visible,button:focus-visible,summary:focus-visible,.btn:focus-visible{{
+ outline:2px solid {ACCENT};outline-offset:2px}}
+.switch a:focus-visible,header nav a:focus-visible,td.cell>a:focus-visible{{outline-offset:-2px}}
+.btn.primary:focus-visible{{outline-color:{INK}}}
+input[type=checkbox]:focus,input[type=range]:focus{{box-shadow:none}}
+input[type=checkbox]:focus-visible,input[type=range]:focus-visible{{
+ outline:2px solid {ACCENT};outline-offset:2px}}
+/* short colour changes on hover and focus, and the fade of an opened popover
+   or fold; all of it is turned off under prefers-reduced-motion */
+.btn,.switch a,header nav a,td a,.tile .name a,.fold>summary,select,input[type=text],
+input[type=number],input[type=date],textarea{{
+ transition:color .12s,border-color .12s,background-color .12s}}
+.filters-box[open]>.popover,.fold[open]>summary~*{{animation:pop .12s ease-out}}
+@keyframes pop{{from{{opacity:0;transform:translateY(-3px)}}}}
 textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .fields{{display:flex;gap:14px;flex-wrap:wrap}}
 /* the paper puts the best trade beside the trades assessment: two columns, the
@@ -283,6 +307,9 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 /* a message that flies is still a message: with motion turned off it simply
    stands and goes */
 @media (prefers-reduced-motion: reduce){{
+ .btn,.switch a,header nav a,td a,.tile .name a,.fold>summary,select,
+ input[type=text],input[type=number],input[type=date],textarea{{transition:none}}
+ .popover,.fold[open]>summary~*{{animation:none}}
  .toast{{animation:said-plain 1.15s steps(1) forwards;
   transform:translate(-50%,-50%)}}
  @keyframes said-plain{{0%{{opacity:1}} 92%{{opacity:1}} 100%{{opacity:0}}}}}}
@@ -365,9 +392,10 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
  border-top:1px solid {GRID};font-size:13px;line-height:1.5}}
 .rules li:first-child{{border-top:0}}
 .rules .n{{flex:0 0 40px;font:600 11px/1.6 {MONO};color:{DIM};text-align:right;
- white-space:nowrap}}
+ white-space:nowrap;display:inline-grid;grid-template-columns:9px 2ch;
+ column-gap:7px;justify-content:end;align-items:baseline}}
 .rules .n::before{{content:"";display:inline-block;width:9px;height:9px;
- border:1px solid {AXIS};border-radius:2px;margin-right:7px;vertical-align:-1px}}
+ border:1px solid {AXIS};border-radius:2px;vertical-align:-1px}}
 .block-bar{{height:4px;background:{GRID};border-radius:2px;max-width:320px;margin-top:8px}}
 .block-bar i{{display:block;height:100%;background:{ACCENT};border-radius:2px}}
 .limits{{display:flex;flex-wrap:wrap;gap:10px 26px;margin:0}}
@@ -455,6 +483,7 @@ mark{{background:rgba(111,157,255,.28);color:inherit;border-radius:2px}}
 .sprite{{position:absolute;width:0;height:0;overflow:hidden}}
 .pair{{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}}
 .pair .pi{{flex:none;display:block}}
+td .pair{{vertical-align:middle}}
 
 /* charts */
 .legend{{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 0;font-size:11px;
@@ -549,6 +578,7 @@ ul.errors li a{{font-family:{MONO};font-size:11px;color:{DIM};margin-right:8px}}
 ul.errors li a:hover{{color:{ACCENT}}}
 .days a{{color:{INK2}}}
 form.inline{{display:inline-block;margin:0}}
+.row-actions{{display:inline-flex;gap:7px;align-items:center}}
 table.shelf td.report{{white-space:nowrap}}
 table.shelf td.report .caption{{margin-right:8px}}
 table.shelf .btn.small{{margin-top:0}}
@@ -573,6 +603,9 @@ svg.weekdays{{display:block;margin:4px 0 14px}}
 .hour-unknown,.field label.hour-unknown{{display:flex;align-items:center;gap:5px;margin-top:4px;
  cursor:pointer;text-transform:none;letter-spacing:0;font-size:11px}}
 .hour-unknown input{{margin:0}}
+label.opt{{display:inline-flex;align-items:center;gap:5px;margin:0 10px 4px 0;vertical-align:middle;
+ text-transform:none;letter-spacing:0;cursor:pointer}}
+.opt input{{margin:0}}
 table.shelf td.path{{padding-top:2px;padding-bottom:2px}}
 table.shelf .spark{{display:block}}
 /* the R distribution: the dots on one line, the two legends under it */
@@ -623,12 +656,15 @@ SIGNS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "CHF": "₣", "RUB"
 
 
 def sign(currency):
-    return SIGNS.get((currency or "").upper(), currency or "")
+    c = currency or ""
+    # an unknown code is written as typed, so it is escaped on the way out
+    return SIGNS.get(c.upper()) or esc(c)
 
 
 def money(x, signed=False):
     if x is None:
         return "-"
+    x = round(x)    # so -0.4 prints 0, not -0
     text = f"{x:+,.0f}" if signed else f"{x:,.0f}"
     return text.replace(",", " ")
 
@@ -664,6 +700,15 @@ def page(title, body, tab="journal", header_right="", notice="", said="",
 # Small things shared by every page. The script sits in the head and hooks
 # listeners onto document, before the markup, but document is already there.
 PAGE_SCRIPT = """
+// The header wraps on a narrow window and grows taller; the sticky table heads
+// and the anchor offset follow its real height.
+// The script sits in the head, so the header exists only after parsing.
+document.addEventListener('DOMContentLoaded', () => {
+  const bar = document.querySelector('header');
+  if (bar && window.ResizeObserver)
+    new ResizeObserver(e => document.documentElement.style.setProperty(
+      '--head', e[0].target.offsetHeight + 'px')).observe(bar);
+});
 function close_popovers(except){
   document.querySelectorAll('details.filters-box[open]').forEach(box => {
     if (!except || !box.contains(except)) box.open = false;

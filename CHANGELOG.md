@@ -7,6 +7,83 @@ What changed and why. Newest first.
 - **Copper has a coin of its own.** COPPER, COPPER-C and XCUUSD get a
   copper coin marked Cu next to gold and silver, in place of a plain coin
   with the letters COP.
+- **Broker suffixes.** USDTRYm, BTCUSDTm and the like get the coins of both
+  currencies.
+- **R is not guessed.** When the balance at entry is not above zero, R shows
+  a dash with a notice instead of a made-up number.
+- **A deposit or withdrawal with the wrong sign in its file is caught.** A
+  file under adjustments/ edited by hand so that a deposit holds a minus or a
+  withdrawal a plus is not read and is named at the top of every page, so it
+  cannot move the balance the wrong way. The form sets the sign itself, as
+  before.
+- **Empty journal.** The list says "No trades yet" instead of "Nothing
+  matches the filter", and the total R tile shows a dash instead of +0.00.
+- **Renaming a daily or weekly card keeps everything.** The text written
+  above its sections and the fields added by hand move with it to the new
+  date.
+- **An id that does not match its folder** is named: a trade, an account or
+  a money record on every page, a plan, playbook or note on its own tab. The
+  folder's name is taken as the id.
+- **Focus rings and short transitions** on buttons and links.
+- **Bad card or week addresses** show an error page.
+- **Names Windows reserves** (con, aux, nul, com1 and the like) and the
+  colon are refused or renamed where ids are made, so a saved record always
+  opens.
+- **Figures are saved to the last digit.** A risk or a sum with more than
+  four decimals was rounded on save, so 0.00004 turned into 0; it is kept
+  as written now.
+- **Files written on Windows read right.** CRLF line ends, a lone CR and a
+  byte order mark no longer double the lines or empty your lists.
+- **Text that looks like a heading is kept.** A line starting with ### inside
+  an idea, an analysis or a note, and a heading written twice in a file, keep
+  every part on save.
+- **Saving keeps what you wrote.** Prose under a playbook's filters, a plan's
+  opening text and an open trade's exit are kept, a pipe sign inside an
+  assessment is written as a slash so the cells stay in place, and playbook
+  versions sort as numbers.
+- **Your own notes in the owner's files stay.** Keys and text added by hand
+  to pairs.md, vocabulary.md and settings.md survive a save from the
+  interface.
+- **New checks on forms.** A new account's currency must be 2 to 6 letters or
+  digits, and a setup's description cannot hold a heading or a checkbox,
+  which would be read back as another setup or rule.
+- **The journal clock is used in more places.** The stop-to-breakeven time,
+  the new-trade and close forms, the time an open trade has been held, the
+  playbook limits above the checklist and the report periods follow the
+  journal timezone, not the computer's.
+- **Prop minimum trading days follow the firm's day**, and untimed losses
+  and fees count on the right day.
+- **Safer server.** A currency or account name cannot inject markup, pages
+  cannot be shown inside a frame, bad addresses and broken form bodies get
+  a clear error instead of a dropped connection, and an unexpected failure
+  shows a page.
+- **Faster pages.** The journal is reread only when its files change, saving
+  loads it once, and the cards tab and reports scan it once instead of once
+  for every period.
+- **Ideas statistics.** The By account table keeps the money of each account
+  apart, the header shows money only when one account is chosen, the "rest"
+  line uses the same figures, and the filter form keeps the count you picked.
+- **Figures.** A winrate over only breakeven trades shows a dash, and
+  balances in reports round the way the totals do.
+- **Account refusals** show as a notice on top of the Accounts tab instead of
+  a fading toast.
+- **Search** also looks in the reasons written under unticked rules and in
+  the exit text, and its snippets show plain text without bold markers.
+- **The risk cell follows the playbook** when you pick one in the trade form,
+  and a risk typed with a non-breaking space is read.
+- **An empty share** keeps its strip, so the stretch or the filter can be
+  changed, instead of a bare 404.
+- **Shared file prints better.** A hash link no longer hides the report, the
+  first trade starts on a new page, and the bar controls show focus.
+- **Small polish.** Sticky table heads sit under a wrapped header, card
+  buttons and pair names line up, time fields look like the rest, switches
+  show hover, ticks in rules sit level, the dim text is a little darker, and
+  units stay with their figures on the tiles.
+- **Tools.** The CSV import reads 2,500 as 2500, (12.5) and a typographic
+  minus as negatives, and refuses a Lose row with a positive PnL.
+  check_journal.py names the trades whose R cannot be measured and exits 1
+  for them. The demo journal takes options, no longer writes a folder for
+  --help and dates nothing after today.
 
 ## v1.8.2, 03.10.2026
 

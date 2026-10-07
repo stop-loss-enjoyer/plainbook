@@ -24,6 +24,7 @@ markdown, kept as is). Text written by hand above the first of them, or
 under "Exit", is kept as it is too.
 """
 import math
+from decimal import Decimal
 import os
 import re
 import shutil
@@ -107,10 +108,16 @@ def _number(s):
 
 
 def _number_to_text(x):
-    """Whole numbers are written without a .0 tail, so the file reads better."""
+    """Whole numbers are written without a .0 tail, so the file reads better.
+    Anything else is the shortest repr, written without an exponent and
+    rounded nowhere: a small figure such as 0.00004 must not become 0 on a
+    save. Zero (and -0.0) is written as 0."""
     if x is None:
         return ""
-    return str(int(x)) if float(x) == int(x) else repr(round(float(x), 4))
+    x = float(x)
+    if x == 0:
+        return "0"
+    return str(int(x)) if x.is_integer() else format(Decimal(repr(x)), "f")
 
 
 def _price_to_text(x):
@@ -152,6 +159,9 @@ def trade_to_text(t):
     if t.result is not None:
         head["result"] = t.result
         head["pnl $"] = _number_to_text(t.pnl)
+    # the exit date is kept on a trade without a result too, or a save would
+    # drop what the file says
+    if t.closed is not None:
         head["exit"] = _date_to_text(t.closed, t.closed_time)
     if t.breakeven is not None:
         head["stop at breakeven"] = _date_to_text(t.breakeven, True)
@@ -192,7 +202,7 @@ def trade_to_text(t):
         for block in t.idea:
             parts.append(f"### {block.tf}" if block.tf else "###")
             if block.text.strip():
-                parts.append(_escape(block.text.strip(), known))
+                parts.append(_escape_blocks(_escape(block.text.strip(), known)))
             parts.extend(f"![]({src})" for src in block.images)
     if t.updates.strip():
         parts.append("## Updates")
@@ -288,6 +298,28 @@ def _unescape(text, known):
                      else line for line in text.split("\n"))
 
 
+# Three hashes alone or followed by a space start a block of an idea, an
+# analysis or a note, so the same line inside a block's text gets one space
+# more on the way out and loses it on the way in.
+def _is_block_line(line):
+    return line.startswith("### ") or line.strip() == "###"
+
+
+def _escape_blocks(text):
+    return "\n".join(" " + line if _is_block_line(line.lstrip(" ")) else line
+                     for line in text.split("\n"))
+
+
+def _unescape_blocks(text):
+    return "\n".join(line[1:] if line[:1] == " " and _is_block_line(line.lstrip(" "))
+                     else line for line in text.split("\n"))
+
+
+def _put(sections, name, text):
+    """A heading met twice keeps both texts, the later one below."""
+    sections[name] = (sections[name] + "\n\n" + text).strip() if sections.get(name) else text
+
+
 def _cut(body, known):
     """Body -> (the text above the first heading, {heading: the text under
     it}), cut only at the `## ` lines named in `known`."""
@@ -297,14 +329,14 @@ def _cut(body, known):
             if name is None:
                 preamble = "\n".join(buf).strip()
             else:
-                sections[name] = "\n".join(buf).strip()
+                _put(sections, name, "\n".join(buf).strip())
             name, buf = line[3:].strip(), []
         else:
             buf.append(line)
     if name is None:
         preamble = "\n".join(buf).strip()
     else:
-        sections[name] = "\n".join(buf).strip()
+        _put(sections, name, "\n".join(buf).strip())
     return (_unescape(preamble, known),
             {k: _unescape(v, known) for k, v in sections.items()})
 
@@ -315,12 +347,12 @@ def _split_sections(body):
     for line in body.split("\n"):
         if line.startswith("## "):
             if name is not None:
-                sections[name] = "\n".join(buf).strip()
+                _put(sections, name, "\n".join(buf).strip())
             name, buf = line[3:].strip(), []
         else:
             buf.append(line)
     if name is not None:
-        sections[name] = "\n".join(buf).strip()
+        _put(sections, name, "\n".join(buf).strip())
     return sections
 
 
@@ -330,11 +362,11 @@ def _parse_idea(text):
     def close():
         if tf is None and not "".join(buf).strip():
             return
-        body, images = _text_and_images("\n".join(buf))
+        body, images = _text_and_images(_unescape_blocks("\n".join(buf)))
         blocks.append(IdeaBlock(tf=tf or "", text=body, images=images))
 
     for line in text.split("\n"):
-        if line.startswith("### ") or line.strip() == "###":
+        if line.startswith("### ") or line.rstrip() == "###":
             close()
             tf, buf = line[4:].strip(), []
         else:
@@ -454,13 +486,13 @@ def plan_to_text(k):
         head["voided"] = _date_to_text(k.voided)
     head.update(k.extra)
 
-    parts = []
+    parts = [_escape(k.preamble.strip(), PLAN_HEADINGS)] if k.preamble.strip() else []
     if k.analysis:
         parts.append("## Analysis")
         for block in k.analysis:
             parts.append(f"### {block.tf}" if block.tf else "###")
             if block.text.strip():
-                parts.append(_escape(block.text.strip(), PLAN_HEADINGS))
+                parts.append(_escape_blocks(_escape(block.text.strip(), PLAN_HEADINGS)))
             parts.extend(f"![]({src})" for src in block.images)
     for heading, text in (("Plan", k.plan), ("Updates", k.updates),
                           ("Review", k.review)):
@@ -485,7 +517,7 @@ def text_to_plan(text):
         voided=voided,
         extra={kk: v for kk, v in head.items() if kk not in known},
     )
-    _, sections = _cut(body, PLAN_HEADINGS)
+    k.preamble, sections = _cut(body, PLAN_HEADINGS)
     k.analysis = _parse_idea(sections.get("Analysis", ""))
     k.plan = sections.get("Plan", "").strip()
     k.updates = sections.get("Updates", "").strip()
@@ -509,7 +541,7 @@ def note_to_text(n):
         if block.tf or i:
             parts.append(f"### {block.tf}" if block.tf else "###")
         if block.text.strip():
-            parts.append(block.text.strip())
+            parts.append(_escape_blocks(block.text.strip()))
         parts.extend(f"![]({src})" for src in block.images)
     return mdfile.dump(head, "\n\n".join(parts))
 
@@ -624,14 +656,22 @@ def playbook_to_text(p):
             if s.text.strip():
                 parts.append(s.text.strip())
             parts.extend(_rule_line(r) for r in s.rules)
-    if p.filters:
+    # the prose of a section goes right after its heading, as a setup's does,
+    # and a section with prose and no rules is still written
+    if p.filters or p.filters_text.strip():
         parts.append(f"## {FILTERS}")
+        if p.filters_text.strip():
+            parts.append(p.filters_text.strip())
         parts.extend(_rule_line(r) for r in p.filters)
-    if p.management:
+    if p.management or p.management_text.strip():
         parts.append(f"## {MANAGEMENT}")
+        if p.management_text.strip():
+            parts.append(p.management_text.strip())
         parts.extend(_rule_line(r) for r in p.management)
-    if p.limits:
+    if p.limits or p.limits_text.strip():
         parts.append(f"## {LIMITS}")
+        if p.limits_text.strip():
+            parts.append(p.limits_text.strip())
         parts.extend(f"- {what}: {value}" for what, value in p.limits)
     for heading, text in p.sections:
         if text.strip():
@@ -670,17 +710,21 @@ def text_to_playbook(text):
         prose, rules = _rules_and_text(sections.pop(CONDITIONS), 1)
         p.setups = [Setup(name="", text=prose, rules=rules)]
     if FILTERS in sections:
-        _, p.filters = _rules_and_text(sections.pop(FILTERS),
+        p.filters_text, p.filters = _rules_and_text(sections.pop(FILTERS),
                                        1 + sum(len(s.rules) for s in p.setups))
     if MANAGEMENT in sections:
-        _, p.management = _rules_and_text(
+        p.management_text, p.management = _rules_and_text(
             sections.pop(MANAGEMENT),
             1 + sum(len(s.rules) for s in p.setups) + len(p.filters))
+    limits_prose = []
     for line in sections.pop(LIMITS, "").split("\n"):
         line = line.strip().lstrip("-*").strip()
         if ":" in line:
             what, _, value = line.partition(":")
             p.limits.append((what.strip(), value.strip()))
+        elif line:
+            limits_prose.append(line)       # prose kept, not dropped on a save
+    p.limits_text = "\n".join(limits_prose)
     p.review = sections.pop(REVIEW, "").strip()
     p.sections = [(h, t) for h, t in sections.items() if t.strip()]
     return p
@@ -700,7 +744,9 @@ def assessment_to_text(rows):
     written before the fourth cell existed has three, and reads as it did."""
     lines = []
     for n, row in enumerate(rows, 1):
-        cells = [f"{n}. {row.trade}".rstrip(), row.grade, row.result, row.id]
+        # a bar in a cell would split it into two on the way back
+        cells = [f"{n}. {row.trade}".replace("|", "/").rstrip(),
+                 row.grade.replace("|", "/"), row.result.replace("|", "/"), row.id]
         while len(cells) > 1 and not cells[-1]:
             cells.pop()
         lines.append(" | ".join(cells))
@@ -814,7 +860,8 @@ def _write(path, text):
     # a name of its own per write, so a form sent twice at once does not
     # take the other's file away from under it
     tmp = f"{path}.{os.getpid()}-{threading.get_ident()}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")   # same bytes on every OS
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
         # on the disk before the rename: a laptop that loses power right
         # after a save must not wake up with an empty record
@@ -838,9 +885,24 @@ def _read(path):
 BROKEN = (ValueError, TypeError, KeyError, AttributeError, OSError)
 
 
-def _load(problems, path, convert, root=None):
+def _load(problems, path, convert, root=None, ident=None, report=False):
+    """Reads one record. `ident` is the folder name (the file stem for an
+    account or an adjustment): the folder is the truth for the id, because
+    the code addresses a record by its folder. A folder copied or renamed by
+    hand keeps the old id in its header, and two records with one id would
+    shadow each other. With `report` the mismatch is also written to the
+    list; the file itself is never rewritten at load."""
     try:
         record = convert(_read(path))
+        header_id = record.id
+        if ident is not None and header_id != ident:
+            record.id = ident
+            if report and problems is not None:
+                shown = (os.path.relpath(path, root).replace(os.sep, "/")
+                         if root else path)
+                problems.append(
+                    (shown, f"the id in the file is {header_id}, "
+                            f"its folder is {ident}"))
         return record.check()
     except BROKEN as e:
         if problems is None:
@@ -870,11 +932,18 @@ def make_layout(root):
     return created
 
 
+# Names Windows will not make a file or a folder of, with any extension
+WINDOWS_RESERVED = frozenset(
+    ["con", "prn", "aux", "nul"]
+    + [f"com{i}" for i in range(1, 10)] + [f"lpt{i}" for i in range(1, 10)])
+
+
 def safe_dir_name(name):
     """A trade id becomes a directory name: no path separators, no climbing
     up, no hidden names. Everything that arrives from a URL is checked."""
     return bool(name) and not name.startswith(".") and \
-        "/" not in name and "\\" not in name and "\0" not in name
+        "/" not in name and "\\" not in name and "\0" not in name and \
+        ":" not in name and name.split(".")[0].lower() not in WINDOWS_RESERVED
 
 
 def trade_dir(root, trade_id):
@@ -896,7 +965,9 @@ def save_trade(root, t):
 
 
 def load_trade(root, trade_id):
-    return text_to_trade(_read(os.path.join(trade_dir(root, trade_id), TRADE_FILE)))
+    t = text_to_trade(_read(os.path.join(trade_dir(root, trade_id), TRADE_FILE)))
+    t.id = trade_id         # the folder is the truth, so a save lands in it
+    return t
 
 
 def save_account(root, a):
@@ -919,7 +990,7 @@ def all_trades(root, problems=None):
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         path = os.path.join(base, name, TRADE_FILE)
         if os.path.isfile(path):
-            t = _load(problems, path, text_to_trade, root)
+            t = _load(problems, path, text_to_trade, root, name, True)
             if t is not None:
                 trades.append(t)
     trades.sort(key=lambda t: (t.opened or datetime.max, t.id))
@@ -987,19 +1058,19 @@ def save_plan(root, k):
     return k
 
 
-def _load_one(problems, path, convert, root):
+def _load_one(problems, path, convert, root, ident=None):
     """One record by its id. With a problems list a missing file is None
     and nothing more (the route answers 404), a file that does not read is
     None with the reason in the list (the route names it); without the list
     both raise, which is what the tests and the tools want."""
     if problems is not None and not os.path.isfile(path):
         return None
-    return _load(problems, path, convert, root)
+    return _load(problems, path, convert, root, ident)
 
 
 def load_plan(root, plan_id, problems=None):
     return _load_one(problems, os.path.join(plan_dir(root, plan_id), PLAN_FILE),
-                     text_to_plan, root)
+                     text_to_plan, root, plan_id)
 
 
 def all_plans(root, problems=None):
@@ -1009,7 +1080,7 @@ def all_plans(root, problems=None):
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         path = os.path.join(base, name, PLAN_FILE)
         if os.path.isfile(path):
-            k = _load(problems, path, text_to_plan, root)
+            k = _load(problems, path, text_to_plan, root, name, True)
             if k is not None:
                 plans.append(k)
     plans.sort(key=lambda k: (k.day or datetime.min, k.id), reverse=True)
@@ -1028,7 +1099,8 @@ def save_playbook(root, p):
 
 def load_playbook(root, playbook_id, problems=None):
     return _load_one(problems, os.path.join(playbook_dir(root, playbook_id),
-                                            PLAYBOOK_FILE), text_to_playbook, root)
+                                            PLAYBOOK_FILE), text_to_playbook, root,
+                     playbook_id)
 
 
 def all_playbooks(root, problems=None):
@@ -1038,7 +1110,7 @@ def all_playbooks(root, problems=None):
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         path = os.path.join(base, name, PLAYBOOK_FILE)
         if os.path.isfile(path):
-            p = _load(problems, path, text_to_playbook, root)
+            p = _load(problems, path, text_to_playbook, root, name, True)
             if p is not None:
                 found.append(p)
     found.sort(key=lambda p: (not p.offered, (p.name or p.id).lower()))
@@ -1054,6 +1126,8 @@ def new_playbook_id(root, name):
     name later, because trades point at it."""
     stem = re.sub(r"-+", "-", re.sub(r"[^\w-]+", "-", (name or "playbook").lower())).strip("-")
     stem = stem or "playbook"
+    if stem.split(".")[0] in WINDOWS_RESERVED:
+        stem += "-1"
     base = os.path.join(root, JOURNAL, PLAYBOOKS)
     taken = set(os.listdir(base) if os.path.isdir(base) else [])
     if stem not in taken:
@@ -1084,10 +1158,13 @@ def freeze_playbook(root, playbook_id):
 
 
 def playbook_versions(root, playbook_id):
-    """The frozen versions, oldest first by file name."""
+    """The frozen versions, oldest first, numbers in the name compared as
+    numbers: 9 comes before 10."""
     base = os.path.join(playbook_dir(root, playbook_id), VERSIONS)
-    return sorted(name[:-3] for name in (os.listdir(base) if os.path.isdir(base) else [])
-                  if name.endswith(".md"))
+    labels = [name[:-3] for name in (os.listdir(base) if os.path.isdir(base) else [])
+              if name.endswith(".md")]
+    return sorted(labels, key=lambda s: [int(p) if p.isdigit() else p
+                                         for p in re.split(r"(\d+)", s)])
 
 
 def load_playbook_version(root, playbook_id, label, problems=None):
@@ -1119,7 +1196,7 @@ def save_note(root, n):
 
 def load_note(root, note_id, problems=None):
     return _load_one(problems, os.path.join(note_dir(root, note_id), NOTE_FILE),
-                     text_to_note, root)
+                     text_to_note, root, note_id)
 
 
 def all_notes(root, problems=None):
@@ -1129,7 +1206,7 @@ def all_notes(root, problems=None):
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         path = os.path.join(base, name, NOTE_FILE)
         if os.path.isfile(path):
-            n = _load(problems, path, text_to_note, root)
+            n = _load(problems, path, text_to_note, root, name, True)
             if n is not None:
                 notes.append(n)
     notes.sort(key=lambda n: (n.day or datetime.min, n.id), reverse=True)
@@ -1194,7 +1271,8 @@ def all_accounts(root, problems=None):
     accounts = {}
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         if name.endswith(".md"):
-            a = _load(problems, os.path.join(base, name), text_to_account, root)
+            a = _load(problems, os.path.join(base, name), text_to_account, root,
+                      name[:-3], True)
             if a is not None:
                 accounts[a.id] = a
     return accounts
@@ -1205,7 +1283,8 @@ def all_adjustments(root, problems=None):
     items = []
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
         if name.endswith(".md"):
-            c = _load(problems, os.path.join(base, name), text_to_adjustment, root)
+            c = _load(problems, os.path.join(base, name), text_to_adjustment, root,
+                      name[:-3], True)
             if c is not None:
                 items.append(c)
     items.sort(key=lambda c: (c.day or datetime.max, c.id))
@@ -1388,6 +1467,15 @@ def _owner_head(path, problems=None, root=None):
         return {}
 
 
+def _owner_file(path):
+    """(head, body) of one of the owner's files, ({}, '') when it is not
+    there. A save starts from this, so a key or a note the owner wrote by
+    hand survives it."""
+    if not os.path.isfile(path):
+        return {}, ""
+    return mdfile.parse(_read(path))
+
+
 def _writable(path):
     """Raises when the owner's file is there and does not parse."""
     if not os.path.isfile(path):
@@ -1415,7 +1503,9 @@ def all_pairs(root):
 def save_pairs(root, pairs):
     _writable(pairs_file(root))
     clean = sorted({str(p).strip().upper() for p in pairs if str(p).strip()})
-    _write(pairs_file(root), mdfile.dump({"pairs": clean},
+    head, body = _owner_file(pairs_file(root))
+    head["pairs"] = clean
+    _write(pairs_file(root), mdfile.dump(head, body.strip() or
            "Pairs suggested in the trade form. Edited in the interface."))
     return clean
 
@@ -1458,8 +1548,10 @@ def save_words(root, kind, words):
             seen.add(word.lower())
             clean.append(word)
     lists[kind] = clean
+    head, body = _owner_file(vocabulary_file(root))
+    head.update(lists)
     _write(vocabulary_file(root), mdfile.dump(
-        lists, "The lists the trade form offers. Edited in the interface."))
+        head, body.strip() or "The lists the trade form offers. Edited in the interface."))
     return clean
 
 
@@ -1506,10 +1598,10 @@ def stop_edge(root):
 
 def save_stop_edge(root, value):
     _writable(settings_file(root))
-    head = _settings(root)
+    head, body = _owner_file(settings_file(root))
     head["stop_edge"] = f"{clean_stop_edge(value):g}"
     _write(settings_file(root), mdfile.dump(
-        head, "The owner's settings. Edited in the interface."))
+        head, body.strip() or "The owner's settings. Edited in the interface."))
     return clean_stop_edge(value)
 
 
@@ -1539,13 +1631,13 @@ def save_clock(root, name):
         raise RecordError(f"no time zone {name!r} on this computer: "
                           f"a name like Europe/Prague or America/New_York")
     _writable(settings_file(root))
-    head = _settings(root)
+    head, body = _owner_file(settings_file(root))
     if name:
         head["clock"] = name
     else:
         head.pop("clock", None)
     _write(settings_file(root), mdfile.dump(
-        head, "The owner's settings. Edited in the interface."))
+        head, body.strip() or "The owner's settings. Edited in the interface."))
     return name
 
 

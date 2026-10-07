@@ -100,10 +100,25 @@ def parse_money(text):
     text = (text or "").strip()
     if not text:
         return None
+    # a typographic minus and accounting brackets are negatives too
+    text = text.replace("\u2212", "-")
+    bracket = re.fullmatch(r"\(([^()]*)\)", re.sub(r"\s", "", text))
+    if bracket:
+        text = "-" + bracket.group(1)
     clean = re.sub(r"[^\d,.\-+]", "", text)
-    if clean.count(",") and not clean.count("."):
-        clean = clean.replace(",", ".")
-    clean = clean.replace(",", "")
+    if "," in clean and "." in clean:
+        # the separator that comes last is the decimal, the other one groups
+        if clean.rfind(",") > clean.rfind("."):
+            clean = clean.replace(".", "").replace(",", ".")
+        else:
+            clean = clean.replace(",", "")
+    elif "," in clean:
+        if re.fullmatch(r"[-+]?\d{1,3}(,\d{3})+", clean):
+            clean = clean.replace(",", "")            # thousands: 12,345,678
+        elif clean.count(",") == 1:
+            clean = clean.replace(",", ".")           # a decimal comma: 3,5
+        else:
+            raise RowError(f"cannot read the number {text!r}")
     try:
         return float(clean)
     except ValueError:
@@ -159,7 +174,7 @@ def read_rows(args):
     out, problems = [], []
     for n, row in enumerate(rows, 2):            # 1 is the header line
         try:
-            out.append((n,) + build(row, args, accounts))
+            out.append((n,) + build(row, args, accounts, n))
         except (RowError, RecordError, ValueError) as e:
             problems.append((n, str(e)))
     if problems:
@@ -170,7 +185,7 @@ def read_rows(args):
     return out
 
 
-def build(row, args, accounts):
+def build(row, args, accounts, n=None):
     if args.account_column:
         name = (row.get(args.account_column) or "").strip()
         account = accounts.get(name.lower(), name)
@@ -194,6 +209,10 @@ def build(row, args, accounts):
         pnl = 0.0 if result == "BE" else None
     if result is not None and closed is None:
         closed, closed_time = opened, opened_time
+    if result == "Lose" and pnl is not None and pnl > 0:
+        # a lost trade with a gain is a flipped sign or a wrong column
+        raise RowError("the result is Lose but the PnL is positive"
+                       + (f" (row {n})" if n else ""))
     risk = parse_money(row.get(args.risk)) if args.risk else None
     pair = (row.get(args.pair) or "").strip().upper().replace("/", "") or PAIR_NOT_SET
     t = Trade(

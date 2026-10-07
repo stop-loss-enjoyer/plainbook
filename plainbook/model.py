@@ -216,6 +216,7 @@ class Plan:
     updates: str = ""                               # notes added while it runs
     review: str = ""                                # how it went, with shots
     voided: date = None                             # the day it was called off
+    preamble: str = ""                              # written above the sections by hand
     extra: dict = field(default_factory=dict)
 
     @property
@@ -325,6 +326,9 @@ class Playbook:
     filters: list = field(default_factory=list)     # [Rule], for every setup
     management: list = field(default_factory=list)  # [Rule], ticked at the close
     limits: list = field(default_factory=list)      # [(what, value)] as text
+    filters_text: str = ""                          # prose under each heading,
+    management_text: str = ""                       # kept so a save does not
+    limits_text: str = ""                           # drop it
     sections: list = field(default_factory=list)    # [(heading, text)] the rest
     review: str = ""                                # dated entries, with shots
     extra: dict = field(default_factory=dict)
@@ -631,6 +635,13 @@ class Adjustment:
             raise RecordError(f"{self.id}: account is not set")
         if self.kind not in ADJUSTMENT_KINDS:
             raise RecordError(f"{self.id}: bad kind {self.kind!r}")
+        # a wrong sign silently moves the balance the other way; fees and
+        # reconciliations stay free (a fee rebate may be positive)
+        if self.kind == "deposit" and self.amount < 0 or \
+                self.kind == "withdrawal" and self.amount > 0:
+            raise RecordError(
+                f"{self.id}: a {self.kind} is written with a "
+                f"{'plus' if self.kind == 'deposit' else 'minus'} sign")
         if self.day is None:
             raise RecordError(f"{self.id}: date is missing")
         return self

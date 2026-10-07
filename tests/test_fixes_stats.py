@@ -192,5 +192,91 @@ class ServerFiguresCase(unittest.TestCase):
         self.assertEqual(cards.call_count, 1)
 
 
+class IdeasFiguresCase(unittest.TestCase):
+    """Under Ideas the copies of a position fold into one: the money and the
+    rest of the journal must still be read from the right set."""
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = cls.tmp.name
+        os.environ["PLAINBOOK_ROOT"] = cls.root
+        import plainbook.server
+        cls.S = importlib.reload(plainbook.server)
+        store.save_account(cls.root, Account(id="a", start_balance=10000))
+        store.save_account(cls.root, Account(id="b", start_balance=100000))
+        day = datetime(2026, 8, 3)
+        store.save_trade(cls.root, trade("2026-08-03-01-eurusd-a", 100, day, "a"))
+        store.save_trade(cls.root, trade("2026-08-03-01-eurusd-b", 3000, day, "b"))
+        other = datetime(2026, 8, 4)
+        store.save_trade(cls.root, trade("2026-08-04-01-gbpusd-a", -50, other, "a",
+                                         pair="GBPUSD"))
+        third = datetime(2026, 8, 5)
+        for acc in ("a", "b"):
+            store.save_trade(cls.root, trade(f"2026-08-05-01-usdjpy-{acc}", 10, third,
+                                             acc, pair="USDJPY", style="day"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+        os.environ.pop("PLAINBOOK_ROOT", None)
+
+    def page(self, **q):
+        return self.S.stats_page({k: [v] for k, v in q.items()})
+
+    def test_the_account_slice_keeps_each_accounts_money(self):
+        j = self.S.journal()
+        key = dict(reports.SLICES)["By account"]
+        want = {v: s.sum_pnl for v, s in stats.by_values(j, j.trades, key)}
+        self.assertEqual(want, {"a": 60, "b": 3010})
+        text = self.page(count="ideas")
+        # the 3010 of the second account is not on the first one's row
+        self.assertIn("+3 010", text)
+
+    def test_the_title_has_no_money_across_two_accounts(self):
+        text = self.page(count="ideas", pair="EURUSD")
+        self.assertIn("1 closed position,", text)
+        # the line of the head, not the tiles below it, which show the money
+        line = text.split("1 closed position,", 1)[1].split("</p>", 1)[0]
+        self.assertNotIn("3 100", line)
+
+    def test_the_filter_form_keeps_the_count(self):
+        text = self.page(count="ideas")
+        self.assertRegex(text, r'<input type="hidden" name="count" value="ideas"')
+
+    def test_the_rest_is_read_in_ideas_too(self):
+        # the rest is the EURUSD idea, mean R of its copies
+        j = self.S.journal()
+        mean = (j.r("2026-08-03-01-eurusd-a") + j.r("2026-08-03-01-eurusd-b")) / 2
+        ij, its = stats.ideas(j, [t for t in j.trades if t.pair == "EURUSD"])
+        self.assertAlmostEqual(stats.summary(ij, its).average_r, mean)
+        gbp = j.r("2026-08-04-01-gbpusd-a")
+        text = self.page(count="ideas", style="day")
+        self.assertIn("the other 2 closed trades", text)
+        self.assertIn(f"{(mean + gbp) / 2:+.2f}", text)
+
+
+class RoundingCase(unittest.TestCase):
+    def test_money_has_no_negative_zero(self):
+        self.assertEqual(H.money(-0.4), "0")
+        self.assertEqual(H.money(-0.4, signed=True), "+0")
+
+    def test_the_balance_change_is_the_difference_of_the_printed_figures(self):
+        accounts = {"broker": Account(id="broker", start_balance=1000.40)}
+        day = datetime(2026, 8, 3)
+        ts = [trade("a", 1.20, day)]
+        j = Journal(accounts, ts, [])
+        with tempfile.TemporaryDirectory() as root:
+            r = reports.compose(root, j, "2026-08")
+            text = reports.to_markdown(r, j, "")
+        self.assertIn("| broker | 1 000 | 1 002 | +2 |", text)
+
+    def test_a_slice_of_break_evens_has_no_winrate(self):
+        s = stats.summary(Journal({"broker": Account(id="broker", start_balance=1000)},
+                                  [trade("a", 0, datetime(2026, 8, 3))], []),
+                          [trade("a", 0, datetime(2026, 8, 3))])
+        self.assertFalse(s.decided)
+        self.assertTrue(reports._figures(s).startswith("1 | - |"))
+
+
 if __name__ == "__main__":
     unittest.main()

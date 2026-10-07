@@ -34,6 +34,12 @@ class Summary:
     sum_r_be: float = 0.0
     gross_won: float = 0.0          # the money of the trades that made money
     gross_lost: float = 0.0         # the money of the ones that lost it, positive
+    # trades whose R could be measured (a balance of nothing at entry has none):
+    # the R averages divide by these, so such a trade is not counted as 0 R
+    measured: int = 0
+    measured_wins: int = 0
+    measured_losses: int = 0
+    measured_be: int = 0
 
     @property
     def profit_factor(self):
@@ -66,18 +72,18 @@ class Summary:
         still paid its commission and swap and never comes back at exactly
         zero R, so leaving it out would flatter the figure. The three sums
         below say how much of it came from each kind of trade."""
-        return self.sum_r / self.trades if self.trades else 0.0
+        return self.sum_r / self.measured if self.measured else 0.0
 
     @property
     def average_win(self):
         """What a winning trade brought on average, in R, or None with no win."""
-        return self.sum_r_win / self.wins if self.wins else None
+        return self.sum_r_win / self.measured_wins if self.measured_wins else None
 
     @property
     def average_loss(self):
         """What a losing trade cost on average, in R and negative, or None
         with no loss."""
-        return self.sum_r_lose / self.losses if self.losses else None
+        return self.sum_r_lose / self.measured_losses if self.measured_losses else None
 
     @property
     def payoff(self):
@@ -108,7 +114,8 @@ class Summary:
         win, lose = self.average_win, self.average_loss
         if win is None or lose is None or win - lose <= 0:
             return None
-        return 100.0 * (-lose - self.sum_r_be / self.decided) / (win - lose)
+        decided = self.measured_wins + self.measured_losses
+        return 100.0 * (-lose - self.sum_r_be / decided) / (win - lose)
 
     @property
     def thin(self):
@@ -125,7 +132,16 @@ def summary(journal, trades):
         s.wins += t.result == "Win"
         s.losses += t.result == "Lose"
         s.be += t.result == "BE"
-        r = journal.r(t.id) or 0.0
+        r = journal.r(t.id)
+        if r is None:
+            s.sum_pnl += t.pnl or 0.0
+            s.gross_won += max(0.0, t.pnl or 0.0)
+            s.gross_lost += max(0.0, -(t.pnl or 0.0))
+            continue
+        s.measured += 1
+        s.measured_wins += t.result == "Win"
+        s.measured_losses += t.result == "Lose"
+        s.measured_be += t.result == "BE"
         s.sum_r += r
         s.sum_r_win += r if t.result == "Win" else 0.0
         s.sum_r_lose += r if t.result == "Lose" else 0.0
@@ -319,12 +335,14 @@ def ideas(journal, trades):
 def _fold(journal, group, r):
     """One idea standing for the copies of a position, its mean R put in `r`."""
     first = copy.copy(group[0])
-    rs = [journal.r(t.id) or 0.0 for t in group]
-    mean = sum(rs) / len(rs)
+    # a copy whose R could not be measured says nothing about the mean
+    rs = [r for r in (journal.r(t.id) for t in group) if r is not None]
+    mean = sum(rs) / len(rs) if rs else None
     first.pnl = sum(t.pnl or 0.0 for t in group)
     results = {t.result for t in group}
     first.result = (results.pop() if len(results) == 1
-                    else "Win" if mean > 0 else "Lose" if mean < 0 else "BE")
+                    else "Win" if (mean or 0.0) > 0 else "Lose"
+                    if (mean or 0.0) < 0 else "BE")
     r[first.id] = mean
     return first
 
@@ -482,8 +500,9 @@ def past_stop(journal, trades):
     sized for."""
     edge = journal.stop_edge
     return sorted((t for t in trades if not t.is_open and t.result == "Lose"
-                   and abs(journal.r(t.id) or 0.0) >= edge),
-                  key=lambda t: journal.r(t.id) or 0.0)
+                   and journal.r(t.id) is not None
+                   and abs(journal.r(t.id)) >= edge),
+                  key=lambda t: journal.r(t.id))
 
 
 def past_stop_over(journal, trade):
@@ -565,7 +584,7 @@ def frame(journal, playbook, now=None):
     has reached its limit is flagged, because the trade being opened would
     go past it; the loss of the week is flagged once it has reached the
     fuse. Nothing is refused, the figures are only shown."""
-    now = now or datetime.now()
+    now = now or journal.now()
     limits = dict(playbook.limits)
     own = [t for t in journal.trades if t.playbook == playbook.id]
     this_week, this_month = week(now), f"{now:%Y-%m}"
@@ -629,8 +648,9 @@ def drawdown(journal, trades):
     """
     # two trades closed at the same stamp are taken in the order the tape
     # draws them, by id, so the picture and the figure agree
-    curve = sorted(((t.closed, t.id, journal.r(t.id) or 0.0) for t in trades
-                    if not t.is_open and t.closed), key=lambda x: (x[0], x[1]))
+    curve = sorted(((t.closed, t.id, journal.r(t.id)) for t in trades
+                    if not t.is_open and t.closed
+                    and journal.r(t.id) is not None), key=lambda x: (x[0], x[1]))
     f = Fall()
     peak = total = 0.0
     peak_at, from_peak, at = None, 0.0, None
@@ -746,7 +766,9 @@ def r_split(journal, trades):
     for t in trades:
         if t.is_open:
             continue
-        r = journal.r(t.id) or 0.0
+        r = journal.r(t.id)
+        if r is None:
+            continue    # no R to place in a bucket
         if t.result == "BE":
             be += 1
             continue
@@ -770,7 +792,9 @@ def r_line(journal, trades):
     for t in trades:
         if t.is_open or t.result not in ("Win", "Lose", "BE"):
             continue
-        r = journal.r(t.id) or 0.0
+        r = journal.r(t.id)
+        if r is None:
+            continue
         if t.result == "BE":
             out.append((t, r, "BE", 0))
             continue
@@ -808,7 +832,9 @@ def cumulative_r(journal, trades):
                     key=lambda t: (t.closed, t.id))
     path, total = [0.0], 0.0
     for t in closed:
-        total += journal.r(t.id) or 0.0
+        if journal.r(t.id) is None:
+            continue    # no R, no step on the path
+        total += journal.r(t.id)
         path.append(total)
     return path
 

@@ -263,8 +263,8 @@ in amber near a limit and in red once one is reached.
 
 ![The Accounts tab: a broker account and a prop account with its rules and where it stands against them, the journal's clock, money in and out](docs/accounts.png)
 
-Accounts are created with a name, a start balance and a currency, and each
-sum in the journal carries the sign of its account.
+Accounts are created with an id, a name, a start balance and a currency,
+and each sum in the journal carries the sign of its account.
 
 Deposits, withdrawals and fees are written down here, apart from trading, so
 a payout is never mistaken for a loss, each with its date and, when you know
@@ -354,8 +354,9 @@ python3 -m plainbook.server
 Open <http://localhost:8778>. Here the records live in the project folder,
 next to the code.
 
-Whichever way in, go to **Accounts** and create one: a name and the balance
-the account has today. The start balance is the point the journal counts
+Whichever way in, go to **Accounts** and create one: a short id (small
+Latin letters, digits and hyphens), a name and the balance the account has
+today. The start balance is the point the journal counts
 from, so the computed balance is right from the first minute.
 
 `PLAINBOOK_PORT` changes the port (8778 by default), `PLAINBOOK_ROOT` changes
@@ -456,8 +457,9 @@ journal/
 .drafts/                    next to journal/: screenshots of unsubmitted forms, swept daily
 ```
 
-That is the whole storage format. There is no database and no export button,
-because the export is a copy of the folder. Put the folder under git and
+That is the whole storage format. There is no database. The CSV button over
+the list hands a selection to a spreadsheet, but the full export is a copy of
+the folder. Put the folder under git and
 `git log` gives you the history of your own thinking, and a way back if you
 fix a number you should not have. Once the code itself is under git, keep the
 records apart from the program:
@@ -515,10 +517,10 @@ Most software tolerates a coding agent. This one is arranged for it, and the
 arrangement is the same one that makes the journal private and durable: plain
 files, no dependencies, a small surface. There is no package manager, no
 lockfile and no build step, so an agent that can run `python3` can run the
-whole project. The tests, more than three hundred of them with no fixtures
-and no network, finish in a few seconds. [AGENTS.md](AGENTS.md) holds the map of
-the code, the invariants that must not be broken, recipes for the usual tasks,
-and the traps that have already bitten this project, each with the reason it
+whole project. The tests, more than four hundred of them with no fixtures
+and no network, finish in under twenty seconds. [AGENTS.md](AGENTS.md) holds
+the map of the code, the invariants that must not be broken, recipes for the
+usual tasks, and the traps that have already bitten this project, each with the reason it
 exists. A guard, `tools/check_public.py`, refuses a push that would carry
 trade records or anything else it recognises as yours; it runs as a pre-push
 hook and in CI. The whole program is about 15 000 lines of Python, so it fits

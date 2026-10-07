@@ -342,6 +342,12 @@ def _pair(name, loose=False):
             return [CURRENCIES[head], CURRENCIES[tail]]
     if not loose:
         return None
+    for size in (4, 3):                     # a known base, then a known quote with a suffix
+        head, tail = name[:size], name[size:]
+        if head in CURRENCIES:
+            for t in (4, 3):
+                if tail[:t] in CURRENCIES:
+                    return [CURRENCIES[head], CURRENCIES[tail[:t]]]
     for size in (4, 3):                     # a known base against an unknown quote
         head, tail = name[:size], name[size:]
         if head in CURRENCIES and 2 <= len(tail) <= 5:

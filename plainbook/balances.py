@@ -84,7 +84,15 @@ class Journal:
             risk_money = b * (t.risk or 0.0) / 100.0
             r = None
             if not t.is_open:
-                r = 0.0 if risk_money == 0 else (t.pnl or 0.0) / risk_money
+                if risk_money <= 0:
+                    # R against a balance of nothing or less means nothing
+                    self.problems.append((
+                        t.id,
+                        "balance at entry is not above zero, so R cannot be "
+                        "measured; add the deposit that funded the account, "
+                        "dated on or before the entry"))
+                else:
+                    r = (t.pnl or 0.0) / risk_money
             computed[t.id] = Computed(balance_at_entry=b, risk_money=risk_money, r=r)
         return computed
 
@@ -218,24 +226,40 @@ class Journal:
         now = now or self.now()
         start, end, found = self.firm_day(a, now)
         p = PropState(account=a, day_from=start, day_until=end, zone_found=found)
+        # A date alone belongs to the firm's day that holds the middle of it
+        # (start + 12h): for a day that starts at 17:00 that is the day it ends
+        # on, so a loss dated the 7th is not "today" again after the new day
+        # has begun that evening.
+        anchor = (start + timedelta(hours=12)).date()
         for t in self.trades:
             if t.account != account_id or t.is_open or t.closed is None:
                 continue
             inside = (start <= t.closed < end if t.closed_time
-                      else t.closed.date() == now.date())
+                      else t.closed.date() == anchor)
             if inside:
                 p.today += t.pnl or 0.0
         for c in self.adjustments:
             if c.account == account_id and c.kind == "fee":
                 inside = (start <= c.day < end if getattr(c, "day_time", False)
-                          else c.day.date() == now.date())
+                          else c.day.date() == anchor)
                 if inside:
                     p.today += c.amount
         p.at_risk = self.open_risk(account_id)
         p.balance = self.balance(account_id)
         p.made = self.result(account_id)
-        p.days = len({t.opened.date() for t in self.trades
-                      if t.account == account_id and t.opened})
+        # Trading days are the firm's days, not the calendar's: an entry
+        # at 18:00 and one at 10:00 the next morning share a day that starts
+        # at 17:00. An entry with no hour can only go by its date.
+        keys = set()
+        for t in self.trades:
+            if t.account != account_id or not t.opened:
+                continue
+            if t.opened_time:
+                s, e, _ = self.firm_day(a, t.opened)
+                keys.add((s if s.hour < 12 else e).date())
+            else:
+                keys.add(t.opened.date())
+        p.days = len(keys)
         if a.max_loss is not None:
             high = running = a.start_balance
             for e in sorted(self._events(), key=lambda e: e[0]):

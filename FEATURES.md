@@ -42,7 +42,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 | checklist, pre-trade checklist, confirmation list | **Playbooks, in the trade form.** Picking a playbook opens the rules of the chosen setup and the filters, a box each. Unticked rules are recorded with the trade with a line for why. |
 | filters, conditions for every trade, news filter, session, trading hours, day of the week | **Playbooks, filters.** Rules checked before every trade whatever the setup. Anything that is a yes or no at the moment of entry is a filter; anything that is a figure the journal can count is a limit. |
 | trade management, position management, exit rules, stop rules, trailing, partials, holding rules | **Playbooks, management.** Rules of holding the position, ticked at the close of the trade; the page of an open trade lists them to be kept in mind. |
-| risk management, risk per trade, max trades, max loss, max positions, exposure, sizing | **Playbooks, limits** (risk per trade, trades per week and per month, loss per week in R, positions open at once, the longest hold, the least RR, any other of your own), counted above the checklist of a new trade and turned red when this trade would go past them. **Accounts, daily loss limit** for a prop account, counted on the tile of the account. The sizing formula in words is a section of the playbook's notes. |
+| risk management, risk per trade, max trades, max loss, max positions, exposure, sizing | **Playbooks, limits** (risk per trade, trades per week and per month, loss per week in R, positions open at once, the longest hold, the least RR, any other of your own), counted above the checklist of a new trade and turned red when this trade would go past them. **Accounts, daily loss limit** for a prop account, counted on its row on the Accounts tab. The sizing formula in words is a section of the playbook's notes. |
 | drawdown, max drawdown, losing streak | **Statistics, Deepest fall from a high**: how far the selection went under its own high in R, between which dates, whether it was made back, the longest run of losses. The reports carry the figure against the period before. |
 | instruments, markets, pairs, watchlist | **Accounts, Pairs**: the list the trade form offers. Which markets a playbook is for is a section of its notes; its **styles** are the styles of the trade form it applies to. |
 | timeframes, higher timeframe, entry timeframe, top down | **Accounts, vocabularies** (the entry timeframes the form offers); the trade's **entry tf** and the timeframes of its idea; a plan's analysis by timeframe; a playbook rule such as "level on W or D". |
@@ -147,7 +147,7 @@ is a backup; any editor reads it.
       reports/        the built reports
       vocabulary.md   the styles, timeframes and execution formats the form offers
       pairs.md        the pairs the form offers
-      settings.md     the stop edge
+      settings.md     the stop edge, the journal's clock
     .trash/           next to journal/: what was deleted, restorable from Accounts
     .drafts/          next to journal/: pictures pasted into forms not yet submitted
 

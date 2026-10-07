@@ -413,6 +413,9 @@ nearly always one of the two is a slip, and Edit puts it right.
 
 R is worked out by the journal, `PnL / (risk% × the balance at the moment of
 entry)`, and there is nothing to recompute by hand.
+When the balance at entry is not above zero there is nothing to measure the risk
+against, so R shows a dash with a notice, and that trade adds nothing to the
+sum of R.
 
 **Prices at the close**, a fold of the closing form, all optional: the **exit**
 price, and the **best** and the **worst** price the market reached while the
@@ -578,9 +581,9 @@ written on the card, the daily one a hyphen.
   it was sized for, so its risk is freed. The money column shows a green
   **BE** chip in place of the sum, and the title of the block counts the
   trades held that way. The daily loss limit of the account stops counting
-  them: with three trades at breakeven and two fresh ones the tile counts the
-  risk of the two, in money, and says how many stand at breakeven. Pressed by
-  mistake, **Risk back** on the page of the trade
+  them: with three trades at breakeven and two fresh ones, its row on the
+  Accounts tab counts the risk of the two, in money, and says how many stand
+  at breakeven. Pressed by mistake, **Risk back** on the page of the trade
   undoes it. The R of the trade is still measured against the risk it was
   opened with, whatever happened to the stop later.
 - **Summary tiles**: the current period, the size of the selection, the
@@ -953,10 +956,15 @@ nothing to correct, the journal says so and writes nothing.
 
 The **Accounts** tab.
 
+- **Id** names the account's file: small Latin letters, digits and hyphens.
+  The name beside it is what the pages show. Names Windows keeps for itself,
+  such as `con`, `aux`, `nul` or `com1`, are refused, so the journal opens on
+  any computer.
 - **Start balance** is the point the journal counts from. Opening an account
   today, put in today's real balance.
-- **Currency** is shown next to every sum of the account: a sign for the usual
-  ones ($, €, £, ¥), the code for the rest.
+- **Currency** is typed as its code, two to six letters or digits (`USD`,
+  `EUR`, `USDT`), and is shown next to every sum of the account: a sign for
+  the usual ones ($, €, £, ¥), the code for the rest.
 - **Kind**: a **broker** account holds your own money, a **prop** account is
   run under the rules of a firm. Pick it when you create the account; a prop
   account opens on its rules next. **Rules** in the row of any account opens
@@ -994,7 +1002,10 @@ The **Accounts** tab.
   place. The downloaded file knows every clock. Run from the source on
   Windows, Python needs its `tzdata` package for the names
   (`py -m pip install tzdata`); without it the journal says the clock is
-  unknown and counts on the computer's own.
+  unknown and counts on the computer's own. The times the journal fills in
+  by itself follow this clock as well: the entry a new trade starts with, the
+  exit the closing form offers, the moment **Breakeven** is pressed and how
+  long an open trade has run.
 - **Archive** keeps the account in the history and the statistics but stops
   offering it when a trade is opened. An account with trades or money
   movements cannot be deleted, only archived; one without them is deleted into
@@ -1004,9 +1015,9 @@ The **Accounts** tab.
 - **Pairs** are the suggestions for the form. Taking a pair out of the list does
   not touch the trades already recorded with it. Every pair is shown with its
   flags: two round ones for a currency pair, one for an index, a lettered coin
-  for gold, silver, copper or a crypto coin. A symbol the journal does not recognise
-  gets a plain coin with its first letters, and is written out in full as
-  before, so nothing depends on the icon.
+  for gold, silver, copper or a crypto coin. A symbol the journal does not
+  recognise gets a plain coin with its first letters, and is written out in
+  full as before, so nothing depends on the icon.
 
 - **The trade form** holds the other three lists: the trading styles, the
   timeframes of the entry TF field and the execution checkboxes. Each opens on a
@@ -1216,11 +1227,11 @@ know about it; make it again and send the new one.
 ## Search
 
 The **Search** tab. A word or a phrase is looked for in everything you have
-written: the ideas, conclusions and updates of trades, the analysis, plan,
-updates and review of every plan, the text of every market note, the name,
-intro, rules, setups, sections and review of every playbook, and every field
-of every card, daily and weekly alike. Case does not
-matter. Every hit is a link to the record, with the matching words shown in
+written: the ideas, conclusions and updates of trades, the why written under
+every rule left unticked, the text written by hand under the exit, the
+analysis, plan, updates and review of every plan, the text of every market
+note, the name, intro, rules, setups, sections and review of every playbook,
+and every field of every card, daily and weekly alike. Case does not matter. Every hit is a link to the record, with the matching words shown in
 the text around them, which is how the trade where you wrote "moved the stop
 too early" three months ago is found again.
 
@@ -1249,7 +1260,7 @@ folder (`C:\Users\<you>\Plainbook`, `/Users/<you>/Plainbook`, `~/Plainbook`);
     journal/reports/2026-Q3.md
     journal/vocabulary.md      the styles, timeframes and execution formats the form offers
     journal/pairs.md           the pairs the form offers
-    journal/settings.md        the stop edge
+    journal/settings.md        the stop edge, the journal's clock
 
 The files open in any text editor and read by eye. There is no database and
 no format of its own, so if the program breaks tomorrow, the records are
@@ -1293,6 +1304,8 @@ the program's repository. A copy on an external drive is worth having too.
 - **A save says Not saved.** A field held something the journal cannot
   read, a letter in a number or a minus in the risk; the page says which.
   **Back to the form** returns with what you typed; a screenshot pasted into
-  the form has to be pasted again.
+  the form has to be pasted again. A form on the Accounts tab (an account,
+  money in and out, a pair or a list) says it on top of that tab instead, and
+  the form below is empty again, so type the line once more.
 - **Deleted the wrong thing.** The Trash card on the Accounts tab, **Restore**.
 - **Port 8778 is taken.** Set another one through `PLAINBOOK_PORT`.

@@ -101,7 +101,7 @@ def still_open(journal, period, now=None):
     position closed long ago has no business standing in blue on an old month.
     They are not in the figures, a period is measured by its exits."""
     start, end, _ = parse_period(period)
-    now = now or datetime.now()
+    now = now or journal.now()
     if not start <= now < end:
         return []
     return [t for t in journal.trades if t.is_open]
@@ -113,14 +113,22 @@ def still_open(journal, period, now=None):
 _STUB = re.compile(r"^_\(empty.*\)_$")
 
 
+def conclusions_of(body):
+    """The conclusions a report file carries, from the body already read:
+    nothing for a file that is not there (`body` None) or holds only the stub."""
+    if body is None:
+        return ""
+    m = re.search(r"^## Conclusions\s*$(.*)", body, re.M | re.S)
+    text = m.group(1).strip() if m else ""
+    return "" if _STUB.match(text) else text
+
+
 def previous_conclusions(root, period):
     file = path(root, period)
     if not os.path.exists(file):
         return ""
     _, body = read(root, period)
-    m = re.search(r"^## Conclusions\s*$(.*)", body, re.M | re.S)
-    text = m.group(1).strip() if m else ""
-    return "" if _STUB.match(text) else text
+    return conclusions_of(body)
 
 
 # --- the report -----------------------------------------------------------
@@ -187,6 +195,24 @@ class Shelf:
             if not t.is_open and t.closed:
                 for kind in ("month", "quarter"):
                     self.closed.setdefault(period_of(t.closed, kind), []).append(t)
+        # what each period of the shelf holds besides its exits, grouped once
+        # so that a report does not scan every card, week and entry again; the
+        # lists keep the order the folders and the journal give
+        self.cards_in, self.weeks_in, self.opened_in = {}, {}, {}
+        for k in self.cards:
+            if k.day:
+                for kind in ("month", "quarter"):
+                    self.cards_in.setdefault((kind, period_of(k.day, kind)), []).append(k)
+        for k in self.weeks:
+            if k.week:
+                monday = k.monday
+                for kind in ("month", "quarter"):
+                    self.weeks_in.setdefault((kind, period_of(monday, kind)), []).append(k)
+        for t in journal.trades:
+            if t.opened:
+                for kind in ("month", "quarter"):
+                    self.opened_in.setdefault((kind, period_of(t.opened, kind)),
+                                              set()).add(t.opened.date())
         # the money of each account in the order balance_at adds it up, so
         # that a balance comes out the same to the last digit
         self._moved, self._closed = {}, {}
@@ -239,8 +265,13 @@ def compose(root, journal, period, problems=None, shelf=None):
     # the list it raises, which is what the tests want
     cards = shelf.cards if shelf else store.all_cards(root, problems)
     weeks = shelf.weeks if shelf else store.all_weeks(root, problems)
-    r.cards = [k for k in cards if k.day and start <= k.day < end]
-    r.weeks = [k for k in weeks if k.week and start <= k.monday < end]
+    if shelf:
+        key = (r.kind, period)
+        r.cards = list(shelf.cards_in.get(key, ()))
+        r.weeks = list(shelf.weeks_in.get(key, ()))
+    else:
+        r.cards = [k for k in cards if k.day and start <= k.day < end]
+        r.weeks = [k for k in weeks if k.week and start <= k.monday < end]
     # A day counted here is a day worked, and work is an entry: the morning
     # the owner sat down, took the trades and wrote the card for. A position
     # that closed on its own a week later did not make that day a working
@@ -248,8 +279,9 @@ def compose(root, journal, period, problems=None, shelf=None):
     # traded. Read off the whole journal rather than off `trades`, which
     # holds the exits of the period: a trade entered inside it and closed
     # after it is not in that list at all.
-    r.days_traded = len({t.opened.date() for t in journal.trades
-                         if t.opened and start <= t.opened < end})
+    r.days_traded = (len(shelf.opened_in.get((r.kind, period), ())) if shelf else
+                     len({t.opened.date() for t in journal.trades
+                          if t.opened and start <= t.opened < end}))
     grades = {}
     for k in r.cards:
         grades[k.grade or "not graded"] = grades.get(k.grade or "not graded", 0) + 1
@@ -365,6 +397,12 @@ def extremes(journal, trades):
     return best, (None if worst.id == best.id else worst)
 
 
+def _r(journal, trade_id):
+    """R for a table cell, a dash where it could not be measured."""
+    r = journal.r(trade_id)
+    return "-" if r is None else f"{r:+.2f}"
+
+
 def balance_at(journal, account, moment):
     """The computed balance of an account on a date (everything strictly before)."""
     acc = journal.accounts.get(account)
@@ -383,7 +421,7 @@ def _money(x):
 
 
 def _figures(s):
-    return (f"{s.trades} | {s.wr:.1f}% | {s.sum_r:+.2f} | {s.average_r:+.2f} "
+    return (f"{s.trades} | {f'{s.wr:.1f}%' if s.decided else '-'} | {s.sum_r:+.2f} | {s.average_r:+.2f} "
             f"| {_money(s.sum_pnl)}")
 
 
@@ -427,7 +465,10 @@ def to_markdown(r, journal, conclusions):
     lines += ["### Balance change by account", "",
               "| account | before | after | change |", "|---|---|---|---|"]
     for account, before, after in r.balances:
-        lines.append(f"| {account} | {before:,.0f} | {after:,.0f} | {after - before:+,.0f} |"
+        # the change is the difference of the printed figures, or 1 000 -> 1 001
+        # would read +2 for a real +1.2
+        b0, b1 = round(before), round(after)
+        lines.append(f"| {account} | {b0:,} | {b1:,} | {b1 - b0:+,} |"
                      .replace(",", " "))
     lines.append("")
     if r.best:
@@ -435,7 +476,7 @@ def to_markdown(r, journal, conclusions):
                   f"| trade | pair | style | R | {cur} |", "|---|---|---|---|---|"]
         for label, t in (("best", r.best), ("worst", r.worst)):
             if t:
-                lines.append(f"| {t.id} | {t.pair} | {t.style} | {journal.r(t.id):+.2f} "
+                lines.append(f"| {t.id} | {t.pair} | {t.style} | {_r(journal, t.id)} "
                              f"| {_money(t.pnl or 0.0)} |")
         lines.append("")
     if r.ticked:
@@ -450,7 +491,7 @@ def to_markdown(r, journal, conclusions):
     if r.past_stop:
         lines += ["### Losses past the stop", "",
                   "| trade | pair | R | over |", "|---|---|---|---|"]
-        lines += [f"| {t.id} | {t.pair} | {journal.r(t.id):+.2f} "
+        lines += [f"| {t.id} | {t.pair} | {_r(journal, t.id)} "
                   f"| {stats.past_stop_over(journal, t):+.2f} |"
                   for t in r.past_stop]
         lines += ["", f"Over the stop as designed, -{journal.stop_edge:g} R: "
@@ -573,7 +614,7 @@ def periods(journal, kind, now=None):
     """Every month (or quarter) from the first one a trade closed in up to the
     one running now, oldest first: the shelf the Reports tab lays them out on,
     a place for each whether a report stands there or not."""
-    now = now or datetime.now()
+    now = now or journal.now()
     closed = [t.closed for t in journal.trades if not t.is_open and t.closed]
     if not closed:
         return []

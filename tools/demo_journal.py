@@ -13,6 +13,7 @@ fixed, so a screenshot taken today differs from one taken last month only in its
 dates and where the interface itself changed. The dates run up to today, because
 a front page whose current week is empty shows half of what it can do.
 """
+import argparse
 import os
 import random
 import sys
@@ -180,6 +181,8 @@ def build(root, days=40, months=0):
     store.save_pairs(root, PAIRS)
 
     today = datetime.now().replace(hour=17, minute=30, second=0, microsecond=0)
+    if today > datetime.now():                      # before 17:30 the open trade would be in the future
+        today -= timedelta(days=1)
     while today.weekday() >= 5:                     # finish the run on a weekday
         today -= timedelta(days=1)
     start = today - timedelta(days=days)
@@ -287,7 +290,8 @@ def build(root, days=40, months=0):
             execution=random.sample(["Market Entry", "IDM", "SNR", "FVG"], 2),
             risk=risk, opened=day, opened_time=True,
             result=result, pnl=float(pnl),
-            closed=(day + timedelta(days=random.randint(0, 3))).replace(
+            # never later than today; randint is still drawn so the seeded stream holds
+            closed=min(day + timedelta(days=random.randint(0, 3)), today).replace(
                 hour=0, minute=0),
             plan=plan.id if plan.covers(day) and pair == "EURUSD" else "",
             idea=[IdeaBlock(tf="H4", text=random.choice(IDEAS))],
@@ -431,10 +435,13 @@ def add_prices(root):
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("--months")]
-    months = next((int(a.split("=", 1)[1]) for a in sys.argv[1:]
-                   if a.startswith("--months=")), 0)
-    root = args[0] if args else "/tmp/pb-demo"
+    ap = argparse.ArgumentParser(description="Write an invented journal.")
+    ap.add_argument("root", nargs="?", default="/tmp/pb-demo",
+                    help="the folder to write (default /tmp/pb-demo)")
+    ap.add_argument("--months", type=int, default=0,
+                    help="a longer run, for pictures")
+    opts = ap.parse_args()
+    root, months = opts.root, opts.months
     os.makedirs(root, exist_ok=True)
     build(root, months=months)
     add_prices(root)

@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from plainbook import store
+from plainbook import balances, store
 
 
 def check(root):
@@ -26,13 +26,25 @@ def check(root):
     # every page, and one that does not parse is named there too
     problems = store.unread_lists(root, [])
     counts = {}
+    read = {}
     for name, reader in (("trades", store.all_trades), ("plans", store.all_plans),
                          ("playbooks", store.all_playbooks), ("notes", store.all_notes),
                          ("cards", store.all_cards), ("weeks", store.all_weeks),
                          ("accounts", store.all_accounts),
                          ("adjustments", store.all_adjustments)):
-        counts[name] = len(reader(root, problems))
-    return counts, problems
+        read[name] = reader(root, problems)
+        counts[name] = len(read[name])
+    # what the replay finds wrong with the money: an entry on a balance of
+    # nothing has no R, and the server names it on every page the same way.
+    # These records are read and counted, so they are kept apart from the
+    # unreadable ones
+    if all(k in read for k in ("trades", "accounts", "adjustments")):
+        j = balances.Journal(read["accounts"], read["trades"],
+                             read["adjustments"], [])
+        replay = list(j.problems)
+    else:
+        replay = []
+    return counts, problems, replay
 
 
 def main():
@@ -41,13 +53,18 @@ def main():
     if not os.path.isdir(os.path.join(root, store.JOURNAL)):
         print(f"no journal folder under {root}")
         return 2
-    counts, problems = check(root)
+    counts, problems, replay = check(root)
     for path, why in problems:
         print(f"CANNOT READ {path}: {why}")
+    for path, why in replay:
+        print(f"NO R {path}: {why}")
     read = ", ".join(f"{n} {name}" for name, n in counts.items())
     if problems:
         n = len(problems)
         print(f"\n{read}; {n} record{'' if n == 1 else 's'} left out")
+        return 1
+    if replay:
+        print(f"\n{read}; every file reads, {len(replay)} with no R")
         return 1
     print(f"clean: {read}, every file reads")
     return 0

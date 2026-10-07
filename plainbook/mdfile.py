@@ -25,7 +25,9 @@ SEP = "---"
 
 def parse(text):
     """Split a file into (header: dict, body: str). The header may be absent."""
-    lines = text.replace("\r\n", "\n").split("\n")
+    if text.startswith("\ufeff"):   # a BOM, from an editor that adds one
+        text = text[1:]
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     if not lines or lines[0].strip() != SEP:
         return {}, text.strip("\n")
 
@@ -65,6 +67,8 @@ def dump(head, body=""):
             out.append(f"{key}: {escape(str(value))}")
     out.append(SEP)
     text = "\n".join(out)
+    # one kind of line end in every file, whatever the text came with
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
     if body.strip():
         text += "\n\n" + body.strip("\n")
     return text + "\n"
@@ -72,7 +76,7 @@ def dump(head, body=""):
 
 # Values go in as they are, but blank and multi-line ones would break the format.
 def escape(value):
-    return value.replace("\n", " ").strip()
+    return value.replace("\r", "").replace("\n", " ").strip()
 
 
 def unescape(value):

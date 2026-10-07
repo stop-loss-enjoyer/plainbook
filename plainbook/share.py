@@ -42,8 +42,8 @@ INFLATION = 4 / 3
 def data_url(path):
     """One picture as text, or an empty string when it cannot be read.
 
-    A picture that is missing must not kill the document: the rest of it is
-    still worth reading, and a broken image says so on the page."""
+    A picture that is missing or is not an image is left out: it must not kill
+    the document, the rest of it is still worth reading."""
     mime = MIME.get(os.path.splitext(path)[1].lower())
     if not mime:
         return ""
@@ -78,9 +78,15 @@ class Shots:
         if not self.pictures:
             return ""
         name = os.path.basename(name)
+        path = os.path.join(self.folder, name)
+        # one gate for both modes, so that the preview draws exactly the
+        # pictures the file will carry and not a broken one the file drops
+        if (os.path.splitext(name)[1].lower() not in MIME
+                or not os.path.isfile(path)):
+            return ""
         if not self.carry:
             return f"{self.base}/{name}"
-        return data_url(os.path.join(self.folder, name))
+        return data_url(path)
 
     def img(self, name, alt="screenshot"):
         src = self.src(name)
@@ -627,7 +633,8 @@ def trade_pages(root, j, trades, book_of, carry, pictures=True):
     return f'<div class="trades">{cards}</div>'
 
 
-HOW_TO_OPEN = " Press a line to open the trade."
+# the line is of no use on paper, where nothing can be pressed
+HOW_TO_OPEN = ' <span class="onscreen">Press a line to open the trade.</span>'
 
 
 def selection_document(root, j, trades, title, lead, book_of=None,
@@ -752,6 +759,7 @@ tr.go:hover a.to{{border-color:{DIM}}}
 .sprite{{position:absolute;width:0;height:0;overflow:hidden}}
 .pair{{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}}
 .pair .pi{{flex:none;display:block}}
+td .pair{{vertical-align:middle}}
 
 .text{{white-space:normal;overflow-wrap:anywhere}}
 .block{{margin-bottom:20px}}
@@ -803,9 +811,14 @@ ul{{margin:0 0 10px;padding-left:18px}}
 .bar form{{display:flex;flex-wrap:wrap;gap:7px;align-items:center;
  margin:0 0 0 auto}}
 .bar input[type=date]{{background:{SURFACE};color:{INK};border:1px solid {AXIS};
- border-radius:4px;padding:4px 7px;font:12px {MONO};color-scheme:dark}}
+ border-radius:4px;padding:4px 7px;font:12px {MONO};color-scheme:dark;
+ box-sizing:border-box;height:28px}}
+.bar input[type=date]:focus{{outline:none;border-color:{ACCENT}}}
+.bar a:focus-visible,.bar button:focus-visible{{outline:2px solid {ACCENT};
+ outline-offset:2px}}
 .bar button{{background:transparent;border:1px solid {AXIS};border-radius:4px;
- padding:5px 11px;color:{INK2};font-size:12px;cursor:pointer}}
+ padding:5px 11px;color:{INK2};font-size:12px;cursor:pointer;
+ box-sizing:border-box;height:28px}}
 .bar button:hover{{border-color:{DIM};color:{INK}}}
 /* the button while the file is being built: still the button, visibly not
    waiting for another press */
@@ -832,6 +845,10 @@ ul{{margin:0 0 10px;padding-left:18px}}
  .bar,.ways{{display:none}}
  a.to{{border:none}}
  .trade[id],.report{{display:block}}
+ .sheet:has(.trade[id]:target) .report{{display:block}}
+ /* each trade of a list starts a sheet, the way the report above it ends one */
+ .report + .trades > .trade:first-child{{break-before:page;page-break-before:always}}
+ .onscreen{{display:none}}
  h1{{font-size:20pt}}
  h2{{color:#5c5c66}}
  .dim,.muted,.caption,.meta,.tile .name,.tile .sub,.foot{{color:#5c5c66}}

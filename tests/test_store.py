@@ -581,6 +581,92 @@ class Layout(unittest.TestCase):
             self.assertEqual(store.make_layout(root), [])   # a second call is quiet
 
 
+class FileFormatSafetyCase(unittest.TestCase):
+    """CRLF, a BOM, headings typed into free text and headings met twice."""
+
+    def test_crlf_text_is_saved_with_plain_line_ends_and_stays_put(self):
+        with tempfile.TemporaryDirectory() as root:
+            store.save_account(root, Account(id="broker", name="Broker", start_balance=1000))
+            t = sample_trade(conclusions="line one\r\nline two\r\n\r\nline three")
+            t.idea = [IdeaBlock(tf="H4", text="line one\r\nline two\r\n\r\nline three")]
+            store.save_trade(root, t)
+            back = store.load_trade(root, t.id)
+            want = "line one\nline two\n\nline three"
+            self.assertEqual(back.conclusions, want)
+            self.assertEqual(back.idea[0].text, want)
+            store.save_trade(root, back)
+            again = store.load_trade(root, t.id)
+            self.assertEqual((again.conclusions, again.idea[0].text), (want, want))
+            path = os.path.join(store.trade_dir(root, t.id), store.TRADE_FILE)
+            with open(path, "rb") as f:
+                self.assertNotIn(b"\r", f.read())
+
+    def test_a_vocabulary_file_with_a_bom_is_read_and_kept(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = store.vocabulary_file(root)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8-sig") as f:
+                f.write("---\nstyles:\n  - scalp\n  - news\nexecution:\n  - M5\n---\n")
+            self.assertEqual(store.all_words(root, "styles"), ["scalp", "news"])
+            store.save_words(root, "timeframes", ["H1", "H4"])
+            self.assertEqual(store.all_words(root, "styles"), ["scalp", "news"])
+            self.assertEqual(store.all_words(root, "execution"), ["M5"])
+            self.assertEqual(store.all_words(root, "timeframes"), ["H1", "H4"])
+
+    def test_setup_description_takes_no_headings_or_checkboxes(self):
+        from plainbook import server
+        for about in ("wait\r\n## Why\r\nbecause", "### x", "- [ ] wait", "  ###"):
+            with self.assertRaises(RecordError, msg=about):
+                server.playbook_from_form(
+                    {"name": ["P"], "setups": ["1"], "setup_name_1": ["A"],
+                     "setup_about_1": [about]}, Playbook(id="p"))
+        p = server.playbook_from_form(
+            {"name": ["P"], "setups": ["1"], "setup_name_1": ["A"],
+             "setup_about_1": ["wait for the retest of the level"],
+             "setup_rule_1": ["Level held"]}, Playbook(id="p"))
+        back = store.text_to_playbook(store.playbook_to_text(p))
+        self.assertEqual(back.setups[0].text, "wait for the retest of the level")
+        self.assertEqual([r.text for r in back.setups[0].rules], ["Level held"])
+
+    def test_triple_hash_lines_inside_block_text_stay_in_the_block(self):
+        text = "trend up\n### key level\n1.0850 holds\n###\nend"
+        t = sample_trade()
+        t.idea = [IdeaBlock(tf="H4", text=text, images=["shots/idea-1-1.png"])]
+        back = store.text_to_trade(store.trade_to_text(t))
+        self.assertEqual([(b.tf, b.text, b.images) for b in back.idea],
+                         [("H4", text, ["shots/idea-1-1.png"])])
+        k = Plan(id="p1", day=datetime(2025, 1, 6),
+                 analysis=[IdeaBlock(tf="H4", text=text, images=["shots/a.png"])])
+        pb = store.text_to_plan(store.plan_to_text(k))
+        self.assertEqual([(b.tf, b.text, b.images) for b in pb.analysis],
+                         [("H4", text, ["shots/a.png"])])
+        n = Note(id="n1", title="T", day=datetime(2025, 1, 6),
+                 blocks=[IdeaBlock(tf="H4", text=text, images=["shots/n.png"])])
+        nb = store.text_to_note(store.note_to_text(n))
+        self.assertEqual([(b.tf, b.text, b.images) for b in nb.blocks],
+                         [("H4", text, ["shots/n.png"])])
+
+    def test_a_heading_met_twice_keeps_both_texts(self):
+        text = ("---\nid: 2026-01-05-01-eurusd\naccount: broker\npair: EURUSD\n"
+                "direction: long\nstyle: swing\nexecution:\nrisk %: 1\nentry: 2026-01-05\n---\n\n"
+                "## Updates\n\n05.01 moved stop\n\n## Conclusions\n\nx\n\n"
+                "## Updates\n\n06.01 closed half\n")
+        t = store.text_to_trade(text)
+        self.assertIn("05.01 moved stop", t.updates)
+        self.assertIn("06.01 closed half", t.updates)
+        sections = store._split_sections("## Notes\nfirst\n## Ideas\nx\n## Notes\nsecond")
+        self.assertIn("first", sections["Notes"])
+        self.assertIn("second", sections["Notes"])
+
+    def test_text_above_the_sections_of_a_plan_survives(self):
+        text = ("---\nid: p1\npair: EURUSD\nfrom: 2025-01-06\n---\n\n"
+                "NFP on Friday.\n\n## Plan\n\nwait\n")
+        k = store.text_to_plan(text)
+        self.assertEqual(k.preamble, "NFP on Friday.")
+        back = store.text_to_plan(store.plan_to_text(k))
+        self.assertEqual((back.preamble, back.plan), ("NFP on Friday.", "wait"))
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -843,3 +929,142 @@ class RecordPathCase(unittest.TestCase):
         text, images = store._text_and_images("the idea\n![](shots\\idea-01-01.png)")
         self.assertEqual(text, "the idea")
         self.assertEqual(images, ["shots/idea-01-01.png"])
+
+
+class SaveKeepsWhatWasWritten(unittest.TestCase):
+    """Records that used to lose data on a save."""
+
+    def test_playbook_prose_under_filters_management_limits_survives(self):
+        text = ("---\nid: p\nname: P\nstatus: active\n---\n\n## Conditions\n\n- [ ] one\n\n"
+                "## Filters\n\nOnly in London session.\n\n- [ ] f1\n\n"
+                "## Management\n\nMove nothing after the entry.\n\n- [ ] m1\n\n"
+                "## Limits\n\nKeep it small after two losses.\n- Max trades: 2\n")
+        p = store.text_to_playbook(text)
+        self.assertEqual(p.filters_text, "Only in London session.")
+        self.assertEqual(p.management_text, "Move nothing after the entry.")
+        self.assertEqual(p.limits_text, "Keep it small after two losses.")
+        again = store.text_to_playbook(store.playbook_to_text(p))
+        self.assertEqual((again.filters_text, again.management_text, again.limits_text),
+                         (p.filters_text, p.management_text, p.limits_text))
+        self.assertEqual(again.limits, [("Max trades", "2")])
+        self.assertEqual(len(again.filters), 1)
+        only = store.text_to_playbook(
+            "---\nid: q\nname: Q\n---\n\n## Filters\n\nJust prose here.\n")
+        back = store.text_to_playbook(store.playbook_to_text(only))
+        self.assertEqual(back.filters_text, "Just prose here.")
+        self.assertEqual(back.filters, [])
+
+    def test_a_bar_in_an_assessment_cell_does_not_split_it(self):
+        row = Graded(trade="EURUSD long | add-on", grade="A", result="+1R",
+                     id="2026-01-05-01-eurusd")
+        back = store.text_to_assessment(store.assessment_to_text([row]))[0]
+        self.assertEqual((back.trade, back.grade, back.result, back.id),
+                         ("EURUSD long / add-on", "A", "+1R", "2026-01-05-01-eurusd"))
+
+    def test_small_and_negative_numbers_survive_a_write(self):
+        for x, text in ((12.345678, "12.345678"), (0.00004, "0.00004"),
+                        (-0.00001, "-0.00001"), (12345.67, "12345.67"), (-0.0, "0")):
+            written = store._number_to_text(x)
+            self.assertEqual(written, text)
+            self.assertEqual(store._number(written), 0.0 if x == 0 else x)
+
+    def _owner_save(self, name, save):
+        with tempfile.TemporaryDirectory() as root:
+            store.make_layout(root)
+            path = os.path.join(root, store.JOURNAL, name)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("---\nnote: mine\n---\n\nMy own words.\n")
+            save(root)
+            with open(path, encoding="utf-8") as f:
+                head, body = mdfile.parse(f.read())
+            self.assertEqual(head.get("note"), "mine")
+            self.assertEqual(body.strip(), "My own words.")
+            return head
+
+    def test_vocabulary_keeps_extra_keys_and_body(self):
+        head = self._owner_save("vocabulary.md",
+                                lambda r: store.save_words(r, "styles", ["swing"]))
+        self.assertEqual(head["styles"], ["swing"])
+
+    def test_pairs_keep_extra_keys_and_body(self):
+        head = self._owner_save("pairs.md", lambda r: store.save_pairs(r, ["eurusd"]))
+        self.assertEqual(head["pairs"], ["EURUSD"])
+
+    def test_settings_keep_extra_keys_and_body(self):
+        self._owner_save("settings.md", lambda r: store.save_stop_edge(r, "1.3"))
+        self._owner_save("settings.md", lambda r: store.save_clock(r, ""))
+
+    def test_playbook_versions_are_in_natural_order(self):
+        with tempfile.TemporaryDirectory() as root:
+            for v in ("10", "1", "11", "9", "2"):
+                store.save_playbook(root, Playbook(id="pb", name="PB", version=v))
+                store.freeze_playbook(root, "pb")
+            self.assertEqual(store.playbook_versions(root, "pb"),
+                             ["1", "2", "9", "10", "11"])
+
+    def test_an_exit_date_on_an_open_trade_survives_a_save(self):
+        text = store.trade_to_text(sample_trade(result=None, pnl=None, closed=None))
+        text = text.replace("entry: ", "exit: 2025-01-06\nentry: ", 1)
+        t = store.text_to_trade(text)
+        self.assertEqual(t.closed, datetime(2025, 1, 6))
+        out = store.trade_to_text(t)
+        self.assertIn("exit: 2025-01-06", out)
+        self.assertEqual(store.text_to_trade(out).closed, datetime(2025, 1, 6))
+
+
+class FolderIsTheIdCase(unittest.TestCase):
+    """A folder copied or renamed by hand keeps the old id in its header; the
+    folder name is what the code addresses, so it wins."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        store.make_layout(self.root)
+        store.save_trade(self.root, sample_trade())
+        shots = os.path.join(store.trade_dir(self.root, "2025-06-25-01-eurusd"),
+                             "shots")
+        os.makedirs(shots)
+        with open(os.path.join(shots, "idea-01.png"), "wb") as f:
+            f.write(b"x")
+
+    def test_a_copied_folder_is_a_second_trade_and_a_problem(self):
+        import shutil
+        from plainbook.balances import Journal
+        base = os.path.join(self.root, store.JOURNAL, store.TRADES)
+        shutil.copytree(os.path.join(base, "2025-06-25-01-eurusd"),
+                        os.path.join(base, "copy-of-it"))
+        j = Journal.load(self.root)
+        self.assertEqual(sorted(t.id for t in j.trades),
+                         ["2025-06-25-01-eurusd", "copy-of-it"])
+        self.assertTrue(any("copy-of-it" in path and
+                            "the id in the file is 2025-06-25-01-eurusd" in why
+                            and "its folder is copy-of-it" in why
+                            for path, why in j.problems))
+
+    def test_a_renamed_folder_loads_and_saves_under_its_own_name(self):
+        base = os.path.join(self.root, store.JOURNAL, store.TRADES)
+        os.rename(os.path.join(base, "2025-06-25-01-eurusd"),
+                  os.path.join(base, "renamed"))
+        self.assertEqual(store.load_trade(self.root, "renamed").id, "renamed")
+        self.assertEqual([t.id for t in store.all_trades(self.root, [])],
+                         ["renamed"])
+        store.save_trade(self.root, store.load_trade(self.root, "renamed"))
+        self.assertEqual([n for n in os.listdir(base) if not n.startswith(".")],
+                         ["renamed"])
+        self.assertTrue(os.path.isfile(os.path.join(base, "renamed", "shots",
+                                                    "idea-01.png")))
+
+    def test_an_account_takes_its_file_stem(self):
+        store.save_account(self.root, Account(id="acc", name="A", start_balance=1))
+        d = os.path.join(self.root, store.JOURNAL, store.ACCOUNTS)
+        os.rename(os.path.join(d, "acc.md"), os.path.join(d, "my-acc.md"))
+        problems = []
+        self.assertEqual(list(store.all_accounts(self.root, problems)), ["my-acc"])
+        self.assertEqual(len(problems), 1)
+
+
+class UnsafeNamesCase(unittest.TestCase):
+    def test_windows_names_are_refused(self):
+        for bad in ("C:", "a:b", "nul", "CON", "com1", "Lpt9", "aux.txt"):
+            self.assertFalse(store.safe_dir_name(bad), bad)
+        for good in ("2025-06-25-01-eurusd", "console", "my-acc"):
+            self.assertTrue(store.safe_dir_name(good), good)

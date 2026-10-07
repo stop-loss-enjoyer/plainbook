@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """The import of old trades from a table."""
+import argparse
 import csv
 import io
 import os
@@ -10,7 +11,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
@@ -159,6 +160,33 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class MoneyCase(unittest.TestCase):
+    def test_formats(self):
+        for text, want in (("$1,234", 1234), ("-1,234", -1234), ("1.234,50", 1234.5),
+                           ("\u221245", -45), ("(120)", -120), ("12,345,678", 12345678),
+                           ("1 234,50 $", 1234.5), ("-$120", -120), ("3,5", 3.5)):
+            self.assertEqual(import_csv.parse_money(text), want, text)
+
+    def test_unreadable_comma(self):
+        with self.assertRaises(import_csv.RowError):
+            import_csv.parse_money("1,23,4")
+
+    def test_lose_with_a_gain_is_refused(self):
+        args = argparse.Namespace(
+            account="broker", account_column=None, pair="Pair", direction="Dir",
+            style="Style", entry="Date", exit=None, result="Result", pnl="PnL",
+            risk=None, entry_tf=None, note=None, conclusions=None, id=None,
+            idea=None, pictures=None, pictures_dir=None, risk_default=1.0)
+        row = {"Pair": "EURUSD", "Dir": "long", "Style": "swing",
+               "Date": "2026-08-05 10:00", "Result": "Lose", "PnL": "+45"}
+        with self.assertRaises(import_csv.RowError) as ctx:
+            import_csv.build(row, args, {}, 7)
+        self.assertIn("row 7", str(ctx.exception))
+        row["Result"] = "Win"
+        row["PnL"] = "-45"
+        import_csv.build(row, args, {}, 7)             # not refused
+
+
 class GuardCase(unittest.TestCase):
     """The two tools the documents lean on, shown to fire and to pass."""
     TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
@@ -187,6 +215,34 @@ class GuardCase(unittest.TestCase):
             for word in ("cyrillic", "home path", "foreign id", "long dash"):
                 self.assertIn(f"FOUND: ", out)
                 self.assertIn(word, out, word)
+        finally:
+            shutil.rmtree(tmp)
+
+    def test_demo_help_writes_nothing(self):
+        tmp = tempfile.mkdtemp(prefix="pb-help-")
+        try:
+            code, out = self.run_tool("demo_journal.py", tmp, "--help")
+            self.assertEqual(code, 0)
+            self.assertIn("usage", out)
+            self.assertEqual(os.listdir(tmp), [])
+        finally:
+            shutil.rmtree(tmp)
+
+    def test_demo_has_nothing_in_the_future(self):
+        import re
+        tmp = tempfile.mkdtemp(prefix="pb-future-")
+        try:
+            demo = os.path.join(tmp, "demo")
+            code, out = self.run_tool("demo_journal.py", tmp, "--months", "3", demo)
+            self.assertEqual(code, 0, out)
+            limit = datetime.now() + timedelta(minutes=1)
+            for t in store.all_trades(demo):
+                stamps = [t.opened, t.closed, t.breakeven]
+                stamps += [datetime.strptime(m, "%d.%m.%Y %H:%M") for m in
+                           re.findall(r"\*\*(\d\d\.\d\d\.\d{4} \d\d:\d\d)\*\*", t.updates)]
+                for stamp in stamps:
+                    if stamp:
+                        self.assertLessEqual(stamp, limit, t.id)
         finally:
             shutil.rmtree(tmp)
 
