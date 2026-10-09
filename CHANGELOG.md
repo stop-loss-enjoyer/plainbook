@@ -2,6 +2,22 @@
 
 What changed and why. Newest first.
 
+## v1.8.4, 09.10.2026
+
+The journal installs from PyPI with one pipx command, and comes up with
+the computer on Windows and macOS from a ready sample.
+
+- **On PyPI.** `pipx install plainbook-journal` installs the journal, and
+  `pipx upgrade plainbook-journal` brings the next version. Every release is
+  published there by GitHub itself, with no token kept anywhere.
+- **Autostart on Windows and macOS, ready made.** `desktop/plainbook.plist` is
+  the LaunchAgent for a Mac, and `desktop/plainbook-startup.ps1` makes the
+  startup shortcut on Windows, for the downloaded file or the source alike,
+  and takes it out again with `-Remove`.
+- **`--background`.** The start an autostart uses: it opens no browser, and
+  on Windows the downloaded file leaves no console window on the screen. The
+  journal started so is stopped in the Task Manager.
+
 ## v1.8.3, 07.10.2026
 
 What you write is kept as written: no figure is rounded on a save, a file
