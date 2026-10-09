@@ -74,6 +74,20 @@ jobs:
           grep -q "Plainbook" page.html
           grep -q "${TAG#v}" page.html
           kill %1
+      # what an autostart shortcut starts (desktop/plainbook-startup.ps1): the
+      # file hands the journal to a copy of itself with no window and returns
+      - name: on Windows, a background start returns and the journal runs on
+        if: runner.os == 'Windows'
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          PLAINBOOK_ROOT="$RUNNER_TEMP/pb2" PLAINBOOK_PORT=8898 "./$OUT" --background
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8898/ > page.html && break
+            sleep 1
+          done
+          grep -q "${TAG#v}" page.html
+          taskkill //F //IM "$OUT"
       - name: the macOS file keeps its permission inside a zip
         if: runner.os == 'macOS'
         run: |

@@ -335,7 +335,7 @@ result together with you.
 [pipx](https://pipx.pypa.io/):
 
 ```bash
-pipx install git+https://github.com/stop-loss-enjoyer/plainbook
+pipx install plainbook-journal
 plainbook
 ```
 
@@ -361,8 +361,10 @@ from, so the computed balance is right from the first minute.
 
 `PLAINBOOK_PORT` changes the port (8778 by default), `PLAINBOOK_ROOT` changes
 where the records live, and `PLAINBOOK_OPEN=0` keeps a start from opening a
-browser, for a service. Autostart on Linux, Windows and macOS, and the
-desktop samples in `desktop/`, are described in [INSTALL.md](INSTALL.md).
+browser, for a service. `--background` is the start of an autostart: no
+browser, and on Windows no window on the screen. Autostart on Linux, Windows
+and macOS, with a ready sample for each in `desktop/`, is described in
+[INSTALL.md](INSTALL.md).
 
 ### Checking a downloaded file
 

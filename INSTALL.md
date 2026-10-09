@@ -115,11 +115,14 @@ through `chromium --app=http://localhost:8778`).
 
 By hand: `py -m plainbook.server` from the project folder.
 
-Autostart without a console window, through a shortcut in the startup folder:
+Autostart is a shortcut in the startup folder, and `desktop/plainbook-startup.ps1`
+makes it:
 
-1. Win+R → `shell:startup`.
-2. Create a shortcut there with the target `pythonw -m plainbook.server` and "Start in"
-   set to the program folder.
+    powershell -ExecutionPolicy Bypass -File desktop\plainbook-startup.ps1 -Source C:\Users\NAME\plainbook
+
+The shortcut starts `pythonw -m plainbook.server --background` in the program
+folder: the journal comes up at login with no window, and the running journal
+shows in the Task Manager as pythonw. `-Remove` takes the shortcut out again.
 
 To keep the records elsewhere, set `PLAINBOOK_ROOT` as a user environment variable
 (System properties → Environment Variables).
@@ -133,24 +136,15 @@ After a reboot, check that the server came up (open the address).
 
 By hand: `python3 -m plainbook.server` from the project folder.
 
-Autostart is a LaunchAgent, `~/Library/LaunchAgents/plainbook.plist`:
+Autostart is a LaunchAgent. The sample is `desktop/plainbook.plist`; put the
+real paths in (`which python3`, the project folder, the records folder), then
 
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-      "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    <plist version="1.0"><dict>
-      <key>Label</key><string>plainbook</string>
-      <key>ProgramArguments</key>
-        <array><string>/usr/bin/python3</string><string>-m</string><string>plainbook.server</string></array>
-      <key>WorkingDirectory</key><string>/Users/NAME/plainbook</string>
-      <key>EnvironmentVariables</key>
-        <dict><key>PLAINBOOK_ROOT</key><string>/Users/NAME/plainbook-data</string></dict>
-      <key>RunAtLoad</key><true/>
-      <key>KeepAlive</key><true/>
-    </dict></plist>
+    cp desktop/plainbook.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/plainbook.plist
 
-Put the real paths in (`which python3`, the project folder), then
-`launchctl load ~/Library/LaunchAgents/plainbook.plist`.
+It is started again only when it fails: a copy that finds the journal already
+running exits cleanly, and a plain `KeepAlive` would restart it every ten
+seconds. `launchctl bootout gui/$(id -u)/plainbook` stops it.
 
 An application shortcut: Chrome → "Save as application" on the journal page, or
 `open -a "Google Chrome" --args --app=http://localhost:8778`.
@@ -176,18 +170,20 @@ The first run: Windows SmartScreen (*More info*, *Run anyway*); macOS
 The README, "Checking a downloaded file", says how the file is verified.
 
 For autostart the file takes the place of `python3 -m plainbook.server` in
-the recipes above, with `PLAINBOOK_OPEN=0` in the environment so that a login
-does not open a browser.
+the recipes above, started with `--background`: a login then opens no
+browser, and on Windows leaves no console window either.
 
-- Linux: `ExecStart=%h/Applications/Plainbook-<version>-linux-x86_64` and
-  `Environment=PLAINBOOK_OPEN=0` in the unit, and the `WorkingDirectory` line
-  taken out, since there is no source folder for it to point at. A unit whose
-  working directory does not exist never starts.
-- Windows: the path of the exe as the target of the shortcut, with
-  `PLAINBOOK_OPEN=0` as a user environment variable. Its console window stays
-  open; that window is the running journal.
-- macOS: the path of the file in `ProgramArguments` of the LaunchAgent, with
-  the variable in `EnvironmentVariables`.
+- Linux: `ExecStart=%h/Applications/Plainbook-<version>-linux-x86_64 --background`
+  in the unit, and the `WorkingDirectory` line taken out, since there is no
+  source folder for it to point at. A unit whose working directory does not
+  exist never starts.
+- Windows: `desktop/plainbook-startup.ps1 -File` with the path of the exe
+  makes the shortcut. Started with `--background`, the file starts a copy of
+  itself with no window and closes its own console at once; the running
+  journal shows in the Task Manager as Plainbook, and that is where it is
+  stopped. Keep the exe where it is: the shortcut points at that path.
+- macOS: the path of the file in `ProgramArguments` of `desktop/plainbook.plist`,
+  followed by `--background`, and the `WorkingDirectory` pair taken out.
 
 ## The check after installing
 

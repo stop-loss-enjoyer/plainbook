@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Autostart on macOS: a LaunchAgent, the journal at every login.
+
+    cp desktop/plainbook.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/plainbook.plist
+
+  Put the real paths in first: NAME is the user (`whoami`), the Python is the
+  one `which python3` names. Stopping and taking it out again:
+
+    launchctl bootout gui/$(id -u)/plainbook
+    rm ~/Library/LaunchAgents/plainbook.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>plainbook</string>
+
+  <!-- From the source. For the downloaded file, unzipped and opened once by
+       hand (Privacy & Security, Open Anyway), its path takes the place of
+       the first three strings, say
+         <string>/Users/NAME/Applications/Plainbook-VERSION-macos-arm64</string>
+       the last one stays, and the WorkingDirectory pair is taken out. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-m</string>
+    <string>plainbook.server</string>
+    <string>--background</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/NAME/plainbook</string>
+
+  <!-- Where the records live. Leave it out and a source install keeps them
+       next to the program, the downloaded file in ~/Plainbook. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PLAINBOOK_ROOT</key>
+    <string>/Users/NAME/plainbook-data</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- Started again only when it fails. A copy that finds the journal
+       already running exits cleanly, and a plain KeepAlive would start it
+       again every ten seconds. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+</dict>
+</plist>

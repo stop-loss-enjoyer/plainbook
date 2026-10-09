@@ -3882,6 +3882,51 @@ class LaunchCase(unittest.TestCase):
         self.assertTrue(w(False, {"PLAINBOOK_OPEN": " yes "}))
         self.assertTrue(w(True, {"PLAINBOOK_OPEN": "maybe"}))
 
+    def test_background_detaches_on_windows_only(self):
+        calls = []
+        spawn = lambda args, **kw: calls.append((args, kw))
+        self.assertFalse(self.S.detach("posix", {}, spawn))
+        self.assertFalse(self.S.detach("nt", {"PLAINBOOK_DETACHED": "1"}, spawn))
+        self.assertEqual(calls, [])
+        self.assertTrue(self.S.detach("nt", {"PLAINBOOK_ROOT": "x"}, spawn))
+        args, kw = calls[0]
+        self.assertEqual(args[0], sys.executable)
+        self.assertEqual(args[-1], "--background")
+        self.assertIn("plainbook.server", args)      # from the source, not frozen
+        self.assertEqual(kw["env"]["PLAINBOOK_DETACHED"], "1")
+        self.assertEqual(kw["env"]["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+        self.assertEqual(kw["env"]["PLAINBOOK_ROOT"], "x")
+        self.assertEqual(kw["creationflags"], 0x08000000 | 0x00000200)
+        sys.frozen = True
+        try:
+            self.S.detach("nt", {}, spawn)
+            self.assertEqual(calls[1][0], [sys.executable, "--background"])
+        finally:
+            del sys.frozen
+
+    def test_background_opens_no_browser(self):
+        import contextlib
+        import socket
+        taken = socket.socket()
+        taken.bind(("127.0.0.1", 0))
+        taken.listen(1)
+        opened = []
+        old = self.S.PORT, self.S.open_journal, self.S.detach
+        self.S.PORT = taken.getsockname()[1]
+        self.S.open_journal = opened.append
+        self.S.detach = lambda: False
+        os.environ["PLAINBOOK_OPEN"] = "1"
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.S.main(open_browser=True, argv=["--background"])
+                self.assertEqual(opened, [])
+                self.S.main(open_browser=True, argv=[])
+                self.assertEqual(len(opened), 1)
+        finally:
+            self.S.PORT, self.S.open_journal, self.S.detach = old
+            os.environ.pop("PLAINBOOK_OPEN", None)
+            taken.close()
+
     def test_a_second_start_on_a_taken_port_says_so_and_returns(self):
         import contextlib
         import socket

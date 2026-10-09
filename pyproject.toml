@@ -1,5 +1,5 @@
-# The package: `pipx install git+https://github.com/stop-loss-enjoyer/plainbook`
-# gives the `plainbook` command. Nothing here is needed to run the program from
+# The package: `pipx install plainbook-journal` gives the `plainbook` command.
+# A published release puts it on PyPI (.github/workflows/publish.yml). Nothing here is needed to run the program from
 # its source; python3 -m plainbook.server works without any of it.
 [build-system]
 requires = ["setuptools>=77"]

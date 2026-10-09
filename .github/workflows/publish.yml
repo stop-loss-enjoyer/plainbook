@@ -1,0 +1,50 @@
+name: publish to PyPI
+
+# The package of a published release goes to PyPI, where
+# `pipx install plainbook-journal` finds it. No token is kept anywhere: PyPI
+# trusts this workflow by its name and the environment below (trusted
+# publishing), and GitHub hands it a short-lived identity for the one upload.
+# PyPI never takes the same version twice, so a release published again
+# changes nothing there. setuptools and build are tools of this workflow only;
+# the source runs without them.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: the tag of an existing release to publish the package of
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build==1.6.1
+      - run: python -m unittest discover -s tests
+      - name: no private records in the package
+        run: python tools/check_public.py
+      # the README is the page of the package on pypi.org, and a relative link
+      # leads nowhere there; this checkout only, the repository keeps its own
+      - name: links of the README made absolute, on the tag
+        run: python tools/pypi_readme.py "$TAG"
+      - run: python -m build
+      - name: the package is the version of the tag
+        run: test -f "dist/plainbook_journal-${TAG#v}.tar.gz"
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

@@ -51,7 +51,9 @@ python3 -m plainbook                     # the same
 
 The `plainbook` command of a pipx install and the downloaded file of a release
 run the same server through `server.app` and open the browser on it;
-`python3 -m plainbook.server` and the autostart units open nothing.
+`python3 -m plainbook.server` and the autostart units open nothing; the
+macOS and Windows entries of `desktop/` start it with `--background`, which opens nothing whatever the entry,
+and on Windows hands the journal to a copy with no window (`server.detach`).
 `PLAINBOOK_OPEN=0` or `1` overrides either way. From source the records live in
 the project folder; from the file or the package, in `~/Plainbook`
 (`server.default_root`).
@@ -91,15 +93,17 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `tools/attach_playbook.py` | ties the trades a playbook was already traded by to it: its styles, from its `since` date |
 | `tools/import_csv.py` | old trades brought in from a CSV table (a Notion export, a spreadsheet), written as the interface writes them |
 | `tools/app_entry.py` | the entry of the downloaded file: what PyInstaller packs |
+| `tools/pypi_readme.py` | the README with its links made absolute on a tag, for the page of the package on pypi.org; the publish workflow runs it on its own checkout |
 | `tools/browser_check.mjs` | the scripted forms driven in a headless Chromium against a demo journal |
 | `tools/screenshots.py` | retakes the pictures of README.md in `docs/` on the demo journal; run it after a release |
 | `tests/` | the suite: `test_server.py` walks the routes on one shared journal, the others take the modules one by one |
 | `docs/` | the screenshots of README.md, taken on the demo journal |
-| `desktop/` | the user unit for Linux, the window toggle and the bar widget for Omarchy; see its README |
+| `desktop/` | the autostart of each system (the user unit for Linux, the LaunchAgent for macOS, the script that makes the startup shortcut on Windows), the window toggle and the bar widget for Omarchy; see its README |
 | `.githooks/pre-push` | runs `check_public.py` before a push; turned on once with `git config core.hooksPath .githooks` |
 | `.github/workflows/tests.yml` | the suite and the guard on every push, on Python 3.10 and 3.14, three systems |
-| `pyproject.toml` | the package for pipx: the `plainbook` command; nothing in it is needed to run from source |
+| `pyproject.toml` | the package on PyPI, `plainbook-journal`: the `plainbook` command of a pipx install; nothing in it is needed to run from source |
 | `.github/workflows/release.yml` | builds one file per system from a published release, attests it, attaches it |
+| `.github/workflows/publish.yml` | puts the package of a published release on PyPI, by trusted publishing: no token anywhere |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
 reports, share, balances, store → model → mdfile`, with `reports` and `share`
@@ -304,7 +308,9 @@ In this order, every time:
   what changed for them. When a version is released, its heading goes in here
   and `__version__` in `plainbook/__init__.py` is raised to the same number:
   that is the figure the front page shows, and the one on the pictures of the
-  README, which `tools/screenshots.py` retakes.
+  README, which `tools/screenshots.py` retakes. Publishing the release puts
+  that version on PyPI within minutes, and PyPI never takes a version twice:
+  a fix after the release is the next version, not the same one again.
 - **`GUIDE.md` gets updated** when the interface changes. It is the owner's
   manual; an out-of-date manual is worse than none.
 - **Comments explain the reason**, never the mechanics. `# closewindow does not

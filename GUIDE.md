@@ -6,7 +6,9 @@ A guide for the person using it. How it is built and what the files look like:
 The journal opens in a browser at **http://localhost:8778**. Installed with
 the autostart of [INSTALL.md](INSTALL.md), the server comes up with the
 machine and there is nothing to start by hand; the downloaded file and the
-`plainbook` command of a pipx install open the browser themselves. On Linux
+`plainbook` command of a pipx install open the browser themselves. On Windows
+the journal started at login has no window: it is stopped in the Task
+Manager, as Plainbook (the downloaded file) or pythonw (the source). On Linux
 with Omarchy there is also a button in the top bar and a hotkey.
 
 ## The daily round

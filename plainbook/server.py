@@ -8388,14 +8388,51 @@ def wants_browser(default, env=os.environ):
     return default
 
 
-def main(open_browser=False):
+# the word an autostart entry starts the journal with (desktop/)
+BACKGROUND = "--background"
+# CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, spelled out: subprocess has the
+# names on Windows only
+NO_WINDOW = 0x08000000 | 0x00000200
+
+
+def detach(platform=os.name, env=os.environ, spawn=subprocess.Popen):
+    """Hands the journal to a new process with no window, on Windows.
+
+    The downloaded file is a console program there, so started by a login it
+    would leave a console window on the screen for as long as it runs. Under
+    BACKGROUND it starts itself again with no window and returns, and the
+    login is left with nothing on the screen. True when it did. Elsewhere a
+    service has no window to begin with, and nothing is done.
+
+    PYINSTALLER_RESET_ENVIRONMENT makes the new copy of the downloaded file
+    unpack itself afresh: without it, it would run from the folder of this
+    one, which is deleted the moment this one returns."""
+    if platform != "nt" or env.get("PLAINBOOK_DETACHED"):
+        return False
+    if getattr(sys, "frozen", False):
+        args = [sys.executable, BACKGROUND]
+    else:
+        args = [sys.executable, "-m", "plainbook.server", BACKGROUND]
+    child = dict(env, PLAINBOOK_DETACHED="1", PYINSTALLER_RESET_ENVIRONMENT="1")
+    spawn(args, env=child, creationflags=NO_WINDOW, close_fds=True,
+          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+          stderr=subprocess.DEVNULL)
+    return True
+
+
+def main(open_browser=False, argv=None):
     """Serves the journal until Ctrl+C. `python3 -m plainbook.server` and the
     autostart units come here and open nothing; the `plainbook` command and the
-    downloaded file come through `app` and open the browser."""
+    downloaded file come through `app` and open the browser. BACKGROUND opens
+    nothing either, whatever the entry, and on Windows leaves no window."""
+    argv = sys.argv[1:] if argv is None else argv
+    background = BACKGROUND in argv
+    if background and detach():
+        return
     if sys.stdout is None:            # a build without a console has nowhere to print
         sys.stdout = open(os.devnull, "w")
     url = f"http://localhost:{PORT}"
-    show = wants_browser(open_browser)
+    show = False if background else wants_browser(open_browser)
     os.makedirs(DRAFTS, exist_ok=True)
     store.make_layout(ROOT)
     try:

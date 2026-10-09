@@ -22,3 +22,29 @@ jobs:
       - run: python -m unittest discover -s tests
       - name: no private records in the repository
         run: python tools/check_public.py
+      # the autostart of desktop/, on the systems it is written for
+      - name: a background start returns and leaves the journal running
+        if: runner.os == 'Windows'
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          PLAINBOOK_ROOT="$RUNNER_TEMP/pb" PLAINBOOK_PORT=8899 python -m plainbook.server --background
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8899/ > page.html && break
+            sleep 1
+          done
+          grep -q "Plainbook" page.html
+      - name: the startup shortcut is made and taken out
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./desktop/plainbook-startup.ps1 -Source .
+          $link = Join-Path ([Environment]::GetFolderPath('Startup')) 'Plainbook.lnk'
+          $made = (New-Object -ComObject WScript.Shell).CreateShortcut($link)
+          if ($made.Arguments -ne '-m plainbook.server --background') { throw "arguments: $($made.Arguments)" }
+          if ($made.TargetPath -notmatch 'pythonw\.exe$|pyw\.exe$') { throw "target: $($made.TargetPath)" }
+          ./desktop/plainbook-startup.ps1 -Remove
+          if (Test-Path $link) { throw 'the shortcut is still there' }
+      - name: the LaunchAgent sample is a property list
+        if: runner.os == 'macOS'
+        run: plutil -lint desktop/plainbook.plist
