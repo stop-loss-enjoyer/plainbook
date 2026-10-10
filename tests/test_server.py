@@ -3983,7 +3983,7 @@ class SecurityCase(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.root = cls.tmp.name
-        store.save_account(cls.root, Account(id="ftmo", name="Roman's FTMO",
+        store.save_account(cls.root, Account(id="ftmo", name="Alex's FTMO",
                                              start_balance=10000))
         os.environ["PLAINBOOK_ROOT"] = cls.root
         import plainbook.server
@@ -4033,7 +4033,7 @@ class SecurityCase(unittest.TestCase):
         self.assertIn('onsubmit="return confirm(this.dataset.ask)"', body)
         ask = re.search(r'data-ask="([^"]*)"', body).group(1)
         self.assertEqual(stdhtml.unescape(ask),
-                         "Delete account Roman's FTMO? It moves to .trash.")
+                         "Delete account Alex's FTMO? It moves to .trash.")
 
     def test_frame_and_sniff_headers(self):
         for path in ("/", "/accounts"):

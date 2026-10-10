@@ -118,7 +118,7 @@ class FiguresCase(unittest.TestCase):
         self.assertEqual(last[5], 450)
 
     def test_a_name_with_quotes_does_not_break_the_chart(self):
-        name = "Roman's account\"'><b id=pwn>"
+        name = "Alex's account\"'><b id=pwn>"
         pts = [(datetime(2026, 9, 1), 5000.0, "start"), (datetime(2026, 9, 2), 5100.0, None)]
         svg = H.equity_svg([(name, "#fff", pts)])
         self.assertNotIn("<b id=pwn>", svg)
