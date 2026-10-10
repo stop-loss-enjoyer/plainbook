@@ -1,7 +1,23 @@
 #!/bin/bash
 # Nothing private leaves this repository. The check is cheap; a leak is not.
 # Turn it on once with:  git config core.hooksPath .githooks
-python3 tools/check_public.py || {
+#
+# Git feeds one line per ref being pushed: <local ref> <local sha> <remote ref>
+# <remote sha>. Besides the tree, the commits that would be published are
+# looked through, so a record added and removed again is still refused.
+zero=0000000000000000000000000000000000000000
+failed=0
+python3 tools/check_public.py || failed=1
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_sha" ] && continue
+  [ "$local_sha" = "$zero" ] && continue          # a delete publishes nothing
+  if [ "$remote_sha" = "$zero" ] || ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+    python3 tools/check_public.py --range "$local_sha" --not --remotes || failed=1
+  else
+    python3 tools/check_public.py --range "${remote_sha}..${local_sha}" || failed=1
+  fi
+done
+[ "$failed" = 0 ] || {
   echo
   echo "push refused: see the lines above"
   exit 1

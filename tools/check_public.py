@@ -4,12 +4,16 @@
 A guard before publishing: does this repository hold anything it should not?
 
     python3 tools/check_public.py
+    python3 tools/check_public.py --range <git log revision arguments>
 
 Four things are checked:
 
 1. **No records are tracked.** The layout under journal/ is held by .gitkeep
-   files and nothing else may live there, because one careless `git add -A`
-   would be enough to publish somebody's trading history.
+   files and nothing else may live there, nor in .trash/ or .drafts/, because
+   one careless `git add -A` would be enough to publish somebody's trading
+   history. With `--range`, the commits a push would publish are looked
+   through as well (`git log --name-only` over the given revisions), so a
+   record that was added and removed again is still found in the history.
 2. **No Cyrillic anywhere.** The project is written in English throughout,
    code, comments, documents and commit messages alike, so any Cyrillic in a
    tracked file means text from the records or from private notes has leaked in.
@@ -44,13 +48,35 @@ SKIP_DIRS = {".git", "__pycache__", ".trash", ".drafts", "journal"}
 SKIP_SUFFIX = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".zip", ".bundle")
 
 
+def is_layout(path):
+    """The only thing allowed under journal/: the file that holds a folder."""
+    return path.startswith("journal/") and path.endswith(".gitkeep")
+
+
 def tracked_records():
     try:
-        files = subprocess.run(["git", "ls-files", "journal"], text=True,
-                               capture_output=True, check=True).stdout.split()
+        files = subprocess.run(["git", "ls-files", "journal", ".trash", ".drafts"],
+                               text=True, capture_output=True, check=True).stdout.split("\n")
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []
-    return [f for f in files if not f.endswith(".gitkeep")]
+    return [f for f in files if f and not is_layout(f)]
+
+
+def history_records(revisions):
+    """Records in the commits that `git log <revisions>` names, even when a
+    later commit removed them again. Returns (paths, error or None)."""
+    try:
+        out = subprocess.run(["git", "log", "--name-only", "--format=", *revisions,
+                              "--", "journal", ".trash", ".drafts"],
+                             text=True, capture_output=True, check=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        detail = (getattr(e, "stderr", "") or str(e)).strip()
+        return [], detail or "git log failed"
+    seen = []
+    for f in out.split("\n"):
+        if f and not is_layout(f) and f not in seen:
+            seen.append(f)
+    return seen, None
 
 
 def scan():
@@ -84,7 +110,16 @@ def main():
     # question mark in the report than a crash before the report
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
+    args = sys.argv[1:]
     problems = [f"a record is tracked: {f}" for f in tracked_records()]
+    if args and args[0] == "--range":
+        if len(args) < 2:
+            problems.append("--range needs the revisions to look through")
+        else:
+            paths, error = history_records(args[1:])
+            if error:
+                problems.append(f"the history could not be read: {error}")
+            problems += [f"a record is in history: {f}" for f in paths]
     problems += scan()
     for p in problems:
         print("FOUND:", p)

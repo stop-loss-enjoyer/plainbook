@@ -33,6 +33,11 @@ def write(path, text):
         f.write(text)
 
 
+def read_file(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
 class TypedHeadingsTest(unittest.TestCase):
     def test_a_heading_typed_behind_a_space_comes_back_as_typed(self):
         k = Plan(id="p", day=datetime(2026, 1, 31),
@@ -147,10 +152,10 @@ class OwnerFilesTest(unittest.TestCase):
                            ("vocabulary.md", lambda: store.save_words(self.root, "styles", ["news"])),
                            ("pairs.md", lambda: store.save_pairs(self.root, ["AUDUSD"]))):
             full = os.path.join(self.root, "journal", path)
-            before = open(full, encoding="utf-8").read()
+            before = read_file(full)
             with self.assertRaises(RecordError):
                 save()
-            self.assertEqual(open(full, encoding="utf-8").read(), before)
+            self.assertEqual(read_file(full), before)
 
     def test_check_journal_names_a_broken_list(self):
         self.break_all()
@@ -242,8 +247,7 @@ class FixesServerCase(unittest.TestCase):
             # the slider refuses to write over it, and the file stays
             self.assertEqual(self.status("/settings/stop-edge",
                                          {"stop_edge": "1.4", "back": "/"}), 400)
-            self.assertEqual(open(path, encoding="utf-8").read(),
-                             "---\nstop_edge 1.3\n---\n")
+            self.assertEqual(read_file(path), "---\nstop_edge 1.3\n---\n")
         finally:
             os.remove(path)
             self.S.drop_cache()

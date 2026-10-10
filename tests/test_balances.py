@@ -504,6 +504,31 @@ class PropRules(unittest.TestCase):
         start, end, _ = j.firm_day(a, datetime(2026, 9, 22, 16, 0))
         self.assertEqual(start, datetime(2026, 9, 21, 17, 0))
 
+    def test_a_profit_closed_today_makes_room_for_the_open_risk(self):
+        """+600 closed today and 503 at risk at the stop: the day ends at +97
+        at worst, so a limit of 500 is nowhere near."""
+        a = self.prop(daily_loss_limit=500)
+        now = datetime(2026, 9, 22, 15, 0)
+        won = self.closed("won", 600, datetime(2026, 9, 22, 9, 0), datetime(2026, 9, 22, 11, 0))
+        running = Trade(id="open", account="prop", pair="EURUSD", direction="long",
+                        style="swing", risk=0.5, opened=datetime(2026, 9, 22, 12, 0),
+                        opened_time=True)
+        p = Journal({"prop": a}, [won, running], []).prop("prop", now)
+        self.assertAlmostEqual(p.at_risk, 503)
+        self.assertEqual(p.daily_used, 0)
+        self.assertEqual(p.daily_left, 500)
+        won.pnl = 200
+        p = Journal({"prop": a}, [won, running], []).prop("prop", now)
+        self.assertAlmostEqual(p.daily_used, p.at_risk - 200)
+        # a losing day still adds the open risk to the loss
+        lost = self.closed("lost", -300, datetime(2026, 9, 22, 9, 0), datetime(2026, 9, 22, 11, 0))
+        small = Trade(id="open", account="prop", pair="EURUSD", direction="long",
+                      style="swing", risk=0.1, opened=datetime(2026, 9, 22, 12, 0),
+                      opened_time=True)
+        p = Journal({"prop": a}, [lost, small], []).prop("prop", now)
+        self.assertAlmostEqual(p.daily_used, 300 + p.at_risk)
+        self.assertAlmostEqual(p.at_risk, 99.7)
+
     def test_an_unknown_clock_falls_back_and_says_so(self):
         a = self.prop(daily_loss_limit=1000, zone="Mars/Base")
         j = Journal({"prop": a}, [], [])

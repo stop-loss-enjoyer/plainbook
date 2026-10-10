@@ -80,8 +80,9 @@ const api = {
     if (r.result.exceptionDetails) throw new Error("evaluate failed: " + JSON.stringify(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text) + " in " + expr.slice(0, 80));
     return r.result.result.value;
   },
-  // submit a form and wait for the page that comes after
-  async submit(selector = "form") {
+  // submit a form and wait for the page that comes after; the header holds
+  // the form of the Lite switch, so the first form is the page's own after it
+  async submit(selector = "form:not(.lite-switch)") {
     events.length = 0;
     await send("Runtime.evaluate", { expression: `document.querySelector(${JSON.stringify(selector)}).requestSubmit()` });
     await loaded();
@@ -342,7 +343,7 @@ async function run(p) {
     dt.items.add(new File([png], 'b.png', {type: 'image/png'}));
     const zone = document.querySelector('.dropzone[data-zone="idea-1"]');
     zone.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true}));
-    document.querySelector('form').requestSubmit();
+    document.querySelector('form:not(.lite-switch)').requestSubmit();
   })()`);
   await loaded();
   check((await p.url()).startsWith("/trade/"), "the save went out once the pictures were up");

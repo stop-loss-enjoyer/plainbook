@@ -278,7 +278,8 @@ class FixesCase(unittest.TestCase):
         _, html = self.get(f"/close/{t.id}")
         self.post(f"/close/{t.id}", {"token": self.token(html), "result": "Win",
                                      "pnl": "100", "exit": "2026-08-14T10:00",
-                                     "conclusions": "", "held_mgmt": "2"})
+                                     "conclusions": "", "ticked_exit": "0",
+                                     "held_mgmt": "2"})
         after = store.load_trade(self.root, t.id)
         self.assertEqual((after.exit_deviations, after.playbook_version), ([3], "1.0"))
         self.assertIsNone(after.deviations)

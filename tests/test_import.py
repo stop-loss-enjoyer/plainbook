@@ -218,6 +218,51 @@ class GuardCase(unittest.TestCase):
         finally:
             shutil.rmtree(tmp)
 
+    def test_check_public_finds_records_in_trash_drafts_and_history(self):
+        tmp = tempfile.mkdtemp(prefix="pb-guard-git-")
+        try:
+            def git(*a):
+                subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
+                                "-c", "commit.gpgsign=false", *a], cwd=tmp,
+                               capture_output=True, check=True)
+            git("init", "-q")
+            os.makedirs(os.path.join(tmp, "journal", "trades", "x"))
+            keep = os.path.join(tmp, "journal", ".gitkeep")
+            open(keep, "w").close()
+            git("add", "journal/.gitkeep")
+            git("commit", "-q", "-m", "layout")
+            code, out = self.run_tool("check_public.py", tmp, "--range", "HEAD")
+            self.assertEqual(code, 0, out)
+            # a record added and removed again stays in the history
+            rec = os.path.join(tmp, "journal", "trades", "x", "trade.md")
+            with open(rec, "w") as f:
+                f.write("pair: EURUSD\n")
+            git("add", "journal/trades/x/trade.md")
+            git("commit", "-q", "-m", "oops")
+            git("rm", "-q", "journal/trades/x/trade.md")
+            git("commit", "-q", "-m", "removed")
+            code, out = self.run_tool("check_public.py", tmp)
+            self.assertEqual(code, 0, out)                 # the tree alone is clean
+            code, out = self.run_tool("check_public.py", tmp, "--range", "HEAD")
+            self.assertEqual(code, 1, out)
+            self.assertIn("a record is in history: journal/trades/x/trade.md", out)
+            code, out = self.run_tool("check_public.py", tmp, "--range", "HEAD~1..HEAD")
+            self.assertEqual(code, 1, out)                 # the removal touches the path
+            code, out = self.run_tool("check_public.py", tmp, "--range", "HEAD~2")
+            self.assertEqual(code, 0, out)                 # before the record
+            code, out = self.run_tool("check_public.py", tmp, "--range", "nonsense")
+            self.assertEqual(code, 1, out)
+            # a tracked file in .trash or .drafts counts as a record
+            os.makedirs(os.path.join(tmp, ".trash"))
+            with open(os.path.join(tmp, ".trash", "t.md"), "w") as f:
+                f.write("pnl: 1\n")
+            git("add", "-f", ".trash/t.md")
+            code, out = self.run_tool("check_public.py", tmp)
+            self.assertEqual(code, 1, out)
+            self.assertIn("a record is tracked: .trash/t.md", out)
+        finally:
+            shutil.rmtree(tmp)
+
     def test_demo_help_writes_nothing(self):
         tmp = tempfile.mkdtemp(prefix="pb-help-")
         try:

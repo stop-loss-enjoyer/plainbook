@@ -334,7 +334,7 @@ class Discipline:
     mistakes_sum: stats.Summary = None
 
 
-def discipline(root, journal, trades, problems=None, playbooks=None):
+def discipline(root, journal, trades, problems=None, playbooks=None, rules=True):
     """How the trades went through their checklists, and which rules were
     broken at what cost.
 
@@ -351,8 +351,15 @@ def discipline(root, journal, trades, problems=None, playbooks=None):
     its period, which are closed by construction; the Statistics tab hands
     over a selection, which is not."""
     trades = [t for t in trades if not t.is_open]
-    c = stats.checklist(journal, trades)
-    ticked = [t for t in trades if stats.ticked(t)]
+    # Lite reads no rule at all: a trade ticked in the full journal counts as
+    # nothing here, so the only mistake it names is a loss past the stop
+    if not rules:
+        ticked, playbooks = [], []
+        c = stats.Checklist(ticked=0, unticked=0, kept=stats.summary(journal, []),
+                            broke=stats.summary(journal, []))
+    else:
+        c = stats.checklist(journal, trades)
+        ticked = [t for t in trades if stats.ticked(t)]
     r = Discipline(ticked=c.ticked, unticked=c.unticked, kept=c.kept, broke=c.broke)
     rows = []
     if playbooks is None:

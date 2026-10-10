@@ -163,7 +163,10 @@ class ServerCase(unittest.TestCase):
             with self.assertRaises(self.S.RecordError, msg=text):
                 self.S.figure(text, "PnL")
         # a PnL of nan is refused with a page, not stored
-        q = urllib.parse.quote(self.open_trade(pair="GBPUSD"))
+        # a day of its own: the deleted trade keeps its id in the trash, and
+        # the story's trade is renamed to GBPUSD on 29.08 in test_08
+        q = urllib.parse.quote(self.open_trade(pair="GBPUSD",
+                                               entry="2026-08-13T14:30"))
         for pnl in ("nan", "inf"):
             self.refused(f"/close/{q}", {"result": "Win", "pnl": pnl,
                                          "exit": "2026-08-30"})
@@ -188,6 +191,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.get("/draft/not-a-token/x.png")
         self.assertEqual(e.exception.code, 400)
+        e.exception.close()
         e.exception.close()
         code, where = self.post("/new", {
             "token": token, "blocks": "1", "account": "broker", "pair": "EURUSD",
@@ -230,6 +234,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             urllib.request.urlopen(req)
         self.assertEqual(caught.exception.code, 304)
+        caught.exception.close()
         caught.exception.close()
 
     def test_06_close_the_trade(self):
@@ -349,6 +354,7 @@ class ServerCase(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as caught:
                 urllib.request.urlopen(req)
             self.assertEqual(caught.exception.code, 403)
+            caught.exception.close()
             caught.exception.close()
         req = urllib.request.Request(self.url("/"),
                                      headers={"Host": f"localhost:{self.port}"})
@@ -496,6 +502,7 @@ class ServerCase(unittest.TestCase):
             self.get(f"/trade/{q}")
         self.assertEqual(e.exception.code, 404)
         e.exception.close()
+        e.exception.close()
 
     def test_21_a_card_is_written_and_read_back(self):
         _, html = self.get("/card/2026-08-29")
@@ -570,6 +577,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.get("/card/2026-13-99")
         self.assertEqual(e.exception.code, 404)
+        e.exception.close()
         e.exception.close()
 
     def test_25_money_goes_in_and_out_and_cashouts_are_counted(self):
@@ -718,6 +726,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.post("/settings/stop-edge", {"stop_edge": "3", "back": "/stats"})
         self.assertEqual(e.exception.code, 400)
+        e.exception.close()
         self.assertEqual(store.stop_edge(self.root), 1.0)
         # a way back that leaves the journal is not taken
         _, where = self.post("/settings/stop-edge",
@@ -1118,6 +1127,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.post(f"/plan/{q}/void", {"reason": "again"})
         self.assertEqual(e.exception.code, 400)
+        e.exception.close()
 
         self.post(f"/plan/{q}/restore", {})
         k = store.load_plan(self.root, plan_id)
@@ -1176,6 +1186,7 @@ class ServerCase(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as caught:
                 self.get("/playbook/nope")
             self.assertEqual(caught.exception.code, 404)
+            caught.exception.close()
         finally:
             shutil.rmtree(store.playbook_dir(self.root, "pull"))
 
@@ -1264,6 +1275,7 @@ class ServerCase(unittest.TestCase):
             self.post("/playbook/pullback/edit", changed)
         self.assertEqual(caught.exception.code, 400)
         html = caught.exception.read().decode("utf-8")
+        caught.exception.close()
         self.assertIn('class="notice"', html)
         self.assertIn("Target 3R away", html)         # what was typed is kept
         self.assertEqual([r.text for r in store.load_playbook(self.root, "pullback").rules][1],
@@ -1472,7 +1484,7 @@ class ServerCase(unittest.TestCase):
             self.post(f"/close/{trade_id}", {"token": self.form_token(html),
                                              "result": "Win", "pnl": "200",
                                              "exit": "2026-08-30T10:00",
-                                             "held_pull": ["5"],
+                                             "ticked_exit": "0", "held_pull": ["5"],
                                              "why_pull_6": "held over the weekend"})
             t = store.load_trade(self.root, trade_id)
             self.assertEqual((t.deviations, t.exit_deviations), ([2], [6]))
@@ -1551,7 +1563,7 @@ class ServerCase(unittest.TestCase):
             _, html = self.get(f"/close/{trade_id}")
             self.post(f"/close/{trade_id}", {"token": self.form_token(html), "result": "Win",
                                              "pnl": "100", "exit": "2026-08-30T10:00",
-                                             "held_pull": ["4"]})
+                                             "ticked_exit": "0", "held_pull": ["4"]})
             self.S.drop_cache()
             base = {"blocks": "1", "account": "broker", "pair": "EURUSD", "direction": "long",
                     "style": "swing", "entry_tf": "H4", "risk": "1", "entry": "2026-08-29T14:30",
@@ -1758,6 +1770,7 @@ class ServerCase(unittest.TestCase):
             self.assertEqual(e.exception.code, 400)
             self.assertIn("This record could not be read", e.exception.read().decode())
             e.exception.close()
+            e.exception.close()
         finally:
             import shutil
             for rel in broken:
@@ -1776,12 +1789,14 @@ class ServerCase(unittest.TestCase):
             self.assertEqual(e.exception.code, 404, where)
             html = e.exception.read().decode()
             e.exception.close()
+            e.exception.close()
             self.assertIn("<h2>No such ", html, where)
             self.assertIn('<header', html, where)      # a page of the journal, with its navigation
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.get("/plan/.hidden/edit")
         self.assertEqual(e.exception.code, 400)
         self.assertIn("<h2>Bad plan id</h2>", e.exception.read().decode())
+        e.exception.close()
         e.exception.close()
 
     def test_50d_a_closed_trade_is_not_closed_again(self):
@@ -2080,6 +2095,7 @@ class ServerCase(unittest.TestCase):
             self.get(f"/trade/{q}")
         self.assertEqual(e.exception.code, 404)
         e.exception.close()
+        e.exception.close()
 
     def test_61_the_streak_is_on_the_statistics_and_not_the_front_page(self):
         # the first rows of the list already show the run; the tile said it twice
@@ -2312,6 +2328,7 @@ class ServerCase(unittest.TestCase):
                 self.get(f"/week/{bad}")
             self.assertEqual(e.exception.code, 404, bad)
             e.exception.close()
+            e.exception.close()
 
     def test_68_search_finds_a_word_in_a_weekly_card(self):
         code, html = self.get("/search?q=US100+on+Thursday")
@@ -2440,6 +2457,7 @@ class ServerCase(unittest.TestCase):
             self.post(f"/edit/{q}", fields)
         self.assertEqual(e.exception.code, 400)
         e.exception.close()
+        e.exception.close()
         self.assertTrue(os.path.isdir(store.trade_dir(self.root, tid)))
         self.assertEqual(store.load_trade(self.root, tid).pair, t.pair)
         self.assertEqual(self.get(f"/trade/{q}")[0], 200)
@@ -2448,6 +2466,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.post(f"/edit/{q}", fields)
         self.assertIn("risk is missing", e.exception.read().decode())
+        e.exception.close()
         e.exception.close()
         self.assertEqual(store.load_trade(self.root, tid).risk, t.risk)
 
@@ -2581,6 +2600,95 @@ class ServerCase(unittest.TestCase):
         _, html = self.get(way)
         self.assertNotIn('href="/report/', html)
 
+    def test_75bb_the_way_back_survives_the_forms_of_a_trade(self):
+        """Opened from a report or a Statistics cut, a trade keeps its way
+        back through Edit, Close, Share and the landing of a save; the dots
+        of the R distribution carry it as the bars and rows do; a missing
+        record sends Back to its own list; Close from the open positions
+        returns to the front page."""
+        t = self.open_trade(entry="2026-08-29T14:30")
+        q = urllib.parse.quote(t)
+        for ctx, want in (("report=2026-08", "?report=2026-08"),
+                          ("closed=2026-08&pair=EURUSD",
+                           "?pair=EURUSD&closed=2026-08")):
+            _, html = self.get(f"/trade/{q}?{ctx}")
+            self.assertIn(f'href="/edit/{q}{want}"', html)
+            self.assertIn(f'href="/close/{q}{want}"', html)
+            self.assertIn(f'href="/share/trade/{q}{want}"', html)
+            self.assertIn(f'action="/trade/{q}/breakeven{want}"', html)
+            _, html = self.get(f"/edit/{q}{want}")
+            self.assertIn(f'action="/edit/{q}{want}"', html)
+            self.assertIn(f'href="/trade/{q}{want}">Cancel', html)
+            _, html = self.get(f"/share/trade/{q}{want}")
+            self.assertIn(f'<a href="/trade/{q}{want.replace("&", "&amp;")}">Back</a>',
+                          html)
+        _, html = self.get(f"/trade/{q}?report=/evil")
+        self.assertNotIn("?report=", html)
+        _, where = self.post(f"/trade/{q}/breakeven?report=2026-08", {})
+        self.assertIn("?report=2026-08", where)
+        self.post(f"/trade/{q}/breakeven", {"undo": "1"})      # put the risk back
+        # closed from the open positions, the save lands on the front page
+        t2 = self.open_trade(entry="2026-08-28T10:00")
+        q2 = urllib.parse.quote(t2)
+        _, form = self.get(f"/close/{q2}?back=%2F")
+        _, where = self.post(f"/close/{q2}", {
+            "token": self.form_token(form), "back": "/", "result": "Win",
+            "pnl": "40", "exit": "2026-08-31T10:00", "conclusions": ""})
+        self.assertEqual(urllib.parse.urlparse(where).path, "/")
+        # the dots of the distribution
+        _, html = self.get("/stats?closed=2026-08")
+        dots = re.findall(r'href="(/trade/[^"]+)"', html[html.index("R distribution"):])
+        self.assertTrue(dots)
+        self.assertTrue(all("closed=2026-08" in d for d in dots))
+        _, html = self.get("/report/2026-08")
+        dots = re.findall(r'href="(/trade/[^"]+)"', html[html.index("R distribution"):])
+        self.assertTrue(dots)
+        self.assertTrue(all("report=2026-08" in d for d in dots))
+        # a missing record: the list of its own kind, under its own tab
+        for path, tab, back in (("/plan/nope", "plans", "/plans"),
+                                ("/note/nope", "notes", "/notes"),
+                                ("/playbook/nope", "playbooks", "/playbooks"),
+                                ("/report/2026-99", "reports", "/reports")):
+            try:
+                self.get(path)
+            except urllib.error.HTTPError as e:
+                html = e.read().decode("utf-8")
+                e.close()
+                self.assertEqual(e.code, 404)
+                self.assertIn(f'<a href="{back}">Back</a>', html, path)
+        # Close from the open positions comes back to the front page
+        _, html = self.get("/")
+        self.assertIn(f'href="/close/{q}?back=%2F"', html)
+        _, html = self.get(f"/close/{q}?back=%2F")
+        self.assertIn('name="back" value="/"', html)
+        self.assertIn('<a class="btn" href="/">Cancel</a>', html)
+        _, html = self.get(f"/close/{q}")
+        self.assertIn(f'<a class="btn" href="/trade/{q}">Cancel</a>', html)
+
+    def test_75c_an_error_line_of_a_report_opens_its_card_with_the_way_back(self):
+        """The whole line of an error is the link, and the card it opens
+        offers the report back, before a save and after it."""
+        self.post("/card/save", {"date": "2026-08-25", "previous": "2026-08-25",
+                                 "errors": "moved the stop too early"})
+        self.addCleanup(self.post, "/card/2026-08-25/delete", {})
+        _, html = self.get("/report/2026-08")
+        m = re.search(r'<li><a href="(/card/[^"?]+)\?report=2026-08">'
+                      r'<span class="when">', html)
+        self.assertIsNotNone(m)
+        card = m.group(1)
+        back = '<a class="btn" href="/report/2026-08">← August 2026</a>'
+        _, html = self.get(f"{card}?report=2026-08")
+        self.assertIn(back, html)
+        self.assertIn('name="report" value="2026-08"', html)
+        _, html = self.get(f"{card}?report=/evil")
+        self.assertNotIn("← ", html)
+        self.assertNotIn('name="report"', html)
+        _, where = self.post("/card/save", {"previous": "2026-08-25",
+                                            "date": "2026-08-25",
+                                            "errors": "moved the stop too early",
+                                            "report": "2026-08"})
+        self.assertIn("?report=2026-08", where)
+
     def test_76b_a_stray_file_in_the_reports_folder_is_passed_over(self):
         """A note or a copy left in journal/reports, and a header edited by
         hand, must not take the shelf or the report down."""
@@ -2609,6 +2717,7 @@ class ServerCase(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as e:
                     self.get(gone)
                 self.assertEqual(e.exception.code, 404)
+                e.exception.close()
         finally:
             for f in stray + [broken]:
                 os.remove(f)
@@ -3217,6 +3326,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             self.get("/share/journal?start=1990-01-01&end=1990-01-02&file=1")
         self.assertEqual(caught.exception.code, 404)
+        caught.exception.close()
         with urllib.request.urlopen(
                 self.url("/share/journal?last=2&file=1")) as r:
             said = r.headers.get("Content-Disposition") or ""
@@ -3294,6 +3404,7 @@ class ServerCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             self.get("/share/plan/no-such-plan")
         self.assertEqual(caught.exception.code, 404)
+        caught.exception.close()
 
     def test_95_breakeven_frees_the_risk_of_an_open_trade(self):
         """Two trades of 1% against a limit of 150 $: over. The first moved
@@ -3307,7 +3418,8 @@ class ServerCase(unittest.TestCase):
         # is at stake now: the risk of the first trade, ~100 $, freed takes
         # the account back under it
         j = self.S.journal(True)
-        used = max(0.0, -j.closed_on("broker", datetime.now())) + j.open_risk("broker")
+        used = j.prop("broker").daily_used
+        self.assertGreater(used, 50)    # a winning close of today would leave no room
         self.post("/account/broker/rules", {"kind": "broker", "daily": f"{used - 50:.2f}"})
         self.assertIn("daily loss limit reached", self.get("/accounts")[1])
         _, html = self.get("/")
@@ -3609,6 +3721,95 @@ class ServerCase(unittest.TestCase):
         self.assertIn(f"/trade/{tid}", html)
         self.assertNotIn("**", html)
 
+    def test_99f_a_trade_closed_by_mistake_is_reopened(self):
+        """Reopen is the way back from Close, as Risk back is from Breakeven:
+        the result, the PnL and the exit go, the folder and what was written
+        stay, and the trade is open again under the same id."""
+        tid = self.open_trade(entry="2026-08-03T09:00", pair="GBPCHF")
+        q = urllib.parse.quote(tid)
+        _, html = self.get(f"/trade/{q}")
+        self.assertNotIn(f'action="/trade/{q}/reopen"', html)  # open: nothing to reopen
+        self.refused(f"/trade/{q}/reopen", {})
+        _, form = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(form), "result": "Lose",
+                                  "pnl": "-80", "exit": "2026-08-03T12:00",
+                                  "exit_price": "1.1", "conclusions": "too early"})
+        _, html = self.get(f"/trade/{q}")
+        self.assertIn(f'action="/trade/{q}/reopen"', html)
+        _, where = self.post(f"/trade/{q}/reopen", {})
+        self.assertEqual(self.landed(where), tid)
+        t = store.load_trade(self.root, tid)
+        self.assertTrue(t.is_open)
+        self.assertEqual((t.pnl, t.closed, t.exit_deviations), (None, None, None))
+        self.assertIn("too early", t.conclusions)
+        self.assertEqual(t.idea[0].text, "a plain idea")
+        t.check()
+        _, html = self.get(f"/trade/{q}")
+        self.assertNotIn(f'action="/trade/{q}/reopen"', html)
+        self.assertIn(f'href="/close/{q}"', html)
+        self.post(f"/trade/{q}/delete", {})
+
+    @unittest.skipUnless(store.zone("Pacific/Kiritimati") and store.zone("Pacific/Pago_Pago"),
+                         "no time zone data here: Python on Windows needs tzdata")
+    def test_99g_today_and_the_stamps_follow_the_clock_of_the_journal(self):
+        """A journal on a clock whose date is not the computer's: the + DRC
+        button, the period tile and the dated line of an update all go by
+        the journal's date, the one its trades are entered on."""
+        local = datetime.now().date()
+        zone = next(z for z in ("Pacific/Kiritimati", "Pacific/Pago_Pago")
+                    if store.zone(z) and datetime.now(store.zone(z)).date() != local)
+        store.save_clock(self.root, zone)
+        try:
+            self.S.drop_cache()
+            now = self.S.journal().now()
+            self.assertNotEqual(now.date(), local)
+            _, home = self.get("/")
+            self.assertIn(f'href="/card/{now:%Y-%m-%d}"', home)
+            self.assertIn(f'href="/week/{stats.week(now)}"', home)
+            _, cards = self.get("/cards")
+            self.assertIn(f'href="/card/{now:%Y-%m-%d}"', cards)
+            tid = self.open_trade(entry=now.strftime("%Y-%m-%dT%H:%M"), pair="NZDCAD")
+            q = urllib.parse.quote(tid)
+            self.post(f"/trade/{q}/update", {"update": "moved the stop"})
+            t = store.load_trade(self.root, tid)
+            self.assertIn(f"**{now:%d.%m.%Y}", t.updates)
+            # closed now on the journal's clock, it is in this week's tile
+            j = self.S.journal(True)
+            key = self.S.group_key(now, "week")
+            before = sum(1 for x in j.trades if not x.is_open and x.closed
+                         and self.S.group_key(x.closed, "week") == key)
+            _, form = self.get(f"/close/{q}")
+            self.post(f"/close/{q}", {"token": self.form_token(form), "result": "Win",
+                                      "pnl": "10", "exit": now.strftime("%Y-%m-%dT%H:%M")})
+            _, home = self.get("/?group=week")
+            self.assertIn(f"{before + 1} closed", home)
+            self.post(f"/trade/{q}/delete", {})
+        finally:
+            store.save_clock(self.root, "")
+            self.S.drop_cache()
+
+    def test_99h_the_period_tile_is_not_cut_by_the_entry_months(self):
+        """The tile of this month goes by the exit, so a trade entered last
+        month and closed in this one is in it, whatever window of entry
+        months the list below is filtered by."""
+        now = self.S.journal(True).now()
+        first = now.replace(day=1, hour=9, minute=0, second=0, microsecond=0)
+        entry = first - timedelta(days=2)
+        tile = re.compile(r'this month</div>.*?(\d+) closed', re.S)
+
+        def count(path):
+            found = tile.search(self.get(path)[1])
+            return int(found.group(1)) if found else 0
+        before = count("/?group=month")
+        tid = self.open_trade(entry=entry.strftime("%Y-%m-%dT%H:%M"), pair="EURNZD")
+        q = urllib.parse.quote(tid)
+        _, form = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(form), "result": "Win",
+                                  "pnl": "30", "exit": now.strftime("%Y-%m-%dT%H:%M")})
+        self.assertEqual(count("/?group=month"), before + 1)
+        self.assertEqual(count(f"/?group=month&from={now:%Y-%m}"), before + 1)
+        self.post(f"/trade/{q}/delete", {})
+
 
 class PerfCase(unittest.TestCase):
     """The journal cache, one load per save, and the cards tab on one pass."""
@@ -3656,6 +3857,7 @@ class PerfCase(unittest.TestCase):
             urllib.request.urlopen(urllib.request.Request(
                 self.url("/account/prop/rules"), data=data))
         self.assertEqual(cm.exception.code, 400)
+        cm.exception.close()
         cm.exception.close()
         self.assertEqual(self.S.journal().accounts["prop"].daily_loss_limit, before)
 
@@ -3720,6 +3922,36 @@ class PerfCase(unittest.TestCase):
         self.assertEqual(answer.status, 303)
         self.assertLessEqual(len(loads), 1)
         self.assertEqual(store.load_trade(self.root, tid).risk, 2.0)
+
+    def test_03b_the_accounts_pages_read_the_journal_only_when_it_moved(self):
+        self.get("/accounts")
+        loads = []
+        real = self.S.Journal.load.__func__
+        self.S.Journal.load = classmethod(
+            lambda cls, root=".": (loads.append(1), real(cls, root))[1])
+        try:
+            for _ in range(2):
+                self.assertEqual(self.get("/accounts")[0], 200)
+                self.assertEqual(self.get("/account/prop/rules")[0], 200)
+            self.assertEqual(len(loads), 0)
+            # after a save drops the cache, the page it leads to loads once
+            self.S.drop_cache()
+            self.assertEqual(self.get("/accounts")[0], 200)
+            self.assertEqual(len(loads), 1)
+            # an account renamed by hand still shows on the next look
+            store.save_account(self.root, Account(id="broker", name="Renamed by hand",
+                                                  start_balance=10000))
+            file = os.path.join(self.root, store.JOURNAL, store.ACCOUNTS)
+            for e in os.scandir(file):
+                later = e.stat().st_mtime_ns + 5_000_000_000
+                os.utime(e.path, ns=(later, later))
+            self.S._cache["checked"] = 0.0
+            self.assertIn("Renamed by hand", self.get("/accounts")[1])
+        finally:
+            self.S.Journal.load = classmethod(real)
+            store.save_account(self.root, Account(id="broker", name="Broker",
+                                                  start_balance=10000))
+            self.S.drop_cache()
 
     def test_04_the_cards_tab_counts_what_was_in_the_market_the_way_the_page_of_a_card_does(self):
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
@@ -3820,6 +4052,67 @@ class SecurityCase(unittest.TestCase):
         code, r, _ = self.form("/settings/stop-edge",
                                {"back": "/stats?pair=EURUSD", "stop_edge": "1"})
         self.assertTrue(r.getheader("Location").startswith("/stats?pair=EURUSD"))
+
+    def test_edition_back_stays_on_this_site(self):
+        try:
+            for back in ("/\\evil.example", "/x\r\nY: 1", "/\t/evil", "//evil.example"):
+                code, r, _ = self.form("/settings/edition", {"back": back})
+                self.assertEqual(code, 303, back)
+                where = r.getheader("Location")
+                self.assertTrue(where == "/" or where.startswith("/?"), back)
+                self.assertIsNone(r.getheader("Y"), back)
+            code, r, _ = self.form("/settings/edition", {"back": "/stats?pair=EURUSD"})
+            self.assertTrue(r.getheader("Location").startswith("/stats?pair=EURUSD"))
+        finally:
+            self.S.drop_cache()
+
+    def test_no_foreign_page_loads_a_journal_answer(self):
+        tid = "2026-09-02-01-eurusd"
+        folder = os.path.join(self.root, "journal", "trades", tid, "shots")
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, "idea-01-01.png"), "wb") as f:
+            f.write(bytes.fromhex("89504e470d0a1a0a"))
+        shot = f"/shot/{tid}/idea-01-01.png"
+        code, r, _ = self.ask("GET", shot)
+        tag = r.getheader("ETag")
+        answers = [(code, r),
+                   self.ask("GET", shot, headers={"If-None-Match": tag})[:2],
+                   self.ask("GET", "/shot/2026-09-03-01-eurusd/idea-01-01.png")[:2],
+                   self.ask("GET", "/")[:2]]
+        self.assertEqual([c for c, _ in answers][:2], [200, 304])
+        for code, r in answers:
+            self.assertEqual(r.getheader("Cross-Origin-Resource-Policy"),
+                             "same-origin", code)
+
+    def test_a_foreign_link_puts_no_words_in_the_journal(self):
+        words = urllib.parse.quote("Your journal is damaged, see evil.example")
+        foreign = {"Sec-Fetch-Site": "cross-site"}
+        _, _, body = self.ask("GET", f"/accounts?m={words}&bad=1", headers=foreign)
+        self.assertNotIn('class="notice"', body)
+        self.assertNotIn("evil.example", body)
+        _, _, body = self.ask("GET", f"/accounts?said={words}", headers=foreign)
+        self.assertNotIn("evil.example", body)
+        _, _, body = self.ask("GET", f"/accounts?m={words}&bad=1",
+                              headers={"Sec-Fetch-Site": "same-origin"})
+        self.assertIn('class="notice"', body)
+
+    def test_a_shared_selection_does_not_name_its_account(self):
+        store.save_account(self.root, Account(id="prop-100k", name="prop 100k",
+                                              kind="prop", start_balance=100000))
+        store.save_trade(self.root, Trade(
+            id="2026-08-03-01-eurusd", account="prop-100k", pair="EURUSD",
+            direction="long", style="swing", entry_tf="H4", risk=1.0,
+            opened=datetime(2026, 8, 3, 10, 0), opened_time=True,
+            closed=datetime(2026, 8, 4, 10, 0), result="Win", pnl=50))
+        self.S.drop_cache()
+        for where in ("/share/journal", "/share/stats"):
+            for file in ("", "&file=1"):
+                code, _, body = self.ask("GET", f"{where}?account=prop-100k{file}")
+                self.assertEqual(code, 200, where + file)
+                self.assertIn("one prop account", body, where + file)
+                self.assertNotIn("prop 100k", body, where + file)
+                if file:
+                    self.assertNotIn("prop-100k", body, where)
 
     def test_malformed_post_is_a_400(self):
         form = {"Content-Type": "application/x-www-form-urlencoded"}

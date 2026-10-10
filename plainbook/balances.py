@@ -39,10 +39,11 @@ class Journal:
     """The whole journal: accounts, trades, adjustments and everything derived."""
 
     def __init__(self, accounts, trades, adjustments, problems=None,
-                 stop_edge=store.STOP_EDGE, clock=""):
+                 stop_edge=store.STOP_EDGE, clock="", edition=""):
         self.accounts = accounts                # {id: Account}
         self.stop_edge = stop_edge              # where a stop ends and an overrun begins, in R
         self.clock = clock                      # the clock the times are written in, "" local
+        self.edition = edition                  # "lite" or "" for the full journal
         self.trades = sorted(trades, key=lambda t: (t.opened or datetime.max, t.id))
         self.adjustments = sorted(adjustments,
                                   key=lambda c: (c.day or datetime.max, c.id))
@@ -57,7 +58,7 @@ class Journal:
         return cls(store.all_accounts(root, problems),
                    store.all_trades(root, problems),
                    store.all_adjustments(root, problems), problems,
-                   store.stop_edge(root), store.clock(root))
+                   store.stop_edge(root), store.clock(root), store.edition(root))
 
     # --- replay ------------------------------------------------------------
 
@@ -346,7 +347,9 @@ class PropState:
 
     @property
     def daily_used(self):
-        return max(0.0, -self.today) + self.at_risk
+        # the worst the day can still end on is what closed today less what
+        # the open stops can take, so a profit closed today makes room
+        return max(0.0, self.at_risk - self.today)
 
     @property
     def daily_left(self):

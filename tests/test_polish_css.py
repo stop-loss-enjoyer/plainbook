@@ -1,5 +1,4 @@
 """The look rules of the polish batch: focus rings, motion off, tokens."""
-import re
 import unittest
 
 from plainbook import html

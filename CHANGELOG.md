@@ -2,6 +2,82 @@
 
 What changed and why. Newest first.
 
+## v1.9.0, 10.10.2026
+
+The journal comes in two editions now. Plainbook Lite keeps the trades, the
+statistics and the accounts, and puts the rest away until it is wanted. The
+window can be cut to half a screen. Before the release the whole journal was
+walked page by page, and what that walk turned up is fixed here.
+
+### Plainbook Lite
+
+- **One switch, two journals.** Plainbook Lite is for a trader who only
+  wants the trades. The playbooks, plans, notes, cards and reports are
+  hidden, and so are the plan, playbook and checklist fields of the trade
+  form, By playbook and What a rule costs on Statistics, and the same rows
+  in Share. The switch is the small **lite** beside the name in the header,
+  and again on Accounts under the journal's clock. A new journal opens as
+  the full Plainbook.
+- **Lite hides, it never deletes.** What was written stays in its files and
+  comes back when the switch is turned off. A trade edited or closed in Lite
+  keeps the plan, playbook and ticks it already had. The Trash card in Lite
+  shows trades, accounts and adjustments, and says how many records of the
+  full Plainbook wait there. A hidden page opened from an old tab says it is
+  turned off and links to the switch.
+
+### New
+
+- **Half a screen, whole journal.** Snap Plainbook to half your monitor and
+  it folds instead of spilling: tables close ranks, each account stacks into
+  its own block with its prop rules spelled out in full, and anything too
+  wide scrolls inside its card while the page stays put. A window wider than
+  1150 pixels looks as it did.
+- **Reopen.** A closed trade has **Reopen** on its page. The result, the PnL
+  and the exit are cleared and the trade is open again under the same id,
+  with its idea, updates, screenshots and conclusions kept.
+- **An error of a report opens its card.** The whole line under *Errors
+  written on the cards* is a link, and the card it opens has a button back
+  to the report, which stays after the card is saved.
+- **What was written can be put right.** The entries of a playbook review,
+  with their pictures, are in the playbook's Edit form. The one-line note of
+  an imported trade is in its Edit form. The name and currency of an account
+  are on its Rules page; the id and the start balance stay, and a new
+  currency only relabels the sums, it converts nothing.
+- **Search reads the reports.** The conclusions written into a report are
+  found along with everything else.
+
+### What the audit found
+
+- A trade opened from a report, a note or a cut of Statistics lost its way
+  back after Edit, Close or Share. It keeps it now, through the save.
+- The dots of the R distribution opened a bare trade. They carry the way
+  back like the bars beside them.
+- A missing plan, note, playbook or report sent Back to the Journal. It goes
+  to its own list.
+- Close from Open positions landed on the trade. It returns to the front
+  page.
+- A prop account that closed +600 for the day with 503 still at the stops
+  read "daily loss limit reached". The closed result now counts.
+- On a journal whose clock is not the computer's, + DRC, the period tile,
+  the running month of Reports and the dates on updates and deposits
+  followed the computer. They follow the journal.
+- The tile of this month dropped a trade entered last month when the list
+  was filtered by month. It counts what closed in it.
+- A new trade could take the id of a trade in the trash, and the notes that
+  named the deleted one moved to it. Ids in the trash are kept.
+- A trade whose account was gone moved quietly to the first account on
+  save. The save is refused and says why.
+- A shared selection cut to one account printed the account's name, which
+  usually carries its size. It says "one prop account".
+
+### Under the hood
+
+Accounts used to read the whole journal on every look and now opens in a
+hundredth of a second. A link from another site can no longer write its own
+words into the journal's banner or load a screenshot to learn which days were
+traded. The guard that keeps records out of the repository reads every commit
+of a push, so a record added and removed again is caught too.
+
 ## v1.8.4, 09.10.2026
 
 The journal installs from PyPI with one pipx command, and comes up with

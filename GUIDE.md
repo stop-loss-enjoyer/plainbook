@@ -246,7 +246,9 @@ what the next version changes, before the rules are revised in the form
 under a new number. When a block has run its course and has no review yet, the
 Playbooks tab turns amber, the list says *review due* and the page of the
 playbook says which block is complete; a dated entry per completed block
-settles it.
+settles it. Entries already written are corrected, or taken out, in the
+**Review** card of the Edit form of the playbook; a new one is added from
+the page.
 
 **Changing the status.** A playbook set to *retired* leaves the form of a
 trade and drops to the end of the list, grey; its page, its trades and its
@@ -402,7 +404,12 @@ in the currency of the account (its sign stands in the label) and the moment
 of the exit; below that go the screenshots of the exit and the conclusions
 with their own screenshots. A trade closed once is not closed again: its
 result and exit are changed with **Edit**, and the close address of a closed
-trade opens the edit form.
+trade opens the edit form. A trade closed by mistake, the wrong row of Open
+positions or a close before the real exit, is opened again with **Reopen** on
+its page: the result, the PnL and the moment of the exit are cleared, along
+with the management rules ticked at the close, and the trade is open under the
+same id, with its idea, updates, breakeven line, exit screenshots, prices and
+conclusions kept for the close that comes next.
 
 The result starts on **pick one** and the form will not be sent until you choose,
 so a trade cannot be closed with a result nobody picked.
@@ -458,7 +465,11 @@ closes it.
   the conclusions are edited there as well, so a result entered wrong is fixed
   without touching the file. The updates of a trade that has any are in the
   form too, as they were written; a new one is added from the trade page,
-  not here. The folder of the trade is named after its day and
+  not here. The one-line note an imported trade carries is in the form as
+  well, to be corrected or cleared; a trade without a note shows no such
+  field. If the account of a trade has gone, the form keeps it in the menu
+  and refuses a save with "no account", instead of moving the trade to the
+  first one. The folder of the trade is named after its day and
   its pair, so changing either moves the folder under a new name; a link to
   the old one stops working, the record itself is untouched.
 - **A copy forgotten at the entry** is written from the same form: while the
@@ -593,7 +604,8 @@ written on the card, the daily one a hyphen.
 - **The current period** counts the trades that closed in it, the way a broker
   states a week and the cards count a day. The list under it groups by entry,
   so a trade held over a weekend stands in last week's group and in this
-  week's tile.
+  week's tile. A range of months in the filters is a window of entries, so it
+  leaves this tile alone; the other filters scope it as they scope the rest.
 - **The list of trades** is split into periods. The **Weeks / Months /
   Quarters** switch sits above the table on the right. The total row of a period
   holds the number of trades, WR with its EV, Σ PnL and Σ R. **A click anywhere on a row
@@ -602,7 +614,8 @@ written on the card, the daily one a hyphen.
   the open positions block.
 - **Filters** sit behind the funnel button to the left of the switch: account,
   pair, style, direction, result, a range of months. They apply both to the
-  list and to the summary tiles. While a filter is on, the funnel is lit and
+  list and to the summary tiles, the range of months to every tile but the
+  current period. While a filter is on, the funnel is lit and
   shows how many fields are set; **Reset** clears them. The form closes on a
   click away or on Escape. **A filter survives a trade being opened**: a trade opened
   from a filtered list carries the selection, its page has a **← Journal**
@@ -970,7 +983,9 @@ The **Accounts** tab.
 - **Kind**: a **broker** account holds your own money, a **prop** account is
   run under the rules of a firm. Pick it when you create the account; a prop
   account opens on its rules next. **Rules** in the row of any account opens
-  them again.
+  them again. The same page corrects the account's **name** and
+  **currency** afterwards, since they are labels; the id and the start
+  balance stay as they were, and no sum is converted to the new currency.
 - **The rules of a prop firm** differ from firm to firm, and between the
   challenge, the verification and the funded account of one firm, so the
   journal carries none of its own: copy them from your firm's page. A sum is
@@ -978,7 +993,8 @@ The **Accounts** tab.
   rule the firm does not have is left empty.
   - **daily loss limit**: the most one day of the firm may lose, counting the
     trades closed that day, the fees charged on it and what the open trades
-    still put at risk at their stops;
+    still put at risk at their stops, that risk set against the day's closed
+    result, so a profit already closed today makes room for it;
   - **max loss** and how it is measured: *static* from the start balance, a
     floor that never moves; *trailing* under the highest balance the account
     has closed at; *trailing to start* the same until the floor reaches the
@@ -1007,7 +1023,10 @@ The **Accounts** tab.
   unknown and counts on the computer's own. The times the journal fills in
   by itself follow this clock as well: the entry a new trade starts with, the
   exit the closing form offers, the moment **Breakeven** is pressed and how
-  long an open trade has run.
+  long an open trade has run, the dates written on updates, reviews and a
+  voided plan, the day a deposit or a fee left without a date is put on, and
+  what "today" and "this week" mean: the day **+ DRC** opens, the period
+  tile of the front page and the running month of the Reports tab.
 - **Archive** keeps the account in the history and the statistics but stops
   offering it when a trade is opened. An account with trades or money
   movements cannot be deleted, only archived; one without them is deleted into
@@ -1097,7 +1116,8 @@ table. The card stands whenever a trade of the period names a playbook or a
 loss went past the stop.
 
 **Process** counts the cards against the days traded and quotes the errors
-written on them; when a stop was moved to breakeven in the period it adds one
+written on them, each line a way to its card with a button back to the
+report; when a stop was moved to breakeven in the period it adds one
 sentence: on how many trades, how they ended, what they brought against the
 trades whose stop stayed, and how soon the stop was moved. The sentence goes
 into the saved file too.
@@ -1210,7 +1230,9 @@ screenshot in it is the only case where the counting is worth watching.
 
 **Money stays home.** The PnL of a trade, the risk in money, the balances
 and the size of an account are left out of every document, and so is the
-name of the account, since traders name accounts by their size. What travels
+name of the account, since traders name accounts by their size: a selection
+cut to one account says only "one prop account" or "one broker account" under
+its title. What travels
 is R, the result measured against the risk you took, the percent the risk
 was written as, and the words you wrote. This is how the document is built
 rather than a switch: it carries only what it names, so a field added to a
@@ -1233,9 +1255,59 @@ written: the ideas, conclusions and updates of trades, the why written under
 every rule left unticked, the text written by hand under the exit, the
 analysis, plan, updates and review of every plan, the text of every market
 note, the name, intro, rules, setups, sections and review of every playbook,
-and every field of every card, daily and weekly alike. Case does not matter. Every hit is a link to the record, with the matching words shown in
+every field of every card, daily and weekly alike, and the conclusions of
+every report. Case does not matter. Every hit is a link to the record, with the matching words shown in
 the text around them, which is how the trade where you wrote "moved the stop
 too early" three months ago is found again.
+
+## Plainbook Lite
+
+Plainbook Lite is the journal with only the trades in it. It is for a trader
+who wants the list, the figures and the screenshots, and not the playbooks,
+the plans or the cards. The title in the corner reads *Plainbook Lite* while
+it is on. A new journal opens as the full Plainbook, and nothing asks you to
+choose.
+
+**The switch** is the small **lite** beside the name in the header, on every
+page. Off, it is a dim word with its knob to the left; on, it lights up and the
+header reads *plainbook lite*. Click it: the knob slides over and the same page
+comes back in the other edition, or the journal if Lite has just turned that
+page off. The same switch, with the two
+lines of explanation, is on the **Accounts** tab in the card *Plainbook Lite*
+under the journal's clock.
+
+**What Lite keeps.** The Journal with its tiles, the list, the filters, the
+open positions and the CSV (every column, the plan and the playbook included).
+Opening, editing, closing, updating, Breakeven and Duplicate of a trade, with
+the screenshots. Statistics. Accounts, with the money, the corrections, the
+rules of a prop firm, the pairs, the word lists and the clock. Search, over
+the trades. Share, for a trade, the journal and Statistics. The Trash holds
+trades, accounts and corrections.
+
+**What Lite hides.** The Playbooks, Plans, Notes, Cards and Reports tabs, and
+the buttons + Plan, + DRC and + WRC on the front page. On the trade form the
+plan, the playbook and the checklist; on Statistics the tables *By playbook*
+and *What a rule costs*; in Share the checklist, the plan and the setup rows.
+The Share of a plan or a report is not offered.
+
+**Nothing is lost.** Lite hides, it never deletes or rewrites. The playbooks,
+plans, notes, cards and reports stay in their folders, and a trade keeps its
+plan, its playbook, its ticked rules and the reasons it already had: saving
+or closing a trade in Lite changes only the fields it shows. A trade closed in
+Lite carries no ticks for the management rules, and says so as a trade that
+was never ticked, not as one that broke them all. A deleted record that the
+full journal names stays in the trash, and the Trash card in Lite says how
+many records are waiting there.
+
+**A page that is hidden.** An old tab, the Back button or a bookmark that
+leads to a hidden page shows *Turned off in Plainbook Lite*, with a link to
+the switch. A form of a hidden page that was open when you switched to Lite
+still saves what you wrote, and then lands on the same short page.
+
+**Switching back.** Click the switch again. Every tab, the buttons and the
+fields return, with everything written while Lite was on. The choice is one
+line in `journal/settings.md`, `edition: lite`; switching back removes the
+line, so a journal that was never in Lite looks as it always did.
 
 ## Where the data lives
 
@@ -1262,7 +1334,7 @@ folder (`C:\Users\<you>\Plainbook`, `/Users/<you>/Plainbook`, `~/Plainbook`);
     journal/reports/2026-Q3.md
     journal/vocabulary.md      the styles, timeframes and execution formats the form offers
     journal/pairs.md           the pairs the form offers
-    journal/settings.md        the stop edge, the journal's clock
+    journal/settings.md        the stop edge, the journal's clock, the edition
 
 The files open in any text editor and read by eye. There is no database and
 no format of its own, so if the program breaks tomorrow, the records are

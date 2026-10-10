@@ -126,7 +126,8 @@ under the trades and before the earlier versions, one field and a dated entry
 each time, with screenshots pasted under it. That is where a
 block is taken apart when its count is reached: what the trades said, what
 leaked, what the next version changes. One dated entry per completed
-block settles the amber tab, two blocks without a review need two; then the
+block settles the amber tab, two blocks without a review need two. Entries
+already written are corrected in the Review card of the form; then the
 rules are revised in the form under a new number.
 
 ## How it comes together

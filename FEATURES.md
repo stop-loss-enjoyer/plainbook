@@ -29,7 +29,14 @@ exists, where it stands, and which requests it answers, so that the answer to
    cards, statistics, reports, accounts, search. A tenth kind of record is
    a rare thing; a tenth view of an existing kind belongs on the tab of that
    kind.
-4. **Text the journal cannot count goes into notes.** A playbook takes any
+4. **Say whether Plainbook Lite hides it.** Lite is the journal with only the
+   trades in it; the tabs below marked *hidden in Lite* are out of its
+   navigation and answer a short page. A new feature either belongs to
+   Lite or is hidden there, and the change says which. A hidden one adds its
+   route prefix to `LITE_HIDDEN_ROUTES` and its tab to `LITE_HIDDEN_TABS` in
+   `server.py`, and a form that shows one more field of a trade leaves
+   that field alone when it is not drawn (AGENTS.md, invariants 14 and 15).
+5. **Text the journal cannot count goes into notes.** A playbook takes any
    `## heading` in its notes and shows it as a section of its own; a note
    takes any text with screenshots. Neither needs code.
 
@@ -86,7 +93,7 @@ cross, and the buttons Close trade, Breakeven, Update, Share, Edit, Delete.
 The same trade goes onto other accounts from its form, through Duplicate on
 other accounts, each copy with a risk of its own.
 
-**Playbooks**, the trading systems. One record per way of trading, each with
+**Playbooks** (hidden in Lite), the trading systems. One record per way of trading, each with
 its own sample and figures. The list shows every playbook with its status,
 version and block progress; the page shows the intro, By setup, What a rule
 costs with the reasons given, the numbered rules by setup with the filters and
@@ -95,17 +102,17 @@ playbook, Review and Earlier versions. **+ Playbook** is a form of six cards: he
 management, limits, notes. The tab is amber while the journal has no
 playbook, and again when a block has run its course without a review.
 
-**Plans**, what was supposed to happen. Written before the market, for a day
+**Plans** (hidden in Lite), what was supposed to happen. Written before the market, for a day
 or a week and a pair: narrative, analysis by timeframe with screenshots, the
 plan, updates while it runs, the review. The list marks the current plan,
 the ones ahead and the voided ones. A trade names the plan it follows, and
 the plan page shows its trades with their R.
 
-**Notes**, what is wider than one trade. A level, a pattern, a lesson, as
+**Notes** (hidden in Lite), what is wider than one trade. A level, a pattern, a lesson, as
 text and screenshots, with the trades tied to the note as examples, so it is
 read next to the trades that show it.
 
-**Cards**, the reviews of a day and a week. The daily card follows a paper
+**Cards** (hidden in Lite), the reviews of a day and a week. The daily card follows a paper
 Daily Report Card, the weekly card a Weekly Report Card: process grade,
 opportunity quality, focus, what went well, errors, the best trade, the
 trades assessment with the mark of every trade next to its result. The PnL
@@ -116,19 +123,21 @@ pair, style, direction, result, period, and the page opens on what
 that cut did: the strip, the bars, the R distribution, the losses cut at the stop
 edge, the equity per account, By playbook, the stop at breakeven, the tables.
 A bar or a row narrows the page to itself, Back steps out one click at a
-time, the trades of the cut stand at the foot.
+time, the trades of the cut stand at the foot. In Lite By playbook and What a
+rule costs are left out.
 
-**Reports**, a month or a quarter on one page. The shelf of every period
+**Reports** (hidden in Lite), a month or a quarter on one page. The shelf of every period
 since the first closed trade, with its figures whether a report was built
 or not. A built report is a file, the archive of that month, and holds the
 conclusions; its figures are read off the journal at every look.
 
 **Accounts**, what is set once. Accounts with a start balance, a
 currency, a daily loss limit, archive; money in and out; corrections; the
-vocabularies of the trade form; the pairs; the trash.
+vocabularies of the trade form; the pairs; the trash; the switch between the
+full Plainbook and Plainbook Lite.
 
 **Search** finds every word ever written into the journal, with the record
-it stands in.
+it stands in; in Lite, among the trades only.
 
 ## The records and where they live
 
@@ -147,7 +156,7 @@ is a backup; any editor reads it.
       reports/        the built reports
       vocabulary.md   the styles, timeframes and execution formats the form offers
       pairs.md        the pairs the form offers
-      settings.md     the stop edge, the journal's clock
+      settings.md     the stop edge, the journal's clock, the edition (lite)
     .trash/           next to journal/: what was deleted, restorable from Accounts
     .drafts/          next to journal/: pictures pasted into forms not yet submitted
 

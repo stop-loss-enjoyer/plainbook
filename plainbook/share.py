@@ -24,7 +24,7 @@ import os
 import re
 from datetime import datetime, timedelta
 
-from . import __version__, flags, stats, store
+from . import flags, stats, store
 from .model import PAIR_NOT_SET
 from .html import (ACCENT, AXIS, BAD, DIM, EDGE, FAVICON, GOOD, GRID, GROUND,
                    INK, INK2, MONO, RAISED, SURFACE, WARN, esc, mark, pair)
@@ -329,12 +329,15 @@ def plan_named(root, t):
         return ""
 
 
-def trade_facts(root, j, t):
+def trade_facts(root, j, t, rules=True):
     """The fields of a trade a reader is allowed to see, and only those.
 
     Risk stands in percent, which is what it is written as; what that percent
     was in money is the size of the account, and the account is not the
-    subject here."""
+    subject here.
+
+    `rules` is False in Plainbook Lite, which has no plan and no playbook: the
+    rows that name them are not asked for, whatever the trade holds."""
     # the account is not named either: traders name accounts by their size
     r = j.r(t.id)
     rows = [("pair", pair(t.pair)),
@@ -347,16 +350,25 @@ def trade_facts(root, j, t):
             ("exit", esc(day_text(t.closed, t.closed_time))),
             ("result", esc(t.result or "position open")),
             ("R", f'<b class="{r_class(r)}">{r_or_dash(r)}</b>')]
-    plan = plan_named(root, t)
+    plan = plan_named(root, t) if rules else ""
     if plan:
         rows.append(("plan", esc(plan)))
-    if t.playbook and (t.setup or t.playbook_version):
+    if rules and t.playbook and (t.setup or t.playbook_version):
         rows.append(("setup", esc(" · ".join(x for x in (t.setup,
                                                          t.playbook_version) if x))))
     if t.note:
         rows.append(("note", esc(t.note)))
     return "".join(f'<tr><td class="dim">{esc(k)}</td><td>{v}</td></tr>'
                    for k, v in rows)
+
+
+def account_word(account):
+    """The account a selection was cut to, as it may leave the journal: its
+    kind and nothing more. Its name and its id are the owner's words, and
+    traders name accounts by their size, so neither goes."""
+    if account is None:
+        return "one account"
+    return "one prop account" if account.is_prop else "one broker account"
 
 
 def ways_strip(near, place):
@@ -379,7 +391,7 @@ def ways_strip(near, place):
 
 
 def trade_card(root, j, t, book=None, carry=True, heading=None, near=None,
-               place=None, pictures=True):
+               place=None, pictures=True, rules=True):
     """One trade whole: the facts, the checklist, the idea with its
     screenshots, the updates, the exit, the conclusions. In a file of many trades it is
     headed and stands as a page of its own, with the ways out above and
@@ -403,8 +415,8 @@ def trade_card(root, j, t, book=None, carry=True, heading=None, near=None,
     return (f'<section class="trade"{where}>{ways}'
             f'<div class="card">{named}'
             f'<p class="meta">{esc(t.id)}</p>'
-            f'<table class="props">{trade_facts(root, j, t)}</table></div>'
-            + checklist_card(t, book)
+            f'<table class="props">{trade_facts(root, j, t, rules)}</table></div>'
+            + (checklist_card(t, book) if rules else "")
             + (f'<div class="card"><h2>Idea</h2>{idea}</div>' if idea else "")
             + (f'<div class="card"><h2>Updates</h2>'
                f'<div class="text shots">{doc_with_shots(t.updates, shots)}</div>'
@@ -597,11 +609,11 @@ def document(title, lead, body, note=""):
 </body></html>"""
 
 
-def trade_document(root, j, t, book=None, carry=True, note=""):
+def trade_document(root, j, t, book=None, carry=True, note="", rules=True):
     lead = " · ".join(x for x in (day_text(t.opened, False), t.style,
                                   t.result or "position open") if x)
     return document(f"{t.pair} {t.direction}".strip(), esc(lead),
-                    trade_card(root, j, t, book, carry), note)
+                    trade_card(root, j, t, book, carry, rules=rules), note)
 
 
 def plan_document(root, j, k, trades, carry=True, note=""):
@@ -616,7 +628,7 @@ def plan_document(root, j, k, trades, carry=True, note=""):
                     note)
 
 
-def trade_pages(root, j, trades, book_of, carry, pictures=True):
+def trade_pages(root, j, trades, book_of, carry, pictures=True, rules=True):
     """Every trade in full, each a page of its own that opens from the list:
     the file shows one at a time, and the heading of each leads to the list
     and to the trades on either side."""
@@ -629,7 +641,7 @@ def trade_pages(root, j, trades, book_of, carry, pictures=True):
                             heading=f"{t.pair} {t.direction} · "
                                     f"{day_text(t.opened, False)}",
                             near=near, place=(i + 1, len(order)),
-                            pictures=pictures)
+                            pictures=pictures, rules=rules)
     return f'<div class="trades">{cards}</div>'
 
 
@@ -638,7 +650,7 @@ HOW_TO_OPEN = ' <span class="onscreen">Press a line to open the trade.</span>'
 
 
 def selection_document(root, j, trades, title, lead, book_of=None,
-                       shots=True, carry=True, note=""):
+                       shots=True, carry=True, note="", rules=True):
     """A stretch of the journal: the figures, the list, then every trade in
     full, a page each that opens from the list. `shots` says whether the
     pictures go with them."""
@@ -651,7 +663,7 @@ def selection_document(root, j, trades, title, lead, book_of=None,
             f'{"" if len(trades) == 1 else "s"}, latest exit first.'
             f'{HOW_TO_OPEN}</p></div>'
             + slices(j, closed) + "</div>")
-    body += trade_pages(root, j, trades, book_of, carry, shots)
+    body += trade_pages(root, j, trades, book_of, carry, shots, rules)
     return document(title, lead, body, note)
 
 

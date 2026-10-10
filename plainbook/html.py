@@ -96,6 +96,27 @@ header .logo:hover{{color:{INK}}}
 header .logo:hover .mark path,header .logo:hover .mark rect{{stroke:{ACCENT}}}
 header .logo:hover .mark rect{{fill:{ACCENT}}}
 header .logo:hover .mark path[stroke="{ACCENT}"]{{stroke:{ACCENT}}}
+header .brand{{display:inline-flex;align-items:center;gap:8px}}
+header .brand .ver{{font:500 10px/1 {MONO};color:{DIM};margin-top:5px}}
+/* the switch of Lite is the second word of the name: a ghost of "lite"
+   asking to be tried, lit in the accent when on; the small switch after it
+   says the word can be pressed */
+.lite-switch{{display:inline-flex;margin:0}}
+.lite-switch button{{display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+ padding:2px 0;border:0;background:transparent;color:#3a3b40;
+ font:600 18px/1 {MONO};letter-spacing:-.02em;transition:color .12s}}
+.lite-switch .track{{position:relative;box-sizing:border-box;width:22px;height:12px;
+ border-radius:6px;border:1.5px solid currentColor}}
+.lite-switch .knob{{position:absolute;top:1.5px;left:1.5px;width:6px;height:6px;
+ border-radius:50%;background:currentColor;transition:transform .18s ease-out}}
+.lite-switch button:hover{{color:{DIM}}}
+.lite-switch button:focus-visible{{outline:2px solid {ACCENT};outline-offset:3px;
+ border-radius:4px}}
+.lite-switch .on,.lite-switch .on:hover{{color:{ACCENT}}}
+.lite-switch .on .knob{{transform:translateX(10px)}}
+/* the click moves the knob first, then the form goes */
+.lite-switch .going .knob{{transform:translateX(10px)}}
+.lite-switch .on.going .knob{{transform:none}}
 header nav{{display:flex;gap:2px;align-items:stretch}}
 header nav a{{display:inline-flex;align-items:center;color:{DIM};padding:0 10px;
  font-size:12px;letter-spacing:.02em;border-bottom:2px solid transparent;
@@ -279,6 +300,22 @@ input[type=number],input[type=date],textarea{{
  transition:color .12s,border-color .12s,background-color .12s}}
 .filters-box[open]>.popover,.fold[open]>summary~*{{animation:pop .12s ease-out}}
 @keyframes pop{{from{{opacity:0;transform:translateY(-3px)}}}}
+/* the edition switch on Accounts: one of the two knobs that slide (the header
+   .lite-switch is the other). A named exception to the flat theme, short and
+   off under reduced motion */
+.edition-row{{display:flex;gap:14px;align-items:flex-start}}
+.edition-row .text{{min-width:0}}
+.toggle{{position:relative;flex:none;width:44px;height:24px;margin-top:2px}}
+.toggle input{{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;
+ cursor:pointer;z-index:1}}
+.toggle .track{{position:absolute;inset:0;border-radius:12px;background:{RAISED};
+ border:1px solid {AXIS};transition:background-color .18s,border-color .18s}}
+.toggle .knob{{position:absolute;top:4px;left:4px;width:16px;height:16px;
+ border-radius:50%;background:{DIM};
+ transition:transform .18s ease-out,background-color .18s}}
+.toggle input:checked~.track{{border-color:{ACCENT}}}
+.toggle input:checked~.knob{{transform:translateX(20px);background:{ACCENT}}}
+.toggle input:focus-visible~.track{{outline:2px solid {ACCENT};outline-offset:2px}}
 textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .fields{{display:flex;gap:14px;flex-wrap:wrap}}
 /* the paper puts the best trade beside the trades assessment: two columns, the
@@ -286,7 +323,7 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .twin{{display:grid;grid-template-columns:1fr 1fr;gap:22px}}
 .twin>div{{display:flex;flex-direction:column;min-width:0}}
 .twin textarea{{flex:1}}
-@media (max-width:900px){{.twin{{grid-template-columns:1fr}}}}
+@media (max-width:1000px){{.twin{{grid-template-columns:1fr}}}}
 .field{{min-width:150px}}
 .actions{{display:flex;gap:8px;align-items:center;margin:16px 0 0}}
 .actions .right{{margin-left:auto}}
@@ -310,6 +347,8 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
  .btn,.switch a,header nav a,td a,.tile .name a,.fold>summary,select,
  input[type=text],input[type=number],input[type=date],textarea{{transition:none}}
  .popover,.fold[open]>summary~*{{animation:none}}
+ .toggle .track,.toggle .knob{{transition:none}}
+ .lite-switch .knob,.lite-switch button{{transition:none}}
  .toast{{animation:said-plain 1.15s steps(1) forwards;
   transform:translate(-50%,-50%)}}
  @keyframes said-plain{{0%{{opacity:1}} 92%{{opacity:1}} 100%{{opacity:0}}}}}}
@@ -574,8 +613,10 @@ td .pair{{vertical-align:middle}}
 ul.errors{{margin:6px 0 0;padding-left:0;list-style:none;max-width:760px}}
 ul.errors li{{padding:6px 0;border-top:1px solid {GRID};font-size:13px;line-height:1.5;
  color:{INK2}}}
-ul.errors li a{{font-family:{MONO};font-size:11px;color:{DIM};margin-right:8px}}
-ul.errors li a:hover{{color:{ACCENT}}}
+ul.errors li a{{display:block;color:inherit;text-decoration:none}}
+ul.errors li .when{{font-family:{MONO};font-size:11px;color:{DIM};margin-right:8px}}
+ul.errors li a:hover{{color:{INK}}}
+ul.errors li a:hover .when{{color:{ACCENT}}}
 .days a{{color:{INK2}}}
 form.inline{{display:inline-block;margin:0}}
 .row-actions{{display:inline-flex;gap:7px;align-items:center}}
@@ -626,6 +667,58 @@ table.shelf .spark{{display:block}}
  border:1px solid {AXIS};border-radius:4px;padding:6px 9px;font-size:11px;
  color:{INK};display:none;z-index:9;white-space:pre;
  font-family:{MONO};font-variant-numeric:tabular-nums}}
+/* narrow windows: a journal kept in half a screen. Nothing here reaches a
+   window wider than 1150px; below it the cells close up, a figure and a pair
+   of buttons stay whole, and below 900px a table too wide for its card
+   scrolls inside its own frame (.scroll) instead of pushing the page
+   sideways. A head cannot stick to the top inside a frame that scrolls, so
+   there it stays put */
+@media (max-width:1150px){{
+ th{{padding:7px 7px}}
+ td{{padding:6px 7px}}
+ td.cell{{padding:0}}
+ td.cell>a{{padding:6px 7px}}
+ tr.group td{{padding:7px 7px;white-space:normal}}
+ tr.group .label,tr.group .dates{{display:inline-block;white-space:nowrap}}
+ .breakdown{{white-space:nowrap}}
+ .row-actions{{flex-wrap:wrap;justify-content:flex-end}}
+ .setup-form .field input{{max-width:100%}}
+}}
+@media (max-width:900px){{
+ .setup-form .fields>.field+.field{{flex-basis:100% !important}}
+ table.shelf .spark{{width:96px;height:auto}}
+ table.shelf td.report{{white-space:normal}}
+ .scroll{{overflow-x:auto}}
+ .scroll th{{position:static}}
+}}
+@media (max-width:800px){{
+ th{{padding:7px 5px}}
+ td{{padding:6px 5px}}
+ td.cell{{padding:0}}
+ td.cell>a{{padding:6px 5px}}
+ tr.group td{{padding:7px 5px}}
+}}
+@media (max-width:760px){{
+ .wrap{{padding:0 12px 48px}}
+ .card{{padding:14px 12px}}
+ table.shelf .spark{{width:60px}}
+}}
+/* the accounts below 1000px: a block per account instead of nine columns.
+   The figures in a row under their names, the kind and the state of its
+   rules across the whole width, the buttons under them */
+@media (max-width:1000px){{
+ table.accounts,table.accounts tbody{{display:block}}
+ table.accounts thead{{display:none}}
+ table.accounts tr{{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr));
+  gap:10px 14px;padding:12px 0;border-bottom:1px solid {GRID};align-items:start}}
+ table.accounts td{{padding:0;border:0;text-align:left;background:none !important}}
+ table.accounts td[data-label]::before{{content:attr(data-label);display:block;color:{DIM};
+  font:500 10px/1.6 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.09em;
+  margin-bottom:2px}}
+ table.accounts td.kind{{grid-column:1/-1}}
+ table.accounts td.act{{align-self:center}}
+ table.accounts td.act:last-child{{grid-column:3/-1}}
+}}
 """
 
 
@@ -670,10 +763,11 @@ def money(x, signed=False):
 
 
 def page(title, body, tab="journal", header_right="", notice="", said="",
-         attention=(), home="/"):
+         attention=(), home="/", hidden=(), lite=False):
     """`attention` names the tabs that ask for the owner, see the CSS. `home`
     is where the Journal tab leads: a trade opened from a filtered list sends
-    the reader back to the same list."""
+    the reader back to the same list. `hidden` names the tabs left out of the
+    nav, and `lite` puts the name of the reduced edition in the header."""
     links = [("journal", home, "Journal"), ("playbooks", "/playbooks", "Playbooks"),
              ("plans", "/plans", "Plans"), ("notes", "/notes", "Notes"),
              ("cards", "/cards", "Cards"), ("stats", "/stats", "Statistics"),
@@ -681,15 +775,16 @@ def page(title, body, tab="journal", header_right="", notice="", said="",
              ("search", "/search", "Search")]
     nav = "".join(
         f'<a href="{href}" class="{" ".join(["current"] * (code == tab) + ["attention"] * (code in attention))}">{name}</a>'
-        for code, href, name in links)
+        for code, href, name in links if code not in hidden)
+    app = "Plainbook Lite" if lite else "Plainbook"
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>{"Plainbook" if title == "Journal"
-          else "Plainbook: " + esc(title)}</title>
+<title>{app if title == "Journal"
+          else app + ": " + esc(title)}</title>
 <link rel="icon" href="{FAVICON}"><style>{CSS}</style>
 <script>{HOVER}{PAGE_SCRIPT}</script></head><body>
 {flags.SPRITE}{said}
 <div class="wrap">
-<header><a href="{home}" class="logo" title="the journal">{mark(26)}plainbook<span class="ver">{__version__}</span></a><nav>{nav}</nav>
+<header><div class="brand"><a href="{home}" class="logo" title="the journal">{mark(26)}plainbook</a>{lite_switch(lite)}<span class="ver">{__version__}</span></div><nav>{nav}</nav>
 <span class="right">{header_right}</span></header>
 {notice}{body}
 </div>
@@ -697,9 +792,39 @@ def page(title, body, tab="journal", header_right="", notice="", said="",
 </body></html>"""
 
 
+def lite_switch(on):
+    """The switch of Plainbook Lite, beside the name it completes: lit, the
+    header reads "plainbook lite". A form of one button, so it works without
+    the script; the script only lets the knob travel before the page goes and
+    sends the reader back to the page they were on."""
+    return (f'<form method="post" action="/settings/edition" class="lite-switch">'
+            f'<input type="hidden" name="back" value="/">'
+            f'<button name="lite" value="{"" if on else "1"}" role="switch" '
+            f'aria-checked="{"true" if on else "false"}" aria-label="Plainbook Lite" '
+            f'class="{"on" if on else ""}">'
+            f'lite<span class="track"><span class="knob"></span></span></button></form>')
+
+
 # Small things shared by every page. The script sits in the head and hooks
 # listeners onto document, before the markup, but document is already there.
 PAGE_SCRIPT = """
+// The switch of Lite in the header: back to the page it was clicked on, and
+// the knob travels before the page goes.
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('.lite-switch button');
+  if (!b || b.classList.contains('going')) return;
+  e.preventDefault();
+  const form = b.form;
+  form.back.value = location.pathname + location.search;
+  b.classList.add('going');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const go = () => {
+    const field = document.createElement('input');
+    field.type = 'hidden'; field.name = b.name; field.value = b.value;
+    form.appendChild(field); form.submit();
+  };
+  setTimeout(go, still ? 0 : 200);
+});
 // The header wraps on a narrow window and grows taller; the sticky table heads
 // and the anchor offset follow its real height.
 // The script sits in the head, so the header exists only after parsing.

@@ -29,8 +29,8 @@ records.
   into a chat, not into an issue. Summary figures answer nearly every question;
   quote a trade only when the owner asked about that trade.
 - **Never commit records.** `python3 tools/check_public.py` refuses a push that
-  would leak them, and it runs as a pre-push hook and in CI. Do not work around
-  it. If it fires, it is right and you are wrong.
+  would leak them (the tree, `.trash`, `.drafts` and the commits being
+  pushed), and it runs as a pre-push hook and in CI. Do not work around it. If it fires, it is right and you are wrong.
 - **Never delete outright.** Removing a trade or a card means moving it to
   `.trash`. If you delete something yourself, do the same.
 - **Never rewrite history to fix a number.** A balance that disagrees with the
@@ -85,7 +85,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/html.py` | the palette, the CSS, the page shell, the SVG charts |
 | `plainbook/flags.py` | the round flag icons of a trading symbol, and what a symbol is taken apart into |
 | `plainbook/share.py` | the document a record leaves in: one file, its pictures inside it, no money in it |
-| `plainbook/server.py` | routes, pages, forms: everything HTTP |
+| `plainbook/server.py` | routes, pages, forms: everything HTTP; the edition gating goes only through `lite()`, `LITE_HIDDEN_TABS`, `LITE_HIDDEN_ROUTES` and `LITE_TRASH_KINDS` |
 | `plainbook/__main__.py` | `python3 -m plainbook`: the same server |
 | `tools/check_public.py` | the guard that keeps records out of the repository |
 | `tools/check_journal.py` | loads every record the way the server does and names the ones that do not read |
@@ -95,8 +95,8 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `tools/app_entry.py` | the entry of the downloaded file: what PyInstaller packs |
 | `tools/pypi_readme.py` | the README with its links made absolute on a tag, for the page of the package on pypi.org; the publish workflow runs it on its own checkout |
 | `tools/browser_check.mjs` | the scripted forms driven in a headless Chromium against a demo journal |
-| `tools/screenshots.py` | retakes the pictures of README.md in `docs/` on the demo journal; run it after a release |
-| `tests/` | the suite: `test_server.py` walks the routes on one shared journal, the others take the modules one by one |
+| `tools/screenshots.py` | retakes the pictures of README.md in `docs/` on the demo journal; run it after a release; `--edition=lite` takes the Plainbook Lite ones into `docs/lite/` |
+| `tests/` | the suite: `test_server.py` walks the routes on one shared journal, the others take the modules one by one; `formpost.py` reads a form of a page the way a browser sends it |
 | `docs/` | the screenshots of README.md, taken on the demo journal |
 | `desktop/` | the autostart of each system (the user unit for Linux, the LaunchAgent for macOS, the script that makes the startup shortcut on Windows), the window toggle and the bar widget for Omarchy; see its README |
 | `.githooks/pre-push` | runs `check_public.py` before a push; turned on once with `git config core.hooksPath .githooks` |
@@ -132,7 +132,9 @@ data. Each one is followed by what it prevents.
    (`apply_shots`). Every form that edits a trade must therefore send back
    **all** of its screenshot zones, including the ones it does not display.
    *Prevents:* screenshots vanishing off the disk when an unrelated field is
-   edited. This has already happened once, to the exit shots.
+   edited. This has already happened once, to the exit shots. The zones are
+   the one place where the rule of invariant 14 is turned around: a zone not
+   sent is a zone emptied.
 3. **A header key with no value parses into an empty list, not an empty
    string**, which is how lists are written in the format. Read header strings
    through `store._text`, and never write an empty value into a header.
@@ -207,9 +209,44 @@ data. Each one is followed by what it prevents.
     were ticked, and these are the ones not met (the key stands, empty for
     a clean trade). `exit_deviations` works the same for the management
     rules, ticked at the close. Only ticked trades hold a playbook's version
-    and take part in the cost of a rule. *Prevents:* a trade attached later counting
+    and take part in the cost of a rule. A form that does not draw the lists
+    leaves both as they stand (invariant 14). *Prevents:* a trade attached later counting
     as clean, and a screenshot fix turning "not ticked" into "every rule
     broken".
+
+14. **A key the form did not send is left as it is; a key sent blank clears
+    it.** `apply_fields`, `apply_playbook` and `apply_management` ask whether
+    `plan`, `playbook` and `ticked_exit` are in the form before they read
+    them, and the body is parsed with `keep_blank_values`, so the `-` of a
+    select still unties a trade. A group of checkboxes sends nothing when
+    none is ticked, so it cannot be told from a group that was not drawn:
+    such a group needs a hidden marker that the form always sends with it,
+    which is what `ticked` (the checklist) and `ticked_exit` (the management
+    rules) are. The screenshot zones are the exception: a zone not sent is
+    emptied, so every form of a trade sends them all (invariant 2).
+    `execution` has no marker and is safe only while every form
+    of a trade draws it. A form of either edition, the full journal or Lite,
+    may save a record written by the other, so a form reads only the fields
+    it draws and leaves the rest of the record byte for byte as it was
+    (`tests/test_forms.py` posts the form as the page draws it, through
+    `tests/formpost.py`). *Prevents:* an edit in Lite wiping the plan, the
+    playbook, the setup and the reasons of a trade, and a close in Lite
+    writing "every management rule not held".
+
+15. **The edition hides, it never deletes or migrates.** The journal is the
+    full Plainbook unless `journal/settings.md` says `edition: lite`; there is
+    one record format for both, and the key is removed, never written empty,
+    when the full journal is chosen again (invariant 3). Lite takes tabs,
+    fields, rows and buttons off the screen, and every file behind them stays
+    as it is, so a record written in one edition reads and saves in the
+    other. All the gating goes through `lite()`, `LITE_HIDDEN_TABS`,
+    `LITE_HIDDEN_ROUTES` and `LITE_TRASH_KINDS` in `server.py`, and "lite" is
+    compared nowhere else. A hidden address answers a short page, but a POST to one is not
+    refused: the save goes through and then leads to that page, because
+    refusing would lose what the owner pasted. A new feature is either shown
+    in Lite or added to the lists. *Prevents:* Lite turning into a second
+    format that the full journal cannot read, and a screen that no longer
+    draws a field wiping it from the file (invariant 14).
 
 ## 5. Recipes
 
@@ -257,11 +294,26 @@ flat: no gradients; drop shadows only on what floats over the page (the filter
 popover, the pair list, the toast); motion only in the toast that answers a
 form, the short (.12s) colour change on hover and focus, and the fade of an
 opened popover or fold, and all of it is off under prefers-reduced-motion.
+One named exception: the two edition switches, `.toggle` on Accounts and the
+header `.lite-switch`, whose knobs slide in .18s, because a switch that does
+not move does not read as one; both are off under prefers-reduced-motion like
+the rest, and the forms behind them work with no script.
 Depth is drawn with flat colour only: a strip of tiles is three
 surfaces and a lit top edge a pixel thick, and a column of the day by day
 is two sides and a roof in three steps of one colour (`_block`). A figure a picture shows under the pointer rides in a
 `data-tip` attribute (`H.tip`), which the page script puts in the tip box
 at once; a `<title>` waits a second and a half and is not seen.
+
+**Hide something in Plainbook Lite.** A new tab or page that belongs to the
+full Plainbook only: add its tab to `LITE_HIDDEN_TABS` and every address
+prefix it answers, pages and pictures and shares, to `LITE_HIDDEN_ROUTES`,
+both in `server.py`. A new record kind with a trash entry that Lite keeps goes
+into `LITE_TRASH_KINDS`, or its trash entries stay hidden and its Restore is
+refused in Lite. A card, row or field inside a page that Lite keeps: draw
+it only `if not lite()`, and if it is a field of a form, read it only when the
+form sent it (invariant 14), so a Lite save leaves it as it was. Nothing is
+deleted or converted, and a test in `tests/test_lite.py` saves a record
+through Lite and compares the files before and after.
 
 **Add a statistic.** `stats.py` computes, `server.py` displays. Keep the
 computation free of HTML and the display free of arithmetic; that split is why

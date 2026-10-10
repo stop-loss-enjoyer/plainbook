@@ -386,6 +386,20 @@ class FilesOnDisk(unittest.TestCase):
             self.assertEqual(store.new_id(root, day, "XAUUSD"),
                              "2026-08-29-02-xauusd")
 
+    def test_new_id_skips_a_trade_in_the_trash(self):
+        """The id of a deleted trade is still named by its notes and cards, and
+        Restore needs the folder free: a new trade or a rename must not take it."""
+        with tempfile.TemporaryDirectory() as root:
+            day = datetime(2026, 8, 29)
+            store.save_trade(root, sample_trade(id="2026-08-29-01-eurusd"))
+            store.delete_trade(root, "2026-08-29-01-eurusd")
+            self.assertEqual(store.new_id(root, day, "EURUSD"), "2026-08-29-02-eurusd")
+            store.save_trade(root, sample_trade(id="2026-08-29-02-gbpusd"))
+            self.assertEqual(store.new_id(root, day, "EURUSD", keep="2026-08-29-02-gbpusd"),
+                             "2026-08-29-02-eurusd")
+            name = store.trash_list(root)[0][0]
+            self.assertEqual(store.restore(root, name), ("trade", "2026-08-29-01-eurusd"))
+
 
 class Cards(unittest.TestCase):
     def test_empty_card_fields_survive_a_write(self):
@@ -566,6 +580,53 @@ class Settings(unittest.TestCase):
         with open(store.settings_file(self.root), "w", encoding="utf-8") as f:
             f.write("---\nstop_edge: 7\n---\n")
         self.assertEqual(store.stop_edge(self.root), 1.2)
+
+
+class Edition(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        store.make_layout(self.root)
+
+    def text(self):
+        with open(store.settings_file(self.root), encoding="utf-8") as f:
+            return f.read()
+
+    def test_absent_and_invalid_read_as_the_full_journal(self):
+        self.assertEqual(store.edition(self.root), "")
+        for value in ("full", "deluxe", ""):
+            with open(store.settings_file(self.root), "w", encoding="utf-8") as f:
+                f.write(f"---\nedition: {value}\n---\n")
+            self.assertEqual(store.edition(self.root), "")
+
+    def test_save_validates_and_full_removes_the_key(self):
+        self.assertEqual(store.save_edition(self.root, "lite"), "lite")
+        self.assertEqual(store.edition(self.root), "lite")
+        with self.assertRaises(RecordError):
+            store.save_edition(self.root, "deluxe")
+        self.assertEqual(store.edition(self.root), "lite")
+        store.save_edition(self.root, "")
+        self.assertEqual(store.edition(self.root), "")
+        self.assertNotIn("edition", self.text())
+
+    def test_other_keys_and_the_body_survive(self):
+        with open(store.settings_file(self.root), "w", encoding="utf-8") as f:
+            f.write("---\nstop_edge: 1.5\n---\n\nBy hand.\n")
+        before = self.text()
+        store.save_edition(self.root, "lite")
+        self.assertEqual(store.stop_edge(self.root), 1.5)
+        self.assertIn("By hand.", self.text())
+        store.save_edition(self.root, "")
+        self.assertEqual(self.text(), before)
+
+    def test_full_with_no_file_writes_nothing(self):
+        store.save_edition(self.root, "")
+        self.assertFalse(os.path.exists(store.settings_file(self.root)))
+
+    def test_a_save_over_a_broken_file_is_refused(self):
+        with open(store.settings_file(self.root), "w", encoding="utf-8") as f:
+            f.write("---\nbroken\n")
+        with self.assertRaises(RecordError):
+            store.save_edition(self.root, "lite")
 
 
 class Layout(unittest.TestCase):

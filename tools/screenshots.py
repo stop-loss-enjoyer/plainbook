@@ -13,6 +13,12 @@ is touched: the journal it shoots is the one tools/demo_journal.py writes.
 Needs a Chromium-family browser on the PATH (chromium, google-chrome, brave).
 Run it after a release, so that the version on the pictures is the one people
 download.
+
+    python3 tools/screenshots.py --edition=lite     # writes docs/lite/*.png
+
+The same journal with `edition: lite` in its settings, shot at the pages Lite
+shows (the front page, a trade form, Statistics, Accounts with the switch).
+It writes only docs/lite/ and leaves the pictures of the full journal alone.
 """
 import os
 import shutil
@@ -75,10 +81,30 @@ def pages(root):
     ]
 
 
+def lite_pages(root):
+    """The pages that show what Lite is: the front page without the plan and
+    card buttons, a form without the playbook, Statistics without the playbook
+    tables, and the switch on Accounts."""
+    trades = store.all_trades(root)
+    closed = sorted((t for t in trades if not t.is_open and t.conclusions),
+                    key=lambda t: t.closed, reverse=True)
+    trade = closed[0] if closed else trades[0]
+    return [
+        ("journal.png", "/", 1000),
+        ("new-trade.png", f"/edit/{trade.id}", 1000),
+        ("statistics.png", "/stats", 1000),
+        # an address with an anchor comes out blank in a headless shot
+        ("accounts.png", "/accounts", 1000),
+    ]
+
+
 def main():
-    out = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else
-                          os.path.join(os.path.dirname(os.path.dirname(
-                              os.path.abspath(__file__))), "docs"))
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    lite = "--edition=lite" in sys.argv[1:]
+    here_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out = os.path.abspath(args[0] if args else
+                          os.path.join(here_dir, "docs", "lite") if lite else
+                          os.path.join(here_dir, "docs"))
     browser = next((b for b in BROWSERS if shutil.which(b)), None)
     if not browser:
         print("no Chromium-family browser on the PATH")
@@ -90,6 +116,9 @@ def main():
     # quarter of the reports need a run longer than six weeks to show
     subprocess.run([sys.executable, os.path.join(here, "tools", "demo_journal.py"), root,
                     "--months=8"], check=True, capture_output=True)
+    if lite:
+        # the same key the switch on Accounts writes
+        store.save_edition(root, "lite")
     env = dict(os.environ, PLAINBOOK_ROOT=root, PLAINBOOK_PORT=str(PORT), PLAINBOOK_OPEN="0")
     server = subprocess.Popen([sys.executable, "-m", "plainbook.server"], cwd=here, env=env,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -106,13 +135,13 @@ def main():
         last = max(t.closed for t in store.all_trades(root) if t.closed)
         period = reports.previous_period(f"{last:%Y-%m}")
         quarter = reports.previous_period(reports.period_of(last, "quarter"))
-        for what, key in (("month", period), ("quarter", quarter)):
+        for what, key in (() if lite else (("month", period), ("quarter", quarter))):
             urllib.request.urlopen(urllib.request.Request(
                 base + "/report/build", data=f"what={what}&period_{what}={key}".encode(),
                 headers={"Origin": base})).close()
         os.makedirs(out, exist_ok=True)
         profile = os.path.join(tmp, "profile")
-        for name, path, height in pages(root):
+        for name, path, height in (lite_pages(root) if lite else pages(root)):
             target = os.path.join(out, name)
             subprocess.run([browser, "--headless=new", "--disable-gpu", "--hide-scrollbars",
                             f"--user-data-dir={profile}", f"--window-size=1400,{height}",

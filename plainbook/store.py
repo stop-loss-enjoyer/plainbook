@@ -1425,12 +1425,18 @@ def new_id(root, day, pair, keep=None):
     base = os.path.join(root, JOURNAL, TRADES)
     taken = [name for name in (os.listdir(base) if os.path.isdir(base) else [])
              if name.startswith(prefix + "-") and name != keep]
+    # a trade in the trash keeps its id: given to a new trade, the notes and
+    # the cards naming the old one would describe the new one, and Restore
+    # would be refused. Only that exact id is barred, so the numbering of the
+    # day is what it was
+    trashed = {x[2] for x in trash_list(root) if x[1] == "trade"}
     if keep and keep.startswith(prefix + "-") and len(keep) > 13:
         same_number = f"{prefix}-{keep[11:13]}-{slug}"
-        if not any(name.startswith(f"{prefix}-{keep[11:13]}-") for name in taken):
+        if same_number not in trashed and not any(
+                name.startswith(f"{prefix}-{keep[11:13]}-") for name in taken):
             return same_number
     n = len(taken) + 1
-    while f"{prefix}-{n:02d}-{slug}" in taken or any(
+    while f"{prefix}-{n:02d}-{slug}" in trashed or any(
             name.startswith(f"{prefix}-{n:02d}-") for name in taken):
         n += 1
     return f"{prefix}-{n:02d}-{slug}"
@@ -1639,6 +1645,36 @@ def save_clock(root, name):
     _write(settings_file(root), mdfile.dump(
         head, body.strip() or "The owner's settings. Edited in the interface."))
     return name
+
+
+# The reduced journal. Absent is the full Plainbook, so a journal that never
+# met the key reads as it always did, and switching back removes the key
+# instead of writing an empty value (invariant 3).
+EDITIONS = ("lite",)
+
+
+def edition(root):
+    """"lite" or "" for the full journal. A value that is not an edition
+    reads as the full journal."""
+    value = _text(_settings(root).get("edition"))
+    return value if value in EDITIONS else ""
+
+
+def save_edition(root, value):
+    value = (value or "").strip()
+    if value and value not in EDITIONS:
+        raise RecordError(f"{value!r} is not an edition of the journal")
+    _writable(settings_file(root))
+    if not value and not os.path.isfile(settings_file(root)):
+        return value                # nothing was ever written, nothing to take out
+    head, body = _owner_file(settings_file(root))
+    if value:
+        head["edition"] = value
+    else:
+        head.pop("edition", None)
+    _write(settings_file(root), mdfile.dump(
+        head, body.strip() or "The owner's settings. Edited in the interface."))
+    return value
 
 
 def delete_account(root, account_id):

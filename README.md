@@ -38,6 +38,7 @@ Contents: [Why](#why-a-journal-on-your-own-machine) ·
 [Statistics](#statistics) · [Reports](#reports) · [Prop firms](#prop-firm-accounts-and-their-rules) ·
 [Accounts](#accounts-and-money) ·
 [Share](#showing-a-trade-to-another-trader) · [Search](#search) ·
+[Lite](#plainbook-lite) ·
 [Install](#install) · [Your data](#your-data) · [The numbers](#how-the-numbers-work) ·
 [Agents](#built-to-be-kept-by-an-agent) · [FAQ](#faq) · [Documents](#the-documents)
 
@@ -296,10 +297,29 @@ You see the document, and what it will weigh, before you send it.
 ![Search: every record with the word, the matching words shown around it](docs/search.png)
 
 A word or a phrase is looked for in everything you have written: ideas,
-conclusions, updates, plans, notes, playbooks and cards. Every hit is a link
+conclusions, updates, plans, notes, playbooks, cards and the conclusions of
+every report. Every hit is a link
 to the record, with the matching words shown in the text around them. It is
 the way to find the trade where you wrote "moved the stop too early" three
 months ago.
+
+## Plainbook Lite
+
+![Plainbook Lite: the front page with the trades, the accounts and the figures, and the navigation cut to four tabs](docs/lite/journal.png)
+
+The full Plainbook is the journal above. **Plainbook Lite** is the same
+journal with only the trades in it, for a trader who wants the list, the
+statistics and the screenshots and nothing about playbooks, plans, notes,
+cards or reports. A new journal opens as the full Plainbook; the switch is the
+small **lite** beside the name in the header, and again on the Accounts tab.
+
+![The Plainbook Lite switch on the Accounts tab: a knob that slides, and two lines on what it does](docs/lite/accounts.png)
+
+Lite hides and never deletes. The files of the hidden tabs stay in the
+journal, a trade keeps the plan, playbook and ticks it already had through
+every edit made in Lite, and switching back brings every tab and field back
+as it was. The choice is one line in `journal/settings.md`, `edition: lite`.
+See [the guide](GUIDE.md#plainbook-lite).
 
 ## Install
 
