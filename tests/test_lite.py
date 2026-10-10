@@ -37,7 +37,8 @@ class LiteBase(unittest.TestCase):
         cls.root = cls.tmp.name
         store.save_account(cls.root, Account(id="broker", name="Broker",
                                              start_balance=10000))
-        with open(store.settings_file(cls.root), "w", encoding="utf-8") as f:
+        with open(store.settings_file(cls.root), "w", encoding="utf-8",
+                  newline="\n") as f:
             f.write(SETTINGS)
         os.environ["PLAINBOOK_ROOT"] = cls.root
         import plainbook.server
@@ -57,7 +58,8 @@ class LiteBase(unittest.TestCase):
         self.write_settings(SETTINGS)
 
     def write_settings(self, text):
-        with open(store.settings_file(self.root), "w", encoding="utf-8") as f:
+        with open(store.settings_file(self.root), "w", encoding="utf-8",
+                  newline="\n") as f:    # the bytes the journal writes
             f.write(text)
         self.S.drop_cache()
 

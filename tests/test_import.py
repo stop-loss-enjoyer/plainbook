@@ -6,6 +6,7 @@ import csv
 import io
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -261,6 +262,10 @@ class GuardCase(unittest.TestCase):
             self.assertEqual(code, 1, out)
             self.assertIn("a record is tracked: .trash/t.md", out)
         finally:
+            # git keeps its objects read-only, which Windows will not delete
+            for top, _, files in os.walk(tmp):
+                for f in files:
+                    os.chmod(os.path.join(top, f), stat.S_IWRITE | stat.S_IREAD)
             shutil.rmtree(tmp)
 
     def test_demo_help_writes_nothing(self):
