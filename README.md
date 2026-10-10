@@ -621,9 +621,10 @@ permission.
   requests it answers.
 - [CHANGELOG.md](CHANGELOG.md): what changed in every version.
 - [CONTRIBUTING.md](CONTRIBUTING.md) for people and [AGENTS.md](AGENTS.md)
-  for agents. Bug reports and small, focused pull requests are welcome; keep
-  it dependency-free, run `python3 -m unittest discover -s tests`, and
-  remember that somebody's trading history is on the other end of this code.
+  for agents. Bug reports and ideas are welcome; code from outside is not
+  merged. Every change stays dependency-free, passes
+  `python3 -m unittest discover -s tests`, and remembers that somebody's
+  trading history is on the other end of this code.
 
 ## Licence
 
@@ -632,5 +633,8 @@ You can run the journal, change it for yourself and pass it on, for any
 purpose that is not commercial. Selling it, selling it under another name, or
 building it into a product that is sold is not allowed. Every version up to
 1.5.0 was released under MIT, and that is not withdrawn from them.
+
+For a commercial licence, or to talk about the project itself, start a thread
+in [Discussions](https://github.com/stop-loss-enjoyer/plainbook/discussions).
 
 Required Notice: Copyright 2026 stop-loss-enjoyer

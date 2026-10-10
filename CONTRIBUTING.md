@@ -22,11 +22,18 @@ Open an issue with:
 Please do not paste real trades into an issue. A synthetic example that shows
 the same problem is more useful anyway.
 
-## Pull requests
+## Code from outside
+
+Pull requests are not merged. Plainbook keeps a single author, so that its
+licence stays in one hand and a commercial licence can be offered. If you have
+a change in mind, open an issue that says what and why; if it fits, it gets
+written here. Your fork is yours to change for yourself under the licence.
+
+## How changes are made
 
 - **Keep it dependency-free.** The Python standard library is the whole toolbox.
-  A pull request that adds a package will be declined however good the package is.
-- **One change per pull request**, with a message that says *why*, because
+  A change that adds a package will be declined however good the package is.
+- **One change per commit**, with a message that says *why*, because
   the diff already says what.
 - **Run the tests**: `python3 -m unittest discover -s tests`. Add one for the
   behaviour you changed; the suite is fast and has no fixtures to fight with.
