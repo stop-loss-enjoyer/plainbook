@@ -634,7 +634,7 @@ purpose that is not commercial. Selling it, selling it under another name, or
 building it into a product that is sold is not allowed. Every version up to
 1.5.0 was released under MIT, and that is not withdrawn from them.
 
-For a commercial licence, or to talk about the project itself, start a thread
-in [Discussions](https://github.com/stop-loss-enjoyer/plainbook/discussions).
+For a commercial licence, or to talk about the project itself, write to
+[sl.enjoyer@pm.me](mailto:sl.enjoyer@pm.me).
 
 Required Notice: Copyright 2026 stop-loss-enjoyer
