@@ -366,6 +366,15 @@ In this order, every time:
   README, which `tools/screenshots.py` retakes. Publishing the release puts
   that version on PyPI within minutes, and PyPI never takes a version twice:
   a fix after the release is the next version, not the same one again.
+- **The page of a release on GitHub is written for the people who update**,
+  short and in one shape, titled `vX.Y.Z`: a sentence on what the version
+  gives them; one picture or animation of the main change, cropped to it,
+  kept in `docs/releases/<version>/` and linked raw by the commit that added
+  it; `### Highlights`, a bullet a change with a bold lead; `### Fixes`, only
+  what was broken for users; `### Upgrade` with `pipx upgrade
+  plainbook-journal` and the files below; and a small closing line with the
+  systems it was tested on and the compare link of the two tags. The full
+  list of a version stays in `CHANGELOG.md`.
 - **`GUIDE.md` gets updated** when the interface changes. It is the owner's
   manual; an out-of-date manual is worse than none.
 - **Comments explain the reason**, never the mechanics. `# closewindow does not
