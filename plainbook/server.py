@@ -467,7 +467,8 @@ def filters_box(j, q, where="/"):
 # --- front page ------------------------------------------------------------
 
 def result_class(t):
-    return {"Win": "win", "Lose": "lose", "BE": "flat"}.get(t.result, "muted")
+    # break-even wears the amber it has on the winrate tiles and the charts
+    return {"Win": "win", "Lose": "lose", "BE": "be"}.get(t.result, "muted")
 
 
 def link_cell(href, inner, cls=""):
@@ -7058,10 +7059,26 @@ def reports_page():
 _ACCOUNT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}\Z")
 
 
-def accounts_page(message="", bad=False):
+# the parts of Accounts a form there leads back to: the page comes back on
+# that part with its fold open, not at the top with every fold shut
+ACCOUNT_PARTS = ("account-list", "archived", "clock", "edition", "money",
+                 "corrections", "trash", "pairs", "words-styles",
+                 "words-timeframes", "words-execution")
+
+
+def accounts_page(message="", bad=False, at=""):
     j = journal()
     reduced = lite()
-    rows = []
+    at = at if at in ACCOUNT_PARTS else ""
+    if at == "archived" and not any(a.archived for a in j.accounts.values()):
+        at = "account-list"          # the last one was unarchived, the fold is gone
+
+    def back_to(part):
+        return f'<input type="hidden" name="at" value="{part}">'
+
+    def opened(part):
+        return " open" if part == at else ""
+    rows, shelved = [], []
     for a in sorted(j.accounts):
         account = j.accounts[a]
         trades = sum(1 for t in j.trades if t.account == a)
@@ -7073,12 +7090,13 @@ def accounts_page(message="", bad=False):
             f'onsubmit="return confirm(this.dataset.ask)" '
             f'data-ask="{esc("Delete account " + (account.name or a) + "? It moves to .trash.")}">'
             f'<input type="hidden" name="id" value="{esc(a)}">'
+            f'{back_to("archived" if account.archived else "account-list")}'
             f'<button class="btn danger">Delete</button></form>'
             if used == 0 else
             f'<span class="caption">has {plural(trades, "trade")} / '
             f'{plural(adjustments, "adjustment")}, archive instead</span>')
         out = j.cashed_out(a)
-        rows.append(
+        (shelved if account.archived else rows).append(
             f'<tr><td>{esc(account.name or a)}<div class="caption">{esc(a)} · '
             f'{esc(account.currency)}</div></td>'
             f'<td class="num" data-label="start">{amount(j, account.start_balance, a)}</td>'
@@ -7092,7 +7110,7 @@ def accounts_page(message="", bad=False):
             f'<td class="act"><a class="btn" href="/account/{U(a)}/rules">Rules</a></td>'
             f'<td class="act">{archive[1]}</td>'
             f'<td class="act"><form method="post" action="/account/archive" style="display:inline">'
-            f'<input type="hidden" name="id" value="{esc(a)}">'
+            f'<input type="hidden" name="id" value="{esc(a)}">{back_to("archived")}'
             f'<button class="btn">{archive[0]}</button></form> {delete}</td></tr>')
 
     pairs = store.all_pairs(ROOT)
@@ -7104,7 +7122,7 @@ def accounts_page(message="", bad=False):
         f'<td class="caption">{"used in trades" if p in from_trades else "manual"}</td>'
         f'<td>' + (
             f'<form method="post" action="/pair/delete" style="display:inline">'
-            f'<input type="hidden" name="pair" value="{esc(p)}">'
+            f'<input type="hidden" name="pair" value="{esc(p)}">{back_to("pairs")}'
             f'<button class="btn">Remove</button></form>'
             if p not in from_trades else '')
         + '</td></tr>'
@@ -7117,23 +7135,29 @@ def accounts_page(message="", bad=False):
         return (f'<form method="post" action="/list/{action}" style="display:inline">'
                 f'<input type="hidden" name="kind" value="{esc(kind)}">'
                 f'<input type="hidden" name="word" value="{esc(word)}">'
+                f'{back_to("words-" + kind)}'
                 f'<button class="btn">{label}</button></form>')
 
-    def word_rows(kind, used):
+    def word_rows(kind, used, boxes):
         """What the form offers, and below it what the trades carry beyond that.
 
         A word only the trades have is the way back for a style you retired:
         it says how many trades hold it, and Add puts it in the form again."""
         words = store.all_words(ROOT, kind)
-        rows = [f'<tr><td>{esc(w)}</td>'
+        # the boxes belong to the form under the table (the form attribute),
+        # since a form cannot hold the forms of the buttons in each row
+        rows = [(f'<tr><td class="pick"><input type="checkbox" name="word" '
+                 f'value="{esc(w)}" form="drop-{kind}" aria-label="select {esc(w)}"></td>'
+                 if boxes else '<tr><td class="pick"></td>')
+                + f'<td>{esc(w)}</td>'
                 f'<td class="caption">{times(used.get(w, 0))}</td>'
                 f'<td>{word_button("delete", kind, w, "Remove")}</td></tr>'
                 for w in words]
-        rows += [f'<tr><td>{esc(w)}</td>'
+        rows += [f'<tr><td class="pick"></td><td>{esc(w)}</td>'
                  f'<td class="caption">{times(used[w])}, not offered</td>'
                  f'<td>{word_button("new", kind, w, "Add")}</td></tr>'
                  for w in sorted(set(used) - set(words))]
-        return "".join(rows) or ('<tr><td colspan="3" class="caption">'
+        return "".join(rows) or ('<tr><td colspan="4" class="caption">'
                                  'the list is empty</td></tr>')
 
     def counted(pick):
@@ -7152,23 +7176,27 @@ def accounts_page(message="", bad=False):
         used = counted({"styles": lambda t: [t.style],
                         "timeframes": lambda t: [t.entry_tf],
                         "execution": lambda t: t.execution}[kind])
-        lists += f"""<details class="fold"><summary>{label}
-<span class="caption">{len(store.all_words(ROOT, kind))} in the list</span></summary>
+        n = len(store.all_words(ROOT, kind))
+        drop = (f'<form method="post" action="/list/delete" id="drop-{kind}" class="drop">'
+                f'<input type="hidden" name="kind" value="{kind}">{back_to("words-" + kind)}'
+                f'<button class="btn">Remove selected</button></form>' if n > 1 else "")
+        lists += f"""<details class="fold" id="words-{kind}"{opened("words-" + kind)}><summary>{label}
+<span class="caption">{n} in the list</span></summary>
 <form method="post" action="/list/new" class="filters">
-<input type="hidden" name="kind" value="{kind}">
+<input type="hidden" name="kind" value="{kind}">{back_to("words-" + kind)}
 <div><label>add</label><input type="text" name="word" placeholder="{hint}"
  required style="width:160px"></div>
 <div><button class="btn primary">Add</button></div>
 </form>
-<table><thead><tr><th>{label.lower()}</th><th>trades</th><th></th></tr></thead>
-<tbody>{word_rows(kind, used)}</tbody></table></details>
+<table class="words"><thead><tr><th class="pick"></th><th>{label.lower()}</th><th>trades</th><th></th></tr></thead>
+<tbody>{word_rows(kind, used, n > 1)}</tbody></table>{drop}</details>
 """
 
     live = [a for a in sorted(j.accounts) if not j.accounts[a].archived]
     every = sorted(j.accounts)
     today = j.now().strftime("%Y-%m-%d")
 
-    def move_rows(kinds):
+    def move_rows(kinds, part):
         # newest first: a list of money movements is read from the last one
         return "".join(
         f'<tr><td>{c.day:%d.%m.%Y}{f" {c.day:%H:%M}" if c.day_time else ""}</td>'
@@ -7179,12 +7207,12 @@ def accounts_page(message="", bad=False):
         f'<td>{esc(c.comment) or EMPTY_CELL}</td>'
         f'<td><form method="post" action="/money/delete" style="display:inline" '
         f'onsubmit="return confirm(\'Delete this record? It moves to .trash.\')">'
-        f'<input type="hidden" name="id" value="{esc(c.id)}">'
+        f'<input type="hidden" name="id" value="{esc(c.id)}">{back_to(part)}'
             f'<button class="btn danger">Delete</button></form></td></tr>'
             for c in reversed(j.adjustments) if c.kind in kinds)
 
-    def move_table(kinds, empty):
-        rows = move_rows(kinds)
+    def move_table(kinds, empty, part):
+        rows = move_rows(kinds, part)
         return (f'<table><thead><tr><th>date</th><th>account</th><th>what</th>'
                 f'<th class="num">amount</th><th>comment</th><th></th></tr></thead>'
                 f'<tbody>{rows}</tbody></table>' if rows else
@@ -7195,9 +7223,9 @@ def accounts_page(message="", bad=False):
         return f"{n} record" if n == 1 else f"{n} records"
 
     money = f"""<div class="card"><h2>Money and corrections</h2>
-<details class="fold"><summary>Money in and out
+<details class="fold" id="money"{opened("money")}><summary>Money in and out
 <span class="caption">{count(MONEY_KINDS)}</span></summary>
-<form method="post" action="/money/new" class="filters">
+<form method="post" action="/money/new" class="filters">{back_to("money")}
 <div><label>account</label>{select("account", live)}</div>
 <div><label>what</label>{select("kind", MONEY_KINDS)}</div>
 <div><label>amount</label><input type="text" name="amount" inputmode="decimal"
@@ -7214,14 +7242,14 @@ decided by what you picked. With a time, the money counts from that moment:
 a deposit made in the evening stays out of the risk of a trade opened that
 morning. Without one it counts from the start of its day. A withdrawal is also counted as a cashout, and the
 total sits in the accounts table above.</p>
-{move_table(MONEY_KINDS, "No money has been moved yet.")}
+{move_table(MONEY_KINDS, "No money has been moved yet.", "money")}
 <p class="caption">Deleting moves the record to <code>.trash</code>. Balances are
 recomputed from what is left, nothing is stored as a number.</p>
 </details>
 
-<details class="fold"><summary>Correct a balance
+<details class="fold" id="corrections"{opened("corrections")}><summary>Correct a balance
 <span class="caption">{count(("reconciliation",))}</span></summary>
-<form method="post" action="/money/correct" class="filters">
+<form method="post" action="/money/correct" class="filters">{back_to("corrections")}
 <div><label>account</label>{select("account", every)}</div>
 <div><label>real balance now</label><input type="text" name="balance"
  inputmode="decimal" required style="width:150px"></div>
@@ -7234,7 +7262,7 @@ recomputed from what is left, nothing is stored as a number.</p>
 <p class="caption">Type what the broker shows. The journal writes down the
 difference as a correction and never touches the start balance or the trades:
 that is what keeps the history honest.</p>
-{move_table(("reconciliation",), "Nothing has been corrected yet.")}
+{move_table(("reconciliation",), "Nothing has been corrected yet.", "corrections")}
 </details>
 <p class="caption">Both are kept in <code>journal/adjustments/</code>, and both
 move the balance; they are apart here because one is money you moved and the
@@ -7254,14 +7282,14 @@ other is a difference you found.</p></div>"""
         f'<tr><td class="muted">{kind}</td><td>{esc(record_id)}</td>'
         f'<td>{when:%d.%m.%Y %H:%M}</td>'
         f'<td><form method="post" action="/trash/restore" style="display:inline">'
-        f'<input type="hidden" name="name" value="{esc(name)}">'
+        f'<input type="hidden" name="name" value="{esc(name)}">{back_to("trash")}'
         f'<button class="btn">Restore</button></form></td></tr>'
         for name, kind, record_id, when in trashed)
     # folded: the list grows with every deleted record and is wanted rarely,
     # so the card shows the count and opens on a click
     n = len(trashed)
     trash = (f'<div class="card"><h2>Trash</h2>'
-             f'<details class="fold"><summary>{n} record{"" if n == 1 else "s"}'
+             f'<details class="fold" id="trash"{opened("trash")}><summary>{n} record{"" if n == 1 else "s"}'
              f'<span class="caption">everything deleted, put back from here</span></summary>'
              + (f'<table><thead><tr><th>what</th><th>id</th><th>deleted</th>'
                 f'<th></th></tr></thead><tbody>{trash_rows}</tbody></table>'
@@ -7273,6 +7301,21 @@ other is a difference you found.</p></div>"""
              f'all. A record written again under the same id since is not '
              f'overwritten: the one in the trash stays there.</p></details></div>')
 
+    def account_table(rows):
+        return ('<table class="accounts"><thead><tr><th>account</th><th class="num">start</th>'
+                '<th class="num">current</th><th class="num">cashed out</th>'
+                '<th class="num">trades</th><th>kind</th><th></th><th>status</th><th></th>'
+                f'</tr></thead><tbody>{"".join(rows)}</tbody></table>')
+
+    # the archived ones fold away under the active: they are kept for the
+    # history and looked at rarely, and mixed in they read as accounts in use
+    archived = (f'<details class="fold" id="archived"{opened("archived")}><summary>Archived'
+                f'<span class="caption">{plural(len(shelved), "account")}</span></summary>'
+                f'{account_table(shelved)}</details>' if shelved else "")
+    active = (account_table(rows) if rows else
+              '<p class="muted">No account is active: unarchive one below or '
+              'create a new one.</p>' if shelved else "")
+
     if message:
         # the address is cleaned as the page appears, so a reload does not
         # show the same message again
@@ -7282,11 +7325,8 @@ other is a difference you found.</p></div>"""
     else:
         top = ""
     body = f"""{top}
-<div class="card"><h2>Accounts</h2>
-<table class="accounts"><thead><tr><th>account</th><th class="num">start</th><th class="num">current</th>
-<th class="num">cashed out</th><th class="num">trades</th><th>kind</th><th></th>
-<th>status</th><th></th></tr></thead>
-<tbody>{"".join(rows)}</tbody></table>
+<div class="card" id="account-list"><h2>Accounts</h2>
+{active}{archived}
 <p class="caption">An account with trades cannot be deleted, archive it instead.
 Archived accounts stay in history and statistics but are not offered when opening
 a trade. <b>Rules</b> makes an account a prop account and holds the rules of its
@@ -7295,8 +7335,8 @@ the hour its day begins. With them set, the row of the account says where it
 stands against each, in amber at four fifths of a limit and in red when one is
 reached.</p></div>
 
-<div class="card"><h2>The journal's clock</h2>
-<form method="post" action="/settings/clock" class="filters">
+<div class="card" id="clock"><h2>The journal's clock</h2>
+<form method="post" action="/settings/clock" class="filters">{back_to("clock")}
 <div><label>the times of the trades are written on the clock of</label>
 <input type="text" name="clock" list="clocks" value="{esc(j.clock)}"
  placeholder="this computer" style="width:220px">
@@ -7309,7 +7349,7 @@ terminal of a broker whose server runs on another clock names that clock here,
 so the day of a prop firm is cut in the right place.</p></div>
 
 <div class="card" id="edition"><h2>Plainbook Lite</h2>
-<form method="post" action="/settings/edition" id="edition-form">
+<form method="post" action="/settings/edition" id="edition-form">{back_to("edition")}
 <div class="edition-row">
 <label class="toggle"><input type="checkbox" role="switch" name="lite" value="1"
  {"checked" if reduced else ""} aria-label="Plainbook Lite">
@@ -7332,10 +7372,10 @@ this is switched off.</p></div>
 
 {money}
 
-<div class="card"><h2>New account</h2>
-<form method="post" action="/account/new" class="filters">
+<div class="card" id="new-account"><h2>New account</h2>
+<form method="post" action="/account/new" class="filters">{back_to("account-list")}
 <div><label>id</label><input type="text" name="id" placeholder="broker-2"
- pattern="[a-z0-9][a-z0-9-]*" required style="width:130px"></div>
+ pattern="[a-z0-9][a-z0-9\\-]*" required style="width:130px"></div>
 <div><label>name</label><input type="text" name="name" placeholder="Broker 2"
  style="width:160px"></div>
 <div><label>start balance</label><input type="text" name="start" inputmode="decimal"
@@ -7354,8 +7394,8 @@ rules next: the limits, the target and the day of its firm.</p></div>
 
 {trash}
 
-<div class="card"><h2>Trading pairs</h2>
-<form method="post" action="/pair/new" class="filters">
+<div class="card" id="pairs"><h2>Trading pairs</h2>
+<form method="post" action="/pair/new" class="filters">{back_to("pairs")}
 <div><label>pair</label><input type="text" name="pair" placeholder="EURJPY"
  required style="width:130px"></div>
 <div><button class="btn primary">Add pair</button></div>
@@ -7373,6 +7413,14 @@ which is why the timeframes stay in the order you trade them. Removing a word
 only stops it being offered: the trades that carry it keep it, and it still
 shows in the filters{" and the statistics" if reduced else ", the statistics and the reports"}. Every style in the list
 gets a winrate tile of its own on the journal page.</p></div>"""
+    if at and not message:
+        # a message stands at the top of the page and has to be read there
+        # the header is measured here: the observer that writes --head runs
+        # only after the page has loaded, and a wrapped header is taller
+        body += (f'<script>(function(){{var part = document.getElementById({js(at)}),'
+                 f'head = document.querySelector("header"); if (!part) return;'
+                 f'if (head) document.documentElement.style.setProperty("--head", head.offsetHeight + "px");'
+                 f'part.scrollIntoView();}})()</script>')
     return page("Accounts", body, "accounts")
 
 
@@ -7736,14 +7784,22 @@ def add_word(data):
 
 
 def remove_word(data):
-    kind, word = _kind(data), one(data, "word")
+    """One word off a list, or every word ticked in it."""
+    kind = _kind(data)
+    picked = list(dict.fromkeys(w.strip() for w in data.get("word", []) if w.strip()))
+    if not picked:
+        raise RecordError("nothing was selected")
     words = store.all_words(ROOT, kind)
-    if kind == "styles" and len(words) <= 1:
+    missing = [w for w in picked if w not in words]
+    if missing:
+        raise RecordError(f"{missing[0]} is not in the list")
+    left = [w for w in words if w not in picked]
+    if kind == "styles" and not left:
         raise RecordError("a trade needs a style: keep at least one in the list")
-    if word not in words:
-        raise RecordError(f"{word} is not in the list")
-    store.save_words(ROOT, kind, [w for w in words if w != word])
-    return f"{word} is no longer offered in the trade form."
+    store.save_words(ROOT, kind, left)
+    if len(picked) == 1:
+        return f"{picked[0]} is no longer offered in the trade form."
+    return f"{len(picked)} words are no longer offered."
 
 
 # --- sharing ---------------------------------------------------------------
@@ -8358,7 +8414,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(week_page(key, (q.get("report") or [""])[0]))
         if path == "/accounts":
             return self._send(accounts_page((q.get("m") or [""])[0],
-                                            (q.get("bad") or [""])[0] == "1"))
+                                            (q.get("bad") or [""])[0] == "1",
+                                            (q.get("at") or [""])[0]))
         if len(parts) == 3 and parts[0] == "account" and parts[2] == "rules":
             shown = rules_page(parts[1]) if store.safe_dir_name(parts[1]) else None
             return self._send(shown) if shown else self._gone("no such account", "accounts", "/accounts")
@@ -8713,7 +8770,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   ("/list/delete", remove_word)):
                 if path == route:
                     # Accounts and pairs report back on their own page rather
-                    # than on a separate error page: you stay where you were.
+                    # than on a separate error page: you stay where you were,
+                    # down to the part of the page the form was in.
+                    at = one(data, "at")
+                    at = "at=" + at if at in ACCOUNT_PARTS else ""
                     try:
                         message = action(data)
                     except (RecordError, ValueError) as e:
@@ -8721,12 +8781,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # page must read the files again, not that half-applied copy
                         drop_cache()
                         # a refusal is not a toast that fades: it stands on the page
-                        return self._go("/accounts?m=" + U(str(e)) + "&bad=1")
+                        return self._go("/accounts?m=" + U(str(e)) + "&bad=1"
+                                        + ("&" + at if at else ""))
                     # a short word rides as the toast; a sentence the toast
                     # would cut stands in a card at the top of the page
                     short = len(message) <= 60
-                    return self._go("/accounts" if short else "/accounts?m=" + U(message),
-                                    message.rstrip(".") if short else "")
+                    where = "/accounts" if short else "/accounts?m=" + U(message)
+                    if at:
+                        where += ("&" if "?" in where else "?") + at
+                    return self._go(where, message.rstrip(".") if short else "")
             if path == "/report/build":
                 what = one(data, "what", "month")
                 period = one(data, f"period_{what}")

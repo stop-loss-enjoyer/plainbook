@@ -759,8 +759,8 @@ class ServerCase(unittest.TestCase):
         self.post("/money/correct", {"account": "broker", "balance": "12345",
                                      "day": "2026-08-19", "comment": "broker"})
         _, html = self.get("/accounts")
-        self.assertIn('<details class="fold"><summary>Money in and out', html)
-        self.assertIn('<details class="fold"><summary>Correct a balance', html)
+        self.assertIn('<details class="fold" id="money"><summary>Money in and out', html)
+        self.assertIn('<details class="fold" id="corrections"><summary>Correct a balance', html)
         money = html[html.index("Money in and out"):html.index("Correct a balance")]
         corrections = html[html.index("Correct a balance"):]
         # a correction belongs under corrections, not among the deposits
@@ -1000,6 +1000,120 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(f"winrate {left[0]}" in home, left[0] in traded)
         for style in traded & set(left):
             self.assertIn(f"winrate {style}", home)
+
+    def test_39a_several_words_go_at_once_and_the_page_comes_back_to_the_list(self):
+        for word in ("X1", "X2", "X3"):
+            self.post("/list/new", {"kind": "timeframes", "word": word,
+                                    "at": "words-timeframes"})
+        _, page = self.get("/accounts")
+        # every offered word has a box that belongs to the form under its table
+        self.assertIn('value="X1" form="drop-timeframes"', page)
+        self.assertIn('<form method="post" action="/list/delete" id="drop-timeframes"', page)
+        self.assertNotIn('id="words-timeframes" open', page)    # shut when nothing led here
+        _, where = self.post("/list/delete", {"kind": "timeframes", "word": ["X1", "X3"],
+                                              "at": "words-timeframes"})
+        words = store.all_words(self.root, "timeframes")
+        self.assertNotIn("X1", words)
+        self.assertNotIn("X3", words)
+        self.assertIn("X2", words)                           # the one not ticked stays
+        self.assertIn("at=words-timeframes", where)
+        self.assertIn("2 words are no longer offered", urllib.parse.unquote(where))
+        _, page = self.get(urllib.parse.urlparse(where).path + "?"
+                           + urllib.parse.urlparse(where).query)
+        # the page comes back on that list, open, and scrolls to it
+        self.assertIn('id="words-timeframes" open', page)
+        self.assertIn('getElementById("words-timeframes")', page)
+        self.assertNotIn('id="words-styles" open', page)
+        # nothing ticked is refused, and the list is open on the refusal too
+        _, where = self.post("/list/delete", {"kind": "timeframes",
+                                              "at": "words-timeframes"})
+        self.assertIn("nothing was selected", urllib.parse.unquote(where))
+        self.assertIn("at=words-timeframes", where)
+        # a part the page does not have is not carried
+        _, where = self.post("/list/delete", {"kind": "timeframes", "word": "X2",
+                                              "at": "nowhere"})
+        self.assertNotIn("at=", where)
+        self.assertNotIn("X2", store.all_words(self.root, "timeframes"))
+        # a list of one word has no button under it, so no box to tick either
+        kept = store.all_words(self.root, "execution")
+        store.save_words(self.root, "execution", kept[:1])
+        _, page = self.get("/accounts")
+        self.assertNotIn('form="drop-execution"', page)
+        self.assertNotIn('id="drop-execution"', page)
+        store.save_words(self.root, "execution", kept)
+        # every form of the tab says where it was, the Lite switch included
+        forms = re.findall(r'<form method="post" action="([^"]+)"[^>]*>(.*?)</form>', page, re.S)
+        for action, inner in forms:
+            if 'name="back"' in inner:
+                continue                         # the switch in the header, back to any page
+            if action.startswith(("/list/", "/pair/", "/money/", "/account/", "/trash/",
+                                  "/settings/clock", "/settings/edition")):
+                self.assertIn('name="at"', inner, action)
+        # the id pattern is a valid expression for the browser's v flag
+        self.assertIn('pattern="[a-z0-9][a-z0-9\\-]*"', page)
+
+    def test_39b_ticking_every_style_does_not_empty_the_list(self):
+        self.post("/list/new", {"kind": "styles", "word": "spare"})
+        styles = store.all_words(self.root, "styles")
+        self.assertGreater(len(styles), 1)
+        _, where = self.post("/list/delete", {"kind": "styles", "word": styles})
+        self.assertIn("at least one", urllib.parse.unquote(where))
+        self.assertEqual(store.all_words(self.root, "styles"), styles)
+        self.post("/list/delete", {"kind": "styles", "word": "spare"})
+
+    def test_39c_archived_accounts_fold_away_under_the_active(self):
+        self.post("/account/new", {"id": "shelf-acc", "name": "Shelf",
+                                   "start": "1000", "currency": "USD"})
+        _, where = self.post("/account/archive", {"id": "shelf-acc", "at": "archived"})
+        self.assertIn("at=archived", where)
+        _, page = self.get("/accounts?at=archived")
+        fold = page.index('<details class="fold" id="archived" open>')
+        self.assertGreater(page.index("Shelf"), fold)         # under the fold
+        self.assertLess(page.index("broker ·"), fold)         # the active above it
+        _, page = self.get("/accounts")
+        self.assertIn('<details class="fold" id="archived"><summary>', page)
+        # Delete in the fold comes back to the fold
+        row = page[page.index('<details class="fold" id="archived">'):]
+        delete = re.search(r'action="/account/delete".*?</form>', row, re.S).group(0)
+        self.assertIn('value="archived"', delete)
+        self.post("/account/archive", {"id": "shelf-acc"})
+        self.post("/account/delete", {"id": "shelf-acc"})
+        _, page = self.get("/accounts")
+        if not any(a.archived for a in store.all_accounts(self.root).values()):
+            self.assertNotIn('id="archived"', page)
+            # the last one unarchived, the page comes back on the table it joined
+            _, page = self.get("/accounts?at=archived")
+            self.assertIn('getElementById("account-list")', page)
+
+    def test_39d_a_break_even_wears_amber_in_the_lists(self):
+        _, html = self.get("/new")
+        _, where = self.post("/new", {
+            "token": self.form_token(html), "blocks": "1", "account": "broker",
+            "pair": "NZDCAD", "direction": "long", "style": "swing",
+            "entry_tf": "H4", "risk": "1", "entry": "2026-08-12T10:00"})
+        tid = self.landed(where)
+        q = urllib.parse.quote(tid)
+        _, html = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(html), "result": "BE",
+                                  "pnl": "-3", "exit": "2026-08-13", "conclusions": ""})
+        _, home = self.get("/?all=1")
+        row = re.search(rf'<tr[^>]*>(?:(?!</tr>).)*?/trade/{re.escape(q)}.*?</tr>',
+                        home, re.S).group(0)
+        self.assertIn('class="cell be"', row)                # the word
+        self.assertIn('class="cell num be"', row)            # and its money
+        _, page = self.get(f"/trade/{q}")
+        self.assertIn('<td class="be">BE</td>', page)
+        store.delete_trade(self.root, tid)
+
+    def test_39e_an_empty_field_does_not_look_filled_in(self):
+        from plainbook import html as H
+        _, page = self.get("/new")
+        # the example in a field is darker than the name of the field above it
+        self.assertIn("::placeholder{color:" + H.HINT, page)
+        self.assertIn("label{display:block;color:" + H.INK2, page)
+        def light(c):
+            return sum(int(c[i:i + 2], 16) for i in (1, 3, 5))
+        self.assertLess(light(H.HINT), light(H.DIM))
 
     def test_40_a_report_carries_the_slices_the_charts_and_the_period_before(self):
         self.post("/report/build", {"what": "month", "period_month": "2026-08"})

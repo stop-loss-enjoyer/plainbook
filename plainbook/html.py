@@ -30,6 +30,9 @@ SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500"]
 GOOD = "#48ac7a"
 BAD = "#d05c55"
 WARN = "#d9a441"
+# the example an empty field shows: darker than any label, so a fresh form
+# does not look filled in already, and still above 3:1 on the field
+HINT = "#626369"
 # The buckets of the R distribution. One hue per side with steps that get
 # brighter as R grows, so the order of the buckets is visible in the colour
 # itself and not only in the legend. Checked against the card surface: every
@@ -252,7 +255,7 @@ tr.group td.win{{color:{GOOD}}}
 tr.group td.lose{{color:{BAD}}}
 tr.group .label{{color:{INK};font-weight:600;letter-spacing:.04em}}
 tr.group .dates{{color:{DIM};margin-left:8px}}
-.win{{color:{GOOD}}} .lose{{color:{BAD}}} .flat{{color:{INK2}}}
+.win{{color:{GOOD}}} .lose{{color:{BAD}}}
 /* figures that say what they are by colour alone and take no labels: the
    winrate tile, and the trades of a report card. Blue is a position that was
    still in the market when the period ended */
@@ -262,8 +265,14 @@ tr.group .dates{{color:{DIM};margin-left:8px}}
 
 /* forms */
 form.filters{{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end}}
-label{{display:block;color:{DIM};font-size:10px;margin-bottom:4px;
+label{{display:block;color:{INK2};font-size:10px;margin-bottom:4px;
  text-transform:uppercase;letter-spacing:.09em}}
+::placeholder{{color:{HINT};opacity:1}}
+/* the words of the trade form on Accounts: a box to tick each, and the one
+   button under the table that takes the ticked ones off */
+table.words th.pick,table.words td.pick{{width:18px;padding-right:0}}
+form.drop{{margin-top:8px}}
+table.accounts + details.fold{{margin-top:12px}}
 select,input[type=text],input[type=number],input[type=date],
 input[type=week],input[type=datetime-local],input[type=time],textarea{{background:{GROUND};color:{INK};
  border:1px solid {AXIS};border-radius:4px;padding:6px 8px;

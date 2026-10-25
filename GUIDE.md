@@ -608,7 +608,9 @@ written on the card, the daily one a hyphen.
   leaves this tile alone; the other filters scope it as they scope the rest.
 - **The list of trades** is split into periods. The **Weeks / Months /
   Quarters** switch sits above the table on the right. The total row of a period
-  holds the number of trades, WR with its EV, Σ PnL and Σ R. **A click anywhere on a row
+  holds the number of trades, WR with its EV, Σ PnL and Σ R. The result and
+  the money of a trade wear its colour: green for a win, red for a loss,
+  amber for a break-even, the same amber as on the winrate tiles. **A click anywhere on a row
   opens that trade**: its fields, the idea you wrote before the entry with its
   screenshots, the exit moment and the conclusions. The same goes for a row in
   the open positions block. When the list holds more than 300 trades,
@@ -1032,7 +1034,9 @@ The **Accounts** tab.
   what "today" and "this week" mean: the day **+ DRC** opens, the period
   tile of the front page and the running month of the Reports tab.
 - **Archive** keeps the account in the history and the statistics but stops
-  offering it when a trade is opened. An account with trades or money
+  offering it when a trade is opened. The active accounts stand in the table;
+  the archived ones fold away under it, in **Archived** with their count, and
+  a click opens them, each with its **Unarchive** button. An account with trades or money
   movements cannot be deleted, only archived; one without them is deleted into
   `.trash` like everything else.
 - **Trash** lists everything deleted, newest first, with a **Restore** button.
@@ -1047,8 +1051,14 @@ The **Accounts** tab.
 - **The trade form** holds the other three lists: the trading styles, the
   timeframes of the entry TF field and the execution checkboxes. Each opens on a
   click, takes a new word in the field and removes one with the button next to
-  it. A new word goes to the end of its list, so the timeframes stay in the
+  it. To take several at once, tick their boxes and press **Remove selected**
+  under the list; the styles keep at least one, since a trade needs a style. A new word goes to the end of its list, so the timeframes stay in the
   order you trade them.
+
+  After a button on the Accounts tab the page comes back on the card, list or
+  fold the button was in, with that fold open. When the journal has more to
+  say than a short word, a refusal or a longer answer, it says it at the top
+  of the page, and the fold stands open below it.
 
   Removing a word only stops the form offering it. The trades that carry it keep
   it: it stays in the filters, the statistics and the reports, it is still shown

@@ -357,6 +357,31 @@ async function run(p) {
   await p.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))`);
   check(await p.evaluate(`!document.querySelector('.viewer')`), "Esc closes it");
 
+  // ---- Accounts: two timeframes ticked go with one button, and the page
+  // comes back on the same list, open, instead of at the top with it shut
+  await p.goto(B + "/accounts");
+  for (const w of ["T1", "T2"]) {
+    await p.evaluate(`document.querySelector('#words-timeframes [name=word][type=text]').value = '${w}'`);
+    await p.submit("#words-timeframes form.filters");
+  }
+  check((await p.url()).includes("at=words-timeframes"), "adding a word comes back to its list");
+  await p.evaluate(`['T1', 'T2'].forEach(w => document.querySelector('input[type=checkbox][form=drop-timeframes][value=' + w + ']').checked = true)`);
+  await p.submit("#drop-timeframes");
+  check(!(await has(`document.querySelector('#words-timeframes table').innerText`, "T1"))
+        && !(await has(`document.querySelector('#words-timeframes table').innerText`, "T2")),
+    "Remove selected took both ticked words");
+  check(await p.evaluate(`document.getElementById('words-timeframes').open`), "the list is open after it");
+  // below the sticky header, which is taller once its tabs wrap
+  check(await p.evaluate(`(() => { const r = document.getElementById('words-timeframes').getBoundingClientRect();
+    const head = document.querySelector('header').getBoundingClientRect().bottom;
+    return scrollY > 0 && r.top >= head && r.top < innerHeight; })()`), "and the page stands on it");
+  await send("Emulation.setDeviceMetricsOverride", { width: 600, height: 900, deviceScaleFactor: 1, mobile: false });
+  await p.goto(B + "/accounts?at=pairs");
+  check(await p.evaluate(`(() => { const r = document.getElementById('pairs').getBoundingClientRect();
+    return scrollY > 0 && r.top >= document.querySelector('header').getBoundingClientRect().bottom; })()`),
+    "a narrow window with a wrapped header lands on the part below the header");
+  await send("Emulation.clearDeviceMetricsOverride");
+
   // ---- a picture dropped from a folder lands like a pasted one, and the
   // zone offers a button to choose a file
   await p.goto(B + "/new");
@@ -374,6 +399,7 @@ async function run(p) {
     return zone.querySelectorAll('.shot').length;
   })()`);
   check(dropped === 1, "a dropped picture lands in the zone");
+
 }
 
 let failed = false;

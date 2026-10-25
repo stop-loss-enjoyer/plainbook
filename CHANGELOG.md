@@ -2,6 +2,30 @@
 
 What changed and why. Newest first.
 
+## v1.9.2, 25.10.2026
+
+Small things a user asked for. A break-even is amber wherever the journal
+shows it, the lists on Accounts lose several words at once and the page
+stays where you were, archived accounts fold away, and a fresh form no
+longer looks filled in.
+
+- A break-even in the list of trades and on the page of a trade is amber,
+  the word and its money, the way the winrate tiles and the charts draw it;
+  it used to be grey there.
+- The lists of the trade form on Accounts (styles, timeframes, execution
+  formats) take several words off at once: tick them and press **Remove
+  selected**. The styles still keep at least one.
+- A button on the Accounts tab no longer throws the page back to the top
+  with every fold shut: it comes back on the card, list or fold the button
+  was in, open, so the next word or the next record is right there. A
+  refusal or a longer answer is still said at the top of the page, with the
+  fold open below it.
+- Archived accounts fold away under the active ones, in **Archived** with
+  their count, instead of standing among them in the table.
+- An empty field no longer looks filled in: the example in it is drawn darker
+  than before and the name of the field above it lighter, so a new trade or
+  playbook shows at a glance what is still to be typed.
+
 ## v1.9.1, 21.10.2026
 
 A new licence that says plainly what the old one left open: the journal is
