@@ -361,18 +361,18 @@ async function run(p) {
   // comes back on the same list, open, instead of at the top with it shut
   await p.goto(B + "/accounts");
   for (const w of ["T1", "T2"]) {
-    await p.evaluate(`document.querySelector('#words-timeframes [name=word][type=text]').value = '${w}'`);
-    await p.submit("#words-timeframes form.filters");
+    await p.evaluate(`document.querySelector('#list-timeframes [name=word][type=text]').value = '${w}'`);
+    await p.submit("#list-timeframes form.filters");
   }
-  check((await p.url()).includes("at=words-timeframes"), "adding a word comes back to its list");
+  check((await p.url()).includes("at=list-timeframes"), "adding a word comes back to its list");
   await p.evaluate(`['T1', 'T2'].forEach(w => document.querySelector('input[type=checkbox][form=drop-timeframes][value=' + w + ']').checked = true)`);
   await p.submit("#drop-timeframes");
-  check(!(await has(`document.querySelector('#words-timeframes table').innerText`, "T1"))
-        && !(await has(`document.querySelector('#words-timeframes table').innerText`, "T2")),
-    "Remove selected took both ticked words");
-  check(await p.evaluate(`document.getElementById('words-timeframes').open`), "the list is open after it");
+  check(!(await has(`document.querySelector('#list-timeframes table').innerText`, "T1"))
+        && !(await has(`document.querySelector('#list-timeframes table').innerText`, "T2")),
+    "Remove selected took both ticked timeframes");
+  check(await p.evaluate(`document.getElementById('list-timeframes').open`), "the list is open after it");
   // below the sticky header, which is taller once its tabs wrap
-  check(await p.evaluate(`(() => { const r = document.getElementById('words-timeframes').getBoundingClientRect();
+  check(await p.evaluate(`(() => { const r = document.getElementById('list-timeframes').getBoundingClientRect();
     const head = document.querySelector('header').getBoundingClientRect().bottom;
     return scrollY > 0 && r.top >= head && r.top < innerHeight; })()`), "and the page stands on it");
   await send("Emulation.setDeviceMetricsOverride", { width: 600, height: 900, deviceScaleFactor: 1, mobile: false });
@@ -380,7 +380,91 @@ async function run(p) {
   check(await p.evaluate(`(() => { const r = document.getElementById('pairs').getBoundingClientRect();
     return scrollY > 0 && r.top >= document.querySelector('header').getBoundingClientRect().bottom; })()`),
     "a narrow window with a wrapped header lands on the part below the header");
+  // ---- Statistics: the stop edge slider comes back on its card, not at the top
+  await p.goto(B + "/stats");
+  events.length = 0;
+  await p.evaluate(`(() => { const r = document.querySelector('#past-stop input[type=range]');
+    r.value = '1.5'; r.dispatchEvent(new Event('change', {bubbles: true})); })()`);
+  await loaded();
+  check(await p.evaluate(`location.hash`) === "#past-stop", "the slider comes back to its card");
+  check(await p.evaluate(`(() => { const r = document.getElementById('past-stop').getBoundingClientRect();
+    return scrollY > 0 && r.top >= document.querySelector('header').getBoundingClientRect().bottom && r.top < innerHeight; })()`),
+    "and the page stands on it, below the wrapped header");
+  check(await p.evaluate(`document.querySelector('#past-stop output').textContent`) === "-1.5 R", "with the new edge");
   await send("Emulation.clearDeviceMetricsOverride");
+
+  // ---- the plan menu follows the date of the entry: today it offers the
+  // plans that cover today, a date inside an older plan offers that one, and
+  // a day no plan covers says so
+  await p.goto(B + "/new");
+  const menu = () => p.evaluate(`[...document.querySelector('select[name=plan]').options].map(o => o.value + '|' + o.textContent)`);
+  const enter = day => p.evaluate(`(() => { const e = document.querySelector('[name=entry]');
+    e.value = ${JSON.stringify(day + "T10:00")}; e.dispatchEvent(new Event('change', {bubbles: true})); })()`);
+  const offeredNow = (await menu()).map(o => o.split("|")[0]).filter(Boolean);
+  const plans = JSON.parse(await p.evaluate(`document.querySelector('select[name=plan]').dataset.plans`));
+  const older = plans.find(k => k.to < DAY && !offeredNow.includes(k.id));
+  check(offeredNow.length > 0 && older, "the menu offers today's plans and the page knows an older one");
+  await enter(older.to);
+  const back = (await menu()).map(o => o.split("|")[0]).filter(Boolean);
+  check(back.includes(older.id) && offeredNow.every(id => !back.includes(id)),
+    "a date inside an older plan offers it and drops today's");
+  await p.evaluate(`document.querySelector('select[name=plan]').value = ${JSON.stringify(older.id)}`);
+  await enter("2001-01-02");
+  const none = await menu();
+  check(none.length === 1 && none[0] === "|no plan covers this day" &&
+    await p.evaluate(`document.querySelector('select[name=plan]').value`) === "",
+    "a day no plan covers says so and drops the pick");
+  // a trade being edited keeps its own plan whatever date it is moved to,
+  // or a save would untie it from the plan
+  await p.goto(B + "/plan/" + encodeURIComponent(older.id));
+  const tied = await p.evaluate(`(document.querySelector('a[href^="/trade/"]') || {}).getAttribute?.('href')`);
+  check(tied, "the older plan has a trade tied to it");
+  await p.goto(B + "/edit/" + tied.split("/")[2].split("?")[0]);
+  check(await p.evaluate(`document.querySelector('select[name=plan]').value`) === older.id,
+    "the edit form of that trade has its plan picked");
+  await enter("2001-01-02");
+  check(await p.evaluate(`document.querySelector('select[name=plan]').value`) === older.id,
+    "and keeps it when the date moves to a day no plan covers");
+
+  // ---- the Plans tab keeps the current plans apart from the past ones
+  await p.goto(B + "/plans");
+  check(await p.evaluate(`[...document.querySelectorAll('.card h2')].map(h => h.textContent).join(',')`) === "Current,Past",
+    "the Plans tab has a Current table and a Past table");
+  await send("Emulation.setDeviceMetricsOverride", { width: 900, height: 900, deviceScaleFactor: 1, mobile: false });
+  check(await p.evaluate(`getComputedStyle(document.querySelector('th.hide-narrow')).display`) === "none",
+    "a narrow window hides WR, PnL and the narrative column of Past");
+  await send("Emulation.clearDeviceMetricsOverride");
+
+  // ---- the Notes tab is tiles; a pinned note comes first
+  await p.goto(B + "/notes");
+  const tiles = () => p.evaluate(`[...document.querySelectorAll('.note-grid > a.note-tile')].map(a => a.getAttribute('href') + '|' + a.querySelector('.note-title').textContent)`);
+  const listed = await tiles();
+  check(listed.length >= 3 && await p.evaluate(`!document.querySelector('.card table')`),
+    "the Notes tab draws tiles, not a table");
+  check(await p.evaluate(`[...document.querySelectorAll('.note-pic img')].every(i => i.loading === 'lazy' && getComputedStyle(i).objectFit === 'contain')`),
+    "a picture is shown whole and loaded lazily");
+  const href = word => listed.find(t => t.includes(word)).split("|")[0];
+  // the demo ships one pinned note; unpin it, then pin another and see it first
+  await p.goto(B + href("swing plan"));
+  await p.submit('form[action$="/unpin"]');
+  await p.goto(B + href("Friday"));
+  await p.submit('form[action$="/pin"]');
+  await p.goto(B + "/notes");
+  const pinnedFirst = await tiles();
+  check(pinnedFirst[0].includes("Friday") && await p.evaluate(`!!document.querySelector('.note-tile .chip')`),
+    "a pinned note is the first tile and wears the mark");
+  // narrow window: the grid falls to one column by itself
+  await send("Emulation.setDeviceMetricsOverride", { width: 420, height: 900, deviceScaleFactor: 1, mobile: false });
+  check(await p.evaluate(`new Set([...document.querySelectorAll('.note-grid > a')].map(a => Math.round(a.getBoundingClientRect().left))).size`) === 1,
+    "a narrow window gives one column of tiles");
+  await send("Emulation.clearDeviceMetricsOverride");
+  // the outdated ones are folded below
+  await p.goto(B + href("Round numbers"));
+  check(await has(`document.body.innerText`, "Marked outdated on"), "an outdated note says since when");
+  await p.goto(B + "/notes");
+  check(await p.evaluate(`!!document.querySelector('details.fold .note-tile.outdated') && !document.querySelector('details.fold').open`),
+    "outdated notes sit in a closed fold");
+
 
   // ---- a picture dropped from a folder lands like a pasted one, and the
   // zone offers a button to choose a file

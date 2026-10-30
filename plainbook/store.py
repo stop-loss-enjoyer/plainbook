@@ -527,13 +527,22 @@ def text_to_plan(text):
 
 
 # --- market note: object <-> text ------------------------------------------
-# The file is the note itself: a header with the title, the day and the ids
-# of the example trades, then the blocks, a `###` heading each, the way the
-# analysis of a plan is written. A first block with no heading is written
-# without the `###` line, so a note of one block reads as plain text.
+# The file is the note itself: a header with the title, the day, the takeaway,
+# the marks of pinned and outdated and the ids of the example trades, then
+# the blocks, a `###` heading each, the way the analysis of a plan is written.
+# A first block with no heading is written without the `###` line, so a note
+# of one block reads as plain text.
 
 def note_to_text(n):
     head = {"id": n.id, "title": n.title, "date": _date_to_text(n.day)}
+    # a header holds one line, and a key with no value is a list (invariant 3),
+    # so what is empty is left out of the file
+    if n.takeaway.strip():
+        head["takeaway"] = " ".join(n.takeaway.split())
+    if n.pinned:
+        head["pinned"] = "yes"
+    if n.outdated:
+        head["outdated"] = _date_to_text(n.outdated)
     if n.trades:
         head["trades"] = list(n.trades)
     head.update(n.extra)
@@ -558,6 +567,9 @@ def text_to_note(text):
         id=_text(head.get("id")),
         title=_text(head.get("title")),
         day=day,
+        takeaway=" ".join(_text(head.get("takeaway")).split()),
+        pinned=_text(head.get("pinned")).strip().lower() in ("yes", "true", "1"),
+        outdated=_date(_text(head.get("outdated")))[0],
         blocks=_parse_idea(body),
         trades=[t for t in trades if t],
         extra={k: v for k, v in head.items() if k not in known},

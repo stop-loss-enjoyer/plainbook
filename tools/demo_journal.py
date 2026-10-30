@@ -208,6 +208,29 @@ def build(root, days=40, months=0):
     plan.plan += "\n\n![](" + shot(folder, "plan-01.png", 103) + ")"
     store.save_plan(root, plan)
 
+    # a plan for next week, which the Current table lists as ahead, and a plan
+    # of two weeks ago that ran its course with trades tied to it below: the
+    # Past table shows its figures, so the page has both kinds to draw
+    store.save_plan(root, Plan(
+        id=store.new_plan_id(root, monday + timedelta(days=7), "USDJPY"),
+        title="next week", pair="USDJPY", narrative="bearish",
+        day=monday + timedelta(days=7), until=monday + timedelta(days=11),
+        analysis=[IdeaBlock(tf="D1", text="A rejection under the 200 day line "
+                            "after a failed breakout.")],
+        plan="Wait for the retest on Monday and sell it only if H4 closes "
+             "back under the line."))
+    earlier = Plan(id=store.new_plan_id(root, monday - timedelta(days=14),
+                                        "GBPUSD"),
+                   title="weekly", pair="GBPUSD", narrative="bearish",
+                   day=monday - timedelta(days=14),
+                   until=monday - timedelta(days=10),
+                   analysis=[IdeaBlock(tf="D1", text="Lower highs into the "
+                                       "monthly level.")],
+                   plan="Sell the first retest of the level, no longs.",
+                   review="Two shorts at the level worked, the long against "
+                          "the plan did not.")
+    store.save_plan(root, earlier)
+
     # a plan of the week before, called off when the market went the other
     # way: the Plans tab shows what a voided plan looks like
     before = monday - timedelta(days=7)
@@ -283,6 +306,8 @@ def build(root, days=40, months=0):
                "Lose": -round(base * risk * random.uniform(0.9, 1.1)),
                "BE": -round(base * risk * 0.06)}[result]
         pair = random.choice(PAIRS)
+        if earlier.covers(day):                 # the trades the past plan was written for
+            pair = earlier.pair
         trade = Trade(
             id=store.new_id(root, day, pair), account=account, pair=pair,
             direction=random.choice(["long", "short"]), style=style,
@@ -293,7 +318,9 @@ def build(root, days=40, months=0):
             # never later than today; randint is still drawn so the seeded stream holds
             closed=min(day + timedelta(days=random.randint(0, 3)), today).replace(
                 hour=0, minute=0),
-            plan=plan.id if plan.covers(day) and pair == "EURUSD" else "",
+            plan=(plan.id if plan.covers(day) and pair == "EURUSD"
+                  else earlier.id if earlier.covers(day)
+                  else ""),
             idea=[IdeaBlock(tf="H4", text=random.choice(IDEAS))],
             conclusions=random.choice(CONCLUSIONS))
         # the swing trades are taken under the playbook: most ticked clean,
@@ -377,16 +404,21 @@ def build(root, days=40, months=0):
                     Graded("GBPUSD long, Tuesday", "A", "Win +2.09 R"),
                     Graded("XAU short, Thursday", "C", "Lose -0.98 R")]))
 
-    # a market note, with two of the trades above as its examples, so that
-    # the Notes tab, the note page and the way back from a trade can be seen
-    examples = [t.id for t in store.all_trades(root)
-                if t.pair == "GBPUSD" and not t.is_open][:2]
+    # market notes, with trades above as their examples, so that the Notes
+    # tab, the note page and the way back from a trade can be seen: one with
+    # a takeaway and a screenshot, one pinned (and long enough for a contents
+    # line), one outdated, and one written the old way, no takeaway and no
+    # picture, to see what the list falls back to
+    closed = [t for t in store.all_trades(root) if not t.is_open]
+    examples = [t.id for t in closed if t.pair == "GBPUSD"][:2]
     note_id = store.new_note_id(root, today - timedelta(days=3),
                                 "Sweep before the London open")
     store.save_note(root, Note(
         id=note_id,
         title="Sweep before the London open",
         day=today - timedelta(days=3),
+        takeaway="GBPUSD sweeps the Asian high or low before London, then "
+                 "turns. Trade the turn, never the sweep.",
         blocks=[IdeaBlock(text="GBPUSD takes the Asian high or low in the hour "
                           "before London opens, then turns. The turn is the "
                           "trade; the sweep itself is not.",
@@ -396,6 +428,46 @@ def build(root, days=40, months=0):
                           text="The M15 close back inside the range. An entry "
                                "on the wick alone was stopped twice in August.")],
         trades=examples))
+
+    frame_id = store.new_note_id(root, today - timedelta(days=9),
+                                 "A swing plan is a frame, not a signal")
+    store.save_note(root, Note(
+        id=frame_id,
+        title="A swing plan is a frame, not a signal",
+        day=today - timedelta(days=9),
+        takeaway="Read the weekly plan before the session; it says which side "
+                 "to look for, never when to enter.",
+        pinned=True,
+        blocks=[IdeaBlock(text="The plan names the narrative and the level. "
+                          "The entry still waits for the H4 close.",
+                          images=[shot(store.note_dir(root, frame_id),
+                                       "note-01-01.png", 520)]),
+                IdeaBlock(tf="Before the session",
+                          text="Open the plan, say the side out loud."),
+                IdeaBlock(tf="When it is against the plan",
+                          text="Half size, or no trade."),
+                IdeaBlock(tf="After the week",
+                          text="Count the trades that went with it and against.")],
+        trades=[t.id for t in closed if t.pair == "EURUSD"][:1]))
+
+    store.save_note(root, Note(
+        id=store.new_note_id(root, today - timedelta(days=24),
+                             "Round numbers on USDJPY"),
+        title="Round numbers on USDJPY",
+        day=today - timedelta(days=24),
+        takeaway="The 150.00 line held three times and then broke on the "
+                 "intervention talk.",
+        outdated=today - timedelta(days=6),
+        blocks=[IdeaBlock(text="Price stalled at every big figure for a week.")]))
+
+    store.save_note(root, Note(
+        id=store.new_note_id(root, today - timedelta(days=15),
+                             "Friday afternoons"),
+        title="Friday afternoons",
+        day=today - timedelta(days=15),
+        blocks=[IdeaBlock(text="Spreads widen after 19:00 and the moves stop "
+                          "meaning anything. The second Friday in a row I took "
+                          "one anyway, and it was the worst entry of the month.")]))
 
 
 # where each pair of the demo trades, and a stop of a sensible size for it

@@ -469,6 +469,21 @@ def plan_outcome(j, trades):
     return " · ".join(bits)
 
 
+def _plan_sides(k, trades):
+    """The trades of a plan split by the narrative: (with it, against it), or
+    None when the plan expected nothing in particular or has no trades. A
+    plan that said "no trade" has no side, so all of its trades are against
+    it. Both lines about it, the long and the short one, read the split from
+    here."""
+    side = {"bullish": "long", "bearish": "short"}.get(k.narrative)
+    if not trades or not (side or k.narrative == "no trade"):
+        return None
+    if k.narrative == "no trade":
+        return [], list(trades)
+    return ([t for t in trades if t.direction == side],
+            [t for t in trades if t.direction != side])
+
+
 def plan_followed(j, k, trades):
     """Did the trades go the way the plan said? One line, or nothing when the
     plan expected nothing in particular. The page of a plan says the same
@@ -476,9 +491,10 @@ def plan_followed(j, k, trades):
 
     A bullish plan is followed by a long and gone against by a short; a plan
     that said "no trade" is gone against by every trade taken under it."""
-    side = {"bullish": "long", "bearish": "short"}.get(k.narrative)
-    if not trades or not (side or k.narrative == "no trade"):
+    sides = _plan_sides(k, trades)
+    if sides is None:
         return ""
+    with_it, against = sides
 
     def told(xs):
         if not xs:
@@ -489,9 +505,22 @@ def plan_followed(j, k, trades):
 
     if k.narrative == "no trade":
         return f"the plan was not to trade; taken anyway: {told(trades)}"
-    with_it = [t for t in trades if t.direction == side]
-    against = [t for t in trades if t.direction != side]
     return f"with the narrative: {told(with_it)} · against it: {told(against)}"
+
+
+def plan_followed_short(k, trades):
+    """The same answer as `plan_followed` in a cell of a list: the counts and
+    nothing else, `2 with · 1 against`, or `1 taken` for a plan that said no
+    trade. Empty when there is nothing to say; a side with no trade is left
+    out."""
+    sides = _plan_sides(k, trades)
+    if sides is None:
+        return ""
+    with_it, against = sides
+    if k.narrative == "no trade":
+        return f"{len(against)} taken"
+    return " · ".join(f"{len(xs)} {word}" for xs, word in
+                      ((with_it, "with"), (against, "against")) if xs)
 
 
 def plan_facts(j, k, trades):

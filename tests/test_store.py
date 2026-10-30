@@ -219,6 +219,38 @@ class NoteRoundTrip(unittest.TestCase):
         # a first block with no heading is plain text in the file
         self.assertIn("\n\nThe Asian high goes first.\n", store.note_to_text(n))
 
+    def test_a_note_keeps_its_takeaway_pin_and_outdated_mark(self):
+        n = self.note(takeaway="Wait for the close, not the wick.", pinned=True,
+                      outdated=datetime(2026, 10, 1))
+        text = store.note_to_text(n)
+        self.assertIn("takeaway: Wait for the close, not the wick.\n", text)
+        self.assertIn("pinned: yes\n", text)
+        self.assertIn("outdated: 2026-10-01\n", text)
+        again = store.text_to_note(text)
+        self.assertEqual((again.takeaway, again.pinned, again.outdated),
+                         (n.takeaway, True, datetime(2026, 10, 1)))
+        self.assertEqual(again.extra, {})          # a known key is not an extra
+        self.assertEqual(store.note_to_text(again), text)
+
+    def test_an_old_note_reads_without_the_new_keys_and_writes_none(self):
+        old = ("---\nid: 2026-09-09-a\ntitle: Old\ndate: 2026-09-09\n---\n\n"
+               "Plain text.\n")
+        n = store.text_to_note(old)
+        self.assertEqual((n.takeaway, n.pinned, n.outdated), ("", False, None))
+        text = store.note_to_text(n)
+        for key in ("takeaway:", "pinned:", "outdated:"):
+            self.assertNotIn(key, text)
+        self.assertEqual(text, old)
+        # a mark written empty by hand reads as not set
+        n = store.text_to_note(old.replace("title: Old", "title: Old\npinned:\n"
+                                           "outdated:\ntakeaway:"))
+        self.assertEqual((n.takeaway, n.pinned, n.outdated), ("", False, None))
+
+    def test_a_takeaway_is_one_line_in_the_file(self):
+        n = self.note(takeaway="first line\n  second: line")
+        again = store.text_to_note(store.note_to_text(n))
+        self.assertEqual(again.takeaway, "first line second: line")
+
     def test_a_note_without_examples_writes_no_empty_key(self):
         text = store.note_to_text(self.note(trades=[]))
         self.assertNotIn("trades:", text)                 # an empty key is a list

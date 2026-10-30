@@ -217,7 +217,9 @@ class LiteHides(LiteBase):
                               exit_deviations=[], conclusions="late")
             store.save_trade(r, Trade(**fields))
         store.save_note(r, Note(id="2026-09-01-levels", title="Levels kept",
-                                day=date(2026, 9, 1), trades=[cls.TRADE]))
+                                day=date(2026, 9, 1), trades=[cls.TRADE],
+                                takeaway="Levels hold on the second touch.",
+                                pinned=True, outdated=date(2026, 10, 1)))
         store.save_card(r, Card(day=date(2026, 8, 30), assessment=[
             Graded(trade="EURUSD", id=cls.TRADE)]))
 
@@ -467,6 +469,29 @@ class LiteHides(LiteBase):
             store.restore(self.root, name)
             self.S.drop_cache()
 
+    def test_a_note_saved_through_lite_keeps_its_takeaway_pin_and_outdated_mark(self):
+        """The full form draws the takeaway and not the two marks, and a save
+        that comes with none of them leaves them as the file has them; the
+        switch of the edition in between changes nothing on disk."""
+        path = "/note/2026-09-01-levels/edit"
+        note_file = os.path.join(store.note_dir(self.root, "2026-09-01-levels"),
+                                 store.NOTE_FILE)
+        with open(note_file, encoding="utf-8") as f:
+            written = f.read()
+        self.assertIn("takeaway: Levels hold on the second touch.", written)
+        fields = self.form(path)
+        self.assertEqual(fields["takeaway"], ["Levels hold on the second touch."])
+        self.assertNotIn("pinned", fields)
+        fields["trade"] = [self.TRADE]                # the form script adds the rows
+        self.post(path, fields)                       # the full form as drawn
+        with open(note_file, encoding="utf-8") as f:
+            self.assertEqual(f.read(), written)
+        self.lite_on()                                # a save with no takeaway key
+        self.post(path, {k: v for k, v in fields.items() if k != "takeaway"})
+        self.lite_off()
+        with open(note_file, encoding="utf-8") as f:
+            self.assertEqual(f.read(), written)
+
     def test_a_renamed_trade_is_followed_in_lite_as_well(self):
         self.lite_on()
         store.retarget_trade(self.root, self.TRADE, "2026-08-29-09-eurusd")
@@ -542,7 +567,9 @@ class LiteRoundTrip(LiteBase):
                 conclusions=f"patience paid\n\n![]({shot('conclusions-01.png')})")
         store.save_trade(self.root, Trade(**fields))
         store.save_note(self.root, Note(id=self.NOTE, title="Levels kept",
-                                        day=date(2026, 9, 1), trades=[trade_id]))
+                                        day=date(2026, 9, 1), trades=[trade_id],
+                                        takeaway="Levels hold on the second touch.",
+                                        pinned=True, outdated=date(2026, 10, 1)))
         store.save_card(self.root, Card(day=self.DAY, focus="patience", assessment=[
             Graded(trade="EURUSD", grade="A", id=trade_id)]))
         self.S.drop_cache()

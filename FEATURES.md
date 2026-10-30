@@ -21,7 +21,7 @@ exists, where it stands, and which requests it answers, so that the answer to
    traders ask; the right names where the thing lives. If it is there, show
    the owner the tab and stop.
 2. **If it is nearly there,** extend the record that holds it: a new heading
-   in a playbook's notes, a new word in a vocabulary, a new limit kind, a
+   in a playbook's notes, a new entry in a list of the trade form, a new limit kind, a
    new field on an existing form. The recipes in [AGENTS.md](AGENTS.md)
    cover every one of these, and none of them is a new tab.
 3. **A new tab is nearly always a duplicate.** The navigation is nine tabs
@@ -45,20 +45,20 @@ exists, where it stands, and which requests it answers, so that the answer to
 | the words of the request | where it already lives |
 |---|---|
 | trading system, strategy, my rules, the edge, the method, the approach | **Playbooks.** A playbook is the trading system written as rules the journal holds every trade against. Name, status, version, the idea behind it, setups, filters, management, limits, notes in any sections, review by blocks. See below and PLAYBOOK.md. |
-| setup, entry conditions, entry model, entry types, pattern, signal, trigger | **Playbooks, setups.** One setup per way of entering, with its rules; several setups with names when there are several ways in. Entry formats as words (market, limit, stop) are a vocabulary list on **Accounts** and a field of the trade. |
+| setup, entry conditions, entry model, entry types, pattern, signal, trigger | **Playbooks, setups.** One setup per way of entering, with its rules; several setups with names when there are several ways in. Execution formats (market, limit, stop) are a list on **Accounts** and a field of the trade. |
 | checklist, pre-trade checklist, confirmation list | **Playbooks, in the trade form.** Picking a playbook opens the rules of the chosen setup and the filters, a box each. Unticked rules are recorded with the trade with a line for why. |
 | filters, conditions for every trade, news filter, session, trading hours, day of the week | **Playbooks, filters.** Rules checked before every trade whatever the setup. Anything that is a yes or no at the moment of entry is a filter; anything that is a figure the journal can count is a limit. |
 | trade management, position management, exit rules, stop rules, trailing, partials, holding rules | **Playbooks, management.** Rules of holding the position, ticked at the close of the trade; the page of an open trade lists them to be kept in mind. |
 | risk management, risk per trade, max trades, max loss, max positions, exposure, sizing | **Playbooks, limits** (risk per trade, trades per week and per month, loss per week in R, positions open at once, the longest hold, the least RR, any other of your own), counted above the checklist of a new trade and turned red when this trade would go past them. **Accounts, daily loss limit** for a prop account, counted on its row on the Accounts tab. The sizing formula in words is a section of the playbook's notes. |
 | drawdown, max drawdown, losing streak | **Statistics, Deepest fall from a high**: how far the selection went under its own high in R, between which dates, whether it was made back, the longest run of losses. The reports carry the figure against the period before. |
 | instruments, markets, pairs, watchlist | **Accounts, Pairs**: the list the trade form offers. Which markets a playbook is for is a section of its notes; its **styles** are the styles of the trade form it applies to. |
-| timeframes, higher timeframe, entry timeframe, top down | **Accounts, vocabularies** (the entry timeframes the form offers); the trade's **entry tf** and the timeframes of its idea; a plan's analysis by timeframe; a playbook rule such as "level on W or D". |
+| timeframes, higher timeframe, entry timeframe, top down | **Accounts, the trade form lists** (the entry timeframes the form offers); the trade's **entry tf** and the timeframes of its idea; a plan's analysis by timeframe; a playbook rule such as "level on W or D". |
 | analysis method, narrative, context, market model, theory, fundamentals, the why behind the rules | **Playbooks, the intro** (what the playbook is) and **the notes**, where any `## heading` becomes a section of the page: the markets, the math, the model, what is still being decided. Knowledge wider than one system is a **Note**. |
 | performance, edge analysis, what works, optimization, which setup earns, what a rule costs | **Statistics, By playbook** (a row per playbook with its setups, the clean and held shares); **the page of a playbook**: By setup, What a rule costs (trades that broke a rule and what they brought in R against the trades that kept every rule), Reasons given. The whole **Statistics** tab for any cut of the history. |
 | review of the system, block review, revision, versioning of rules | **Playbooks, Review** (dated entries with screenshots, one per completed block, the tab turns amber when a block is due) and **versions**: rules change under a new number once trades were ticked against the old one, and a trade keeps the rules it was ticked against. |
 | status of a system: testing, live, dropped | **Playbooks, status**: experiment, active, retired. A retired playbook leaves the form and keeps its trades and figures. |
-| plan for the day, plan for the week, pre-market, scenarios, what I will and will not do | **Plans.** A plan is a record of its own: pair, narrative, analysis by timeframe with screenshots, the plan, dated updates, a review after. A trade points at the plan it followed; the plan page counts its trades and says how many went with the narrative. A plan the market went against is voided, with the reason kept. Share on the plan page writes it as one file. |
-| notes, lessons, patterns, levels, observations, a knowledge base, a wiki | **Notes.** Text and screenshots, with the trades of the journal tied to a note as examples. |
+| plan for the day, plan for the week, pre-market, scenarios, what I will and will not do | **Plans.** A plan is a record of its own: pair, narrative, analysis by timeframe with screenshots, the plan, dated updates, a review after. The Plans tab lists the current plans and, apart, the past ones with their figures. A trade points at the plan it followed, picked from the plans of its day; the plan page counts its trades and says how many went with the narrative. A plan the market went against is voided, with the reason kept. Share on the plan page writes it as one file. |
+| notes, lessons, patterns, levels, observations, a knowledge base, a wiki | **Notes.** Text and screenshots, with the trades of the journal tied to a note as examples; a takeaway line, tiles with the picture, pinned and outdated. |
 | daily review, end of day, journal grade, process grade, report card | **Cards, + DRC**: the day on the pattern of a paper Daily Report Card, with the trades of the day graded. |
 | weekly review | **Cards, + WRC**: the same for a trading week. |
 | monthly review, quarterly review, period report | **Reports.** A shelf of every month and quarter since the first closed trade; a report opens on its figures against the period before, the mistakes, the rules not met, the errors from the cards, your conclusions, kept through every rebuild. |
@@ -70,7 +70,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 | entry price, stop loss, take profit, RR, MFE, MAE, left on the table | **The Prices fold** of the trade form and of the closing form; the trade page reads them in R, Statistics has a **Prices** card. |
 | several accounts, prop firm and broker, the same trade on two accounts | **Accounts**: any number, each in its own currency, archive for the closed ones; the trade form has Duplicate on other accounts, a copy per ticked account with a risk of its own; **Statistics** counts the copies once with its Trades \| Ideas switch. |
 | deposits, withdrawals, payouts, fees, balance does not match the broker | **Accounts, money**: deposits, withdrawals and fees written apart from trading, withdrawals with a running total; a correction records the difference to the broker without editing history. |
-| custom fields, my own words in the form, styles, entry formats | **Accounts, vocabularies**: styles, entry timeframes, execution formats are lists you edit; a word taken out stops being offered and stays on the trades that carry it. |
+| custom fields, my own words in the form, styles, entry formats | **Accounts, the trade form lists**: styles, entry timeframes, execution formats are lists you edit; one taken out stops being offered and stays on the trades that carry it. |
 | screenshots, charts, pictures | Paste with Ctrl+V into any drop zone: the idea and the exit of a trade, its updates, a plan and its updates, a note, a playbook review. |
 | export, spreadsheet, CSV, backup | **CSV** next to the filters of the list; the records themselves are markdown and PNG files in `journal/`, a copy of that folder is the backup. |
 | share with a mentor, send a trade, send a plan, print a report, PDF | **Share** on a trade, on a plan, on the filtered list, on the Statistics tab and on a report: one HTML file with the screenshots inside and no money in it, opens offline, prints to PDF. Over the list it is cut to a stretch first: the last 10 or 25 trades, the last week to year, or two dates. Each line of the file opens its trade, with or without the screenshots. |
@@ -104,13 +104,17 @@ playbook, and again when a block has run its course without a review.
 
 **Plans** (hidden in Lite), what was supposed to happen. Written before the market, for a day
 or a week and a pair: narrative, analysis by timeframe with screenshots, the
-plan, updates while it runs, the review. The list marks the current plan,
-the ones ahead and the voided ones. A trade names the plan it follows, and
-the plan page shows its trades with their R.
+plan, updates while it runs, the review. The tab keeps the plans in force
+(current and ahead) apart from the past and voided ones, whose figures
+(trades, winrate, Σ R, PnL, with the narrative or against it) are read in the
+list. A trade names the plan it follows, picked from the plans that cover the
+day of its entry, and the plan page shows its trades with their R.
 
 **Notes** (hidden in Lite), what is wider than one trade. A level, a pattern, a lesson, as
 text and screenshots, with the trades tied to the note as examples, so it is
-read next to the trades that show it.
+read next to the trades that show it. A note carries a takeaway of your own,
+the list is tiles with the first screenshot whole, a note can be pinned to the
+top or marked outdated and folded away.
 
 **Cards** (hidden in Lite), the reviews of a day and a week. The daily card follows a paper
 Daily Report Card, the weekly card a Weekly Report Card: process grade,

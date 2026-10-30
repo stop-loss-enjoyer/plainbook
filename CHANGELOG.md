@@ -2,22 +2,65 @@
 
 What changed and why. Newest first.
 
+## v1.10.0, 30.10.2026
+
+Notes and plans you can read without opening them. A note tile shows its
+scheme and the line you wrote on what to remember, and the past plans show
+how they went right in the list.
+
+- The **Notes** tab says what each note is about at a glance. A note has a
+  **takeaway**, a line or two of your own on what to remember, written under
+  the title in the form and shown as the lead of the note page. The list is
+  now tiles instead of a table: the first screenshot of the note whole, so a
+  scheme stays readable, then the title, the takeaway (the first line of the
+  text for an older note without one), a line with the date and the flags
+  of the pairs of its examples, and a line that says what the examples did,
+  `2 examples: 1 won, 1 lost · Σ R +0.50`, the Σ R being only the total of
+  the trades tied to the note. Search finds a takeaway and shows it first.
+- A note can be **pinned**, which puts its tile first in the list, and
+  **marked outdated**, which folds it into an Outdated section below, dimmed, still
+  found by Search; **Still true** brings it back. The note page shows a line
+  of facts under the title (date, pairs, examples and their Σ R), a contents
+  line when the note has three or more headings, and since when a note is
+  outdated. Older note files read as they were; the three new keys are in the
+  head of the file only when set.
+- The **Plans** tab keeps the plans in force apart from the past ones. The
+  **Current** table on top lists the plans that cover today and the ones that
+  start later, with the time left. **Past** below lists the plans that have
+  run their course and the voided ones, newest first, and shows their
+  figures without opening the plan: trades with their won, lost and
+  break-even in words (`5 · 3 won, 2 lost`), winrate, Σ R, PnL, how many trades went with the narrative and
+  how many against, and a line under the table with the total of all past
+  plans. The latest 20 are drawn, **Show all** lists the rest. A narrow
+  window drops the winrate, the PnL and the narrative column.
+- The plan menu of the trade form offers only the plans that cover the day
+  of the entry, not every plan in the journal. Change the date and the menu
+  follows, so a trade written in for last Tuesday sees Tuesday's plans. A
+  voided plan is no longer offered; a trade you edit keeps its own plan in
+  the menu whatever its days, and a day no plan covers says so.
+- The slider on **Past the stop** no longer throws the Statistics page back
+  to the top: on release the page comes back on the card. The card also
+  keeps its column while the slider moves; it used to jump to the other one
+  when the number of losses it listed changed.
+- The Accounts tab calls the lists of the trade form by what they hold,
+  styles, timeframes and execution formats, where it used to say "words".
+
 ## v1.9.2, 25.10.2026
 
 Small things a user asked for. A break-even is amber wherever the journal
-shows it, the lists on Accounts lose several words at once and the page
-stays where you were, archived accounts fold away, and a fresh form no
+shows it, the lists on Accounts let you remove several at once and the
+page stays where you were, archived accounts fold away, and a fresh form no
 longer looks filled in.
 
 - A break-even in the list of trades and on the page of a trade is amber,
   the word and its money, the way the winrate tiles and the charts draw it;
   it used to be grey there.
 - The lists of the trade form on Accounts (styles, timeframes, execution
-  formats) take several words off at once: tick them and press **Remove
+  formats) let you remove several at once: tick them and press **Remove
   selected**. The styles still keep at least one.
 - A button on the Accounts tab no longer throws the page back to the top
   with every fold shut: it comes back on the card, list or fold the button
-  was in, open, so the next word or the next record is right there. A
+  was in, open, so the next timeframe or the next record is right there. A
   refusal or a longer answer is still said at the top of the page, with the
   fold open below it.
 - Archived accounts fold away under the active ones, in **Archived** with

@@ -56,8 +56,13 @@ than it was.
   The time counts as known, midnight included. When you do not know the
   hour, tick **hour not known** under the field: the journal then keeps the
   date alone, and orders the trade within its day by the date only.
-- **plan**: the trading plan this trade follows, picked from the plans you have
-  written. Left at "-" if the trade belongs to none.
+- **plan**: the trading plan this trade follows. The menu offers the plans
+  that cover the day of the entry above it, not every plan you ever wrote:
+  change the date and the menu follows, so a trade written in for last
+  Tuesday is offered Tuesday's plans. A voided plan is never offered. When
+  you edit a trade, its own plan stays in the menu and picked, however old,
+  so a save never unties it. A day no plan covers says **no plan covers
+  this day**. Left at "-" if the trade belongs to none.
 - **playbook**: the playbook the trade is opened under, if any. Picking one
   sets the style and opens its checklist under the header fields, above the
   idea blocks; see [Playbooks](#playbooks) below.
@@ -294,11 +299,13 @@ happen.
   expect: bullish, bearish, neutral or no trade. A decision not to trade is a
   plan as well.
 - **from** and **until**: the days the plan covers. Until is left empty for a
-  plan that lives one day. The list marks the state of a plan with a pill:
-  green **current** for one that covers today, blue **ahead** for one whose
-  first day has not come, red **voided** for one called off. A plan that has
-  run its course wears nothing. The card of a current plan carries an amber
-  stripe on its left edge, like an open trade.
+  plan that lives one day. The tab keeps two tables: **Current** holds the
+  plans that cover today and the ones whose first day has not come, with the
+  time **left** (`today`, `2 days`, `starts in 3 days`), the trades tied to
+  them and their Σ R; **Past** holds the plans that have run their course
+  and the voided ones, a red **voided** pill in the outcome column. The card
+  of a current plan carries an amber stripe on its left edge, like an open
+  trade.
 - **analysis blocks**: timeframe, text and screenshots, the same blocks as the
   idea of a trade. **+ analysis block** adds another timeframe.
 - **plan**: what you will do, and what you will not. This is the part you read
@@ -320,13 +327,26 @@ added from the page.
 **Void.** A plan the market went against, the direction or the variables
 wrong, is voided and kept. The **Void** button in the header of its page
 leads to a short form at the bottom, one line for what went against it, and
-the plan is called off. It stops being current, the list says
-**voided** next to it, the stripe on its card turns red, and the reason stands
+the plan is called off. It stops being current and moves to the **Past**
+table with a red **voided** pill, the stripe on its card turns red, and the reason stands
 under **Updates** with the date. Everything else stays: the analysis, the
 plan, the trades tied to it, so the mistake can be read back later. The
-trade form still offers a voided plan, with the word in its name. **Restore**
+trade form does not offer it any more. **Restore**
 undoes it, with a dated line of its own, when the market turns around after
 all. **Delete** is for a plan written by mistake: that one goes to the trash.
+
+**Figures of the past plans.** The Past table says what came of each plan
+without opening it: the trades tied to it, counted and then split in words
+(`5 · 3 won, 2 lost`, `1 · 1 open`), the winrate, Σ R, the PnL, and under **by narrative**
+how many trades went with the plan and how many against (`2 with · 1
+against`; `1 taken` for a plan that said no trade), the same count the page of
+the plan gives in full. A plan that ended with no trade is marked **no
+trades**: it is an answer as well, the plan did not give an entry. The line
+under the table totals every past plan, not only the rows drawn: how many
+plans, how many had trades, how many ended in profit, and their Σ R. The
+latest 20 are drawn and **Show all** lists the rest. In a narrow window the
+winrate, the PnL and the narrative column are dropped, and the dates, the
+pair, the outcome and Σ R stay.
 
 **What came of the plan.** Every trade you tied to it is listed on its page with
 its result, PnL and R, and the line under the table says how many trades, the
@@ -346,6 +366,10 @@ coming back, a lesson wider than a day.
 
 - **title** and **date**: the name of the note and the day it was written.
   The date is yours to set, a note about last month can carry last month.
+- **takeaway**: what to remember from the note, in a line or two, in your own
+  words. It is the first thing the list and the note page say, so write the
+  point here and keep the circumstances for the text. Optional; a note without
+  one shows the first line of its text in the list.
 - **blocks**: a note is written in blocks, each a heading of its own, a text
   and a drop zone: click, Ctrl+V, and the screenshot sits under that text.
   The heading is optional, a note of one block needs none. **+ block** adds
@@ -363,10 +387,32 @@ the form, and **Remove** on a row takes the trade off the note and touches
 nothing else: the trade stays in the journal. A trade page also says which
 notes it is an example in, under the line of its playbook.
 
-The list on the Notes tab shows every note with its date, the first line of
-its text and how many examples it has. Notes are found by Search along with
-everything else, and a deleted note goes to the trash on the Accounts tab
-like a plan does.
+**Pin** on the note page puts the note first in the list, with a small pinned
+mark: for the notes you reread before every session. **Mark outdated** says
+the level broke or the lesson is learned: the note drops into an
+**Outdated** section at the bottom of the list, closed and dimmed, and the
+page says since when. It stays in the journal and Search still finds it, and **Still
+true** brings it back. Neither button touches the text.
+
+The Notes tab is a grid of tiles, one per note, the pinned ones first and the
+rest newest first; a narrow window falls to one column by itself. A tile is
+one link. Its top is the first screenshot of the note, shown whole and not
+cropped, so a scheme with its drawings stays readable; a note with no picture
+is text alone. Under it come the title and the takeaway (the first line of the
+text, paler, for a note with no takeaway). At the bottom, one line gives the
+date and the flags of the pairs of the examples, and the next says what the
+examples did in words, `2 examples: 1 won, 1 lost · Σ R +0.50`, or **no
+examples yet**. The Σ R is the
+total of the trades tied to the note and nothing more: examples are picked
+after the fact, a lesson is often a loss, so it does not say whether the
+pattern pays.
+
+On the note page, a line of facts sits under the title (date, pairs,
+"2 examples: 1 won, 1 lost · Σ R +0.80" or "no examples yet"), then the takeaway as the lead,
+then a contents line of the headings when the note has three or more of them.
+Notes are found by Search along with everything else, the takeaway first in
+what it shows, and a deleted note goes to the trash on the Accounts tab like a
+plan does, with its takeaway, its pin and its outdated mark.
 
 ## The stop at breakeven
 
@@ -890,10 +936,11 @@ than by the whole of it.
 **The stop edge is yours to set.** The slider in the head of the card runs
 from 1 to 2 R by tenths and stands at 1.2 until you move it: how much a stop
 with the fees on it may cost before the loss counts as an overrun. Release it
-and the journal keeps the figure, in `journal/settings.md`, and every number
-that hangs on it is worked out afresh on the next look: the buckets, this table
-and its total, the mistakes of every report, the old months as much as the
-new ones, since nothing computed is ever stored. A report built earlier keeps
+and the journal keeps the figure, in `journal/settings.md`, the page comes back
+on this card rather than at its top, and every number that hangs on it is
+worked out afresh on the next look: the buckets, this table and its total, the
+mistakes of every report, the old months as much as the new ones, since
+nothing computed is ever stored. A report built earlier keeps
 the edge it was written with in its text; rebuild it to read it at the new one.
 
 **Prices.** Among the tables, once closed trades carry an entry and a stop:
@@ -927,8 +974,10 @@ the entry and the exit, because an exit is often written without an hour.
 
 The cards from the playbooks down are dealt into the two columns by their
 height, so that the columns end together whatever the journal put in them: a
-long list of pairs, sixty weeks or ten losses past the stop changes which card
-stands where; the shorter column is left with no empty ground under it.
+long list of pairs or sixty weeks changes which card stands where; the shorter
+column is left with no empty ground under it. **Past the stop** is counted at
+its full ten rows however many it shows, so moving its slider never sends it
+to the other column.
 
 **A selection with nothing closed in it says so.** Filter down to open
 positions, or to a pair you have not traded in the months chosen, and the page
@@ -1050,17 +1099,19 @@ The **Accounts** tab.
 
 - **The trade form** holds the other three lists: the trading styles, the
   timeframes of the entry TF field and the execution checkboxes. Each opens on a
-  click, takes a new word in the field and removes one with the button next to
-  it. To take several at once, tick their boxes and press **Remove selected**
-  under the list; the styles keep at least one, since a trade needs a style. A new word goes to the end of its list, so the timeframes stay in the
-  order you trade them.
+  click, takes a new entry in the field and removes one with the button next to
+  it. To remove several at once, tick their boxes and press **Remove selected**
+  under the list; the styles keep at least one, since a trade needs a style. A
+  new entry goes to the end of its list, so the timeframes stay in the order
+  you trade them.
 
   After a button on the Accounts tab the page comes back on the card, list or
   fold the button was in, with that fold open. When the journal has more to
-  say than a short word, a refusal or a longer answer, it says it at the top
+  say than a short line, a refusal or a longer answer, it says it at the top
   of the page, and the fold stands open below it.
 
-  Removing a word only stops the form offering it. The trades that carry it keep
+  Removing a style, a timeframe or a format only stops the form offering it.
+  The trades that carry it keep
   it: it stays in the filters, the statistics and the reports, it is still shown
   when that trade is edited, and the list on the Accounts tab shows it below the
   others, saying how many trades hold it, with an **Add** button to offer it
@@ -1294,7 +1345,7 @@ under the journal's clock.
 open positions and the CSV (every column, the plan and the playbook included).
 Opening, editing, closing, updating, Breakeven and Duplicate of a trade, with
 the screenshots. Statistics. Accounts, with the money, the corrections, the
-rules of a prop firm, the pairs, the word lists and the clock. Search, over
+rules of a prop firm, the pairs, the lists of styles, timeframes and execution formats, and the clock. Search, over
 the trades. Share, for a trade, the journal and Statistics. The Trash holds
 trades, accounts and corrections.
 

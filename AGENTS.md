@@ -286,7 +286,9 @@ it in the middle of the screen, and it fades out on its own. Keep it short and
 in the past tense, because it is gone in a second. A form on the Accounts tab
 also sends `back_to(<part>)`, a hidden `at` naming the card or fold it sits
 in; the part is listed in `ACCOUNT_PARTS` and its card or `details` carries
-that id, so the page comes back there with the fold open.
+that id, so the page comes back there with the fold open. Elsewhere the way
+back can end in an anchor (`/stats#past-stop`): `_go` puts the word before it,
+and the toast keeps it when it cleans the address.
 
 **Change the look.** Everything visual is in `html.py`: the palette constants at
 the top, then one `CSS` string. The one exception is `flags.py`, which draws the

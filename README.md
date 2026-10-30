@@ -161,7 +161,10 @@ went against is voided rather than deleted, with the reason kept.
 A trade points at the plan it followed, so the plan's page lists every trade
 that came out of it with its R, says how many went with the narrative and how
 many against it, and answers the one question worth asking of a plan: whether
-following it was worth anything.
+following it was worth anything. The Plans tab keeps the plans in force
+apart from the past ones, each past plan shows its trades, winrate, R and
+money in its row, and the trade form offers only the plans that cover the
+day of the entry.
 
 ## Notes about the market
 
@@ -170,7 +173,11 @@ following it was worth anything.
 A note is for what is wider than one trade: a level a pair keeps respecting, a
 pattern that comes back, a lesson. It holds text and screenshots in blocks,
 and the trades of the journal can be tied to it as examples, so the note is
-read next to the trades that show it, each a click away.
+read next to the trades that show it, each a click away. The Notes tab shows
+every note as a tile: its first screenshot whole, the title and a line of
+your own on what to remember, so the list says what each note is about. A
+note you reread is pinned first; one that no longer holds is folded away as
+outdated.
 
 ## The daily and weekly cards
 
@@ -272,7 +279,7 @@ a payout is never mistaken for a loss, each with its date and, when you know
 it, its hour. When the broker shows a different
 balance, you type the real number and the journal records the difference as
 a correction with your comment; history is never edited to make a figure
-agree. The tab also holds the words the trade form offers, the trading
+agree. The tab also holds the lists the trade form offers, the trading
 styles, the entry timeframes, the execution formats and the pairs, all of
 them lists you edit, and the trash, where every deleted record waits with a
 Restore button.
@@ -583,8 +590,8 @@ typed in, because writing the idea down is the part that makes a journal
 worth keeping. Screenshots come from wherever you take them.
 
 **Is it for forex only?** No. A pair is free text, so stocks, futures,
-indices, metals and crypto tickers all work, and the words in the form are
-lists you edit.
+indices, metals and crypto tickers all work, and the styles, timeframes and
+execution formats in the form are lists you edit.
 
 **Windows, macOS or Linux?** All three: a file per system on the releases
 page, or the source on any Python 3.10 or newer. There is no mobile app; it

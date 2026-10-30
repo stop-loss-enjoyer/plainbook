@@ -202,13 +202,14 @@ def said_box():
 
     The word travels in the query, so a page reloaded an hour later would say
     "Trade opened" again. It is taken out of the address as the page appears,
-    which is what history.replaceState is for."""
+    which is what history.replaceState is for; an anchor after it stays, the
+    page still has to be scrolled to it."""
     text = getattr(SAID, "text", "")
     if not text:
         return ""
     return (f'<div class="toast" role="status">{esc(text)}</div>'
             f'<script>history.replaceState({{}}, "", '
-            f'{js(getattr(SAID, "url", "/"))})</script>')
+            f'{js(getattr(SAID, "url", "/"))} + location.hash)</script>')
 
 
 def page(title, body, tab="journal", header_right="", problems=(), home="/"):
@@ -2073,8 +2074,8 @@ def stats_url(q):
 
 def stop_edge_slider(j, back):
     """The slider that sets where a stop ends and an overrun begins. It
-    submits on release and comes back to the page it stood on, and the
-    figure beside it follows the thumb while it is dragged."""
+    submits on release and comes back to the page it stood on, down to its
+    card, and the figure beside it follows the thumb while it is dragged."""
     low, high = store.STOP_EDGE_RANGE
     return (f'<form method="post" action="/settings/stop-edge" class="edge" '
             f'title="up to this loss a stop is the stop as designed">'
@@ -2098,7 +2099,7 @@ def past_stop_card(j, q, trades):
     past = stats.past_stop(j, trades)
     slider = stop_edge_slider(j, stats_url(q))
     if not past:
-        return (f'<div class="card"><div class="card-head">'
+        return (f'<div class="card" id="past-stop"><div class="card-head">'
                 f'<h2>Past the stop</h2>{slider}</div>'
                 f'<p class="muted">No loss in this selection went past '
                 f'-{j.stop_edge:g} R.</p>'
@@ -2107,7 +2108,7 @@ def past_stop_card(j, q, trades):
     cut = f"The ten deepest of {len(past)}, and the total over them all. " \
         if len(past) > len(shown) else ""
     cost = stats.past_stop_cost(j, past)
-    return (f'<div class="card"><div class="card-head">'
+    return (f'<div class="card" id="past-stop"><div class="card-head">'
             f'<h2>Past the stop</h2>{slider}<span class="right caption">'
             f'{len(past)} over the stop by '
             f'<span class="{sum_class(cost)}">{r_text(cost)}</span></span></div>'
@@ -2115,6 +2116,17 @@ def past_stop_card(j, q, trades):
             f'<tbody>{past_stop_rows(j, shown, stats_way(q))}'
             f'</tbody></table>'
             f'<p class="caption">{cut}{past_stop_why(j.stop_edge)}</p></div>')
+
+
+def past_stop_tall():
+    """The height Past the stop is dealt at: full, ten rows and the longest
+    caption, however many losses it holds. Moving the slider changes the
+    rows, and a card priced by them would jump to the other column under
+    the hand that moves it."""
+    # an edge with a tenth gives the longest caption
+    return guess_height("<tr>" * 11 + '<td class="pair">' * 10
+                        + '<p class="caption">The ten deepest of 99, and the '
+                        f'total over them all. {past_stop_why(1.5)}</p>')
 
 
 def breakeven_card(j, q, trades):
@@ -2203,8 +2215,10 @@ def deal(cards, pinned=0):
     bottom. The first `pinned` cards are placed before the choice is made,
     the first at the top of the left column, the second at the top of the
     right, for the pair a reader expects to find side by side. One card
-    stands alone across the page; none is nothing."""
-    cards = [(c, guess_height(c)) for c in cards if c]
+    stands alone across the page; none is nothing. A card given as a pair
+    of the page and a height is dealt at that height."""
+    cards = [c if isinstance(c, tuple) else (c, guess_height(c))
+             for c in cards if c]
     if not cards:
         return ""
     if len(cards) == 1:
@@ -2344,7 +2358,7 @@ def stats_page(q):
     rules = "" if lite() else stats_rules_card(j, d)
     # the playbooks beside the rules, as on the report; everything after them
     # is dealt into the two columns by height
-    cards = [books, rules, past_stop_card(j, q, trades),
+    cards = [books, rules, (past_stop_card(j, q, trades), past_stop_tall()),
              breakeven_card(j, q, trades),
              periods_table(j, q, trades, grain),
              stats_slice(j, "By pair", slices["By pair"], link),
@@ -2491,10 +2505,13 @@ def search_page(q):
             found.append(("plan", f"/plan/{U(k.id)}", k.label,
                           _snippet(texts[3:] + texts[1:2], needle)))
     for n in ([] if reduced else store.all_notes(ROOT, [])):
-        texts = [n.id, n.title] + [b.tf + " " + b.text for b in n.blocks]
+        texts = [n.id, n.title, n.takeaway] + [b.tf + " " + b.text for b in n.blocks]
         if hit(texts):
+            # the takeaway is what the note says, so it is the first place looked
             found.append(("note", f"/note/{U(n.id)}",
-                          f"{n.day:%d.%m.%Y} · {n.title}", _snippet(texts[1:], needle)))
+                          f"{n.day:%d.%m.%Y} · {n.title}"
+                          + (" · outdated" if n.outdated else ""),
+                          _snippet(texts[2:3] + texts[1:2] + texts[3:], needle)))
     for b in ([] if reduced else store.all_playbooks(ROOT, [])):
         texts = [b.id, b.name, b.intro, b.review] \
             + [r.text + " " + r.detail for r in b.rules] \
@@ -2678,7 +2695,7 @@ document.addEventListener('DOMContentLoaded', () => { init_zones(); });
 
 
 def select(name, values, current="", empty=None, labels=None, style="",
-           required=False):
+           required=False, attrs=""):
     """A menu. `labels` gives a value a name of its own, as a plan id needs.
 
     A menu with no empty option arrives with its first value picked whether the
@@ -2690,7 +2707,7 @@ def select(name, values, current="", empty=None, labels=None, style="",
         f'{esc((labels or {}).get(v, v))}</option>' for v in values)
     where = f' style="{style}"' if style else ""
     must = " required" if required else ""
-    return f'<select name="{name}"{where}{must}>{options}</select>'
+    return f'<select name="{name}"{where}{must}{attrs}>{options}</select>'
 
 
 def shot_in_zone(base, path, field):
@@ -3040,17 +3057,28 @@ def trade_form(t=None, token="", keep=""):
         f'<button type="button" class="option" data-value="{esc(p)}">'
         f'{H.pair(p)}</button>' for p in pairs)
 
-    # the plans are offered newest first: a trade is nearly always taken under
-    # the plan just written, and an old one is still there to be picked
+    # The plan menu offers the plans that cover the day the trade is opened
+    # on, not today: a trade written in for last Tuesday sees Tuesday's plans,
+    # and the script of the form redraws the menu when the date changes. Every
+    # plan that could be offered rides in the page with its first and last
+    # day. A voided plan covers nothing, so it is never in the data; the plan
+    # a trade being edited already holds is kept in the menu whatever its
+    # days, or a save would silently untie the trade (invariant 14).
     # Lite draws neither the plan nor the playbook nor the checklist, and
     # loads none of them: what the trade holds of them is left as it stands
-    # (invariant 14)
     full = not lite()
     plans = store.all_plans(ROOT, []) if full else []
-    if full and editing and t.plan and t.plan not in {k.id for k in plans}:
-        plans = plans + [Plan(id=t.plan, day=t.opened)]
-    plan_ids = [k.id for k in plans]
+    own_plan = t.plan if editing else ""
+    if full and own_plan and own_plan not in {k.id for k in plans}:
+        plans = plans + [Plan(id=own_plan, day=t.opened)]
+    plans = [k for k in plans if not k.voided or k.id == own_plan]
+    trade_day = t.opened if editing else j.now()
+    plan_ids = [k.id for k in plans
+                if k.covers(trade_day) or k.id == own_plan]
     plan_names = {k.id: k.label for k in plans}
+    plan_data = [{"id": k.id, "label": k.label, "from": f"{k.day:%Y-%m-%d}",
+                  "to": f"{k.last_day:%Y-%m-%d}", "voided": bool(k.voided)}
+                 for k in plans]
 
     # the playbooks offered are the ones in use; the one a trade being edited
     # was ticked against is drawn as it was then, retired or revised since
@@ -3081,8 +3109,10 @@ def trade_form(t=None, token="", keep=""):
     plan_fields = checklist_card = ""
     if full:
         plan_fields = f"""<div class="field"><label>plan</label>
-{select("plan", plan_ids, t.plan if editing else "", empty="-",
-        labels=plan_names, style="max-width:min(460px,100%)")}</div>
+{select("plan", plan_ids, own_plan, empty="-" if plan_ids else NO_PLAN_THAT_DAY,
+        labels=plan_names, style="max-width:min(460px,100%)",
+        attrs=f' data-plans="{esc(json.dumps(plan_data))}" '
+              f'data-own="{esc(own_plan)}"')}</div>
 <div class="field"><label>playbook</label>
 {select("playbook", book_ids, t.playbook if editing else "", empty="-",
         labels=book_names)}</div>
@@ -3189,8 +3219,38 @@ def trade_form(t=None, token="", keep=""):
 init_zones();</script>{"" if editing else f"<script>{RISK_SCRIPT}</script>"}{f"<script>{DUP_SCRIPT}</script>" if duplicate else ""}
 <script>{RISK_HINT_SCRIPT}</script>
 <script>{PRICE_SCRIPT}</script>
-{f"<script>{CHECKLIST_SCRIPT}</script><script>{EXIT_SCRIPT}</script>" if full else ""}"""
+{f"<script>{PLAN_MENU_SCRIPT}</script><script>{CHECKLIST_SCRIPT}</script><script>{EXIT_SCRIPT}</script>" if full else ""}"""
 
+
+NO_PLAN_THAT_DAY = "no plan covers this day"
+
+# The plan menu follows the date of the entry: the page carries every plan
+# that could be offered with its first and last day (`data-plans`), and a
+# change of the date keeps the ones that cover it. The plan the trade being
+# edited already holds stays whatever the date says (`data-own`), and a pick
+# the new date no longer covers is dropped, so the form cannot post a plan the
+# menu does not show. The days are ISO strings, which compare as dates do.
+PLAN_MENU_SCRIPT = """
+function offer_plans(){
+  const menu = document.querySelector('select[name=plan]');
+  const entry = document.querySelector('[name=entry]');
+  if (!menu || !entry || !entry.value) return;
+  const day = entry.value.slice(0, 10), own = menu.dataset.own || '';
+  const plans = JSON.parse(menu.dataset.plans || '[]')
+    .filter(k => k.id === own || (k.from <= day && day <= k.to));
+  const picked = menu.value;
+  menu.textContent = '';
+  const add = (value, text) => {
+    const o = document.createElement('option');
+    o.value = value; o.textContent = text; menu.appendChild(o);
+  };
+  add('', plans.length ? '-' : %s);
+  plans.forEach(k => add(k.id, k.label));
+  menu.value = plans.some(k => k.id === picked) ? picked : '';
+}
+document.querySelector('[name=entry]').addEventListener('input', offer_plans);
+document.querySelector('[name=entry]').addEventListener('change', offer_plans);
+""" % json.dumps(NO_PLAN_THAT_DAY)
 
 # The risk field takes a percent or a sum of money, and the line under it says
 # what the other one is, against the balance the server will convert by. The
@@ -4225,21 +4285,126 @@ def plan_result(j, trades):
     return " · ".join(bits)
 
 
-def plan_state(k, today):
-    """The pill of a plan in the list: voided, current, or ahead when its
-    first day has not come. A plan that has run its course wears nothing."""
-    if k.voided:
-        word = "voided"
-    elif k.covers(today):
-        word = "current"
-    elif k.day.date() > today.date():
-        word = "ahead"
-    else:
+# The Past table of the Plans tab draws this many plans, the newest, and says
+# how to see the rest: the plans written over years would otherwise make the
+# tab grow without end.
+PAST_PLANS = 20
+
+
+def plan_span(k):
+    span = f"{k.day:%d.%m.%Y}"
+    if k.until and k.until != k.day:
+        span += f" - {k.until:%d.%m.%Y}"
+    return span
+
+
+def plan_time_left(k, today):
+    """How long a current plan has to run, or when an ahead one starts."""
+    if k.covers(today):
+        days = (k.last_day.date() - today.date()).days
+        return "today" if not days else plural(days, "day")
+    return "starts in " + plural((k.day.date() - today.date()).days, "day")
+
+
+def plan_trades_cell(j, closed, running):
+    """The trades of a plan in a cell of the Plans tab: the count, then what
+    they did in words, `5 · 3 won, 2 lost`; a plan with no trade reads 0."""
+    split = breakdown_words(j, closed, running)
+    count = len(closed) + len(running)
+    return f"{count} · {split}" if split else str(count)
+
+
+def current_plans_card(j, plans, today):
+    """The plans that cover today, then the ones that start later: what is
+    open for trading now and what is coming. A voided plan is neither."""
+    now = [k for k in plans if k.covers(today)]
+    ahead = sorted((k for k in plans if not k.voided
+                    and k.day.date() > today.date()),
+                   key=lambda k: (k.day, k.id))
+    if not now and not ahead:
+        return ('<div class="card"><h2>Current</h2>'
+                '<p class="muted">No plan covers today.</p></div>')
+    rows = ""
+    for k in now + ahead:
+        trades = plan_trades(j, k.id)
+        s = stats.summary(j, trades)
+        closed = [t for t in trades if not t.is_open]
+        running = [t for t in trades if t.is_open]
+        cells = [(esc(plan_span(k)), ""),
+                 (esc(plan_time_left(k, today)), ""),
+                 (H.pair(k.pair), ""),
+                 (esc(k.narrative) or "-", ""),
+                 (esc(k.title) or "-", ""),
+                 (plan_trades_cell(j, closed, running), ""),
+                 ("-" if not s.trades else f"{s.sum_r:+.2f}",
+                  f"num {sum_class(s.sum_r)}")]
+        rows += ("<tr>" + "".join(link_cell(f"/plan/{U(k.id)}", inner, cls)
+                                  for inner, cls in cells) + "</tr>")
+    return (f'<div class="card"><h2>Current</h2><div class="scroll"><table>'
+            f'<thead><tr><th>dates</th><th>left</th><th>pair</th>'
+            f'<th>narrative</th><th>title</th><th>trades</th>'
+            f'<th class="num">Σ R</th></tr></thead><tbody>{rows}</tbody>'
+            f'</table></div></div>')
+
+
+def past_plans_card(j, plans, today, show_all):
+    """The plans that ran their course and the voided ones, newest first,
+    with the figures of each: they are read here without opening the plan.
+    The line under the table is the total of every past plan, not only of
+    the rows drawn."""
+    past = [k for k in plans if k.voided or k.last_day.date() < today.date()]
+    if not past:
         return ""
-    return f'<span class="state {word}">{word}</span>'
+    rows = ""
+    shown = past if show_all else past[:PAST_PLANS]
+    for k in shown:
+        trades = plan_trades(j, k.id)
+        s = stats.summary(j, trades)
+        closed = [t for t in trades if not t.is_open]
+        running = [t for t in trades if t.is_open]
+        outcome = ('<span class="state voided">voided</span>' if k.voided
+                   else "")
+        if not outcome and not trades:
+            outcome = '<span class="muted">no trades</span>'
+        followed = share.plan_followed_short(k, trades)
+        long_form = share.plan_followed(j, k, trades)
+        wr = f"{s.wr:.1f}%" if s.decided else "-"
+        cells = [(esc(plan_span(k)), ""),
+                 (H.pair(k.pair), ""),
+                 (esc(k.narrative) or "-", ""),
+                 (esc(k.title) or "-", ""),
+                 (outcome, ""),
+                 (plan_trades_cell(j, closed, running), ""),
+                 (wr, "num hide-narrow" + (" muted" if s.thin else "")),
+                 ("-" if not s.trades else f"{s.sum_r:+.2f}",
+                  f"num {sum_class(s.sum_r)}"),
+                 ("-" if not s.trades else amount(j, s.sum_pnl, signed=True),
+                  f"num hide-narrow {sum_class(s.sum_pnl if s.trades else 0)}"),
+                 (f'<span title="{esc(long_form)}">{esc(followed)}</span>'
+                  if followed else "-", "hide-narrow")]
+        rows += ("<tr>" + "".join(link_cell(f"/plan/{U(k.id)}", inner, cls)
+                                  for inner, cls in cells) + "</tr>")
+    every = [stats.summary(j, plan_trades(j, k.id)) for k in past]
+    traded = [s for s in every if s.trades]
+    total = sum(s.sum_r for s in traded)
+    profitable = sum(1 for s in traded if s.sum_r > 0)
+    line = (f'{plural(len(past), "past plan")}: {len(traded)} had trades, '
+            f'{profitable} ended in profit, Σ R '
+            f'<span class="{sum_class(total)}">{total:+.2f}</span>')
+    more = ""
+    if len(shown) < len(past):
+        more = (f' The newest {len(shown)} are above. '
+                f'<a href="/plans?all=1">Show all {len(past)}</a>')
+    return (f'<div class="card"><h2>Past</h2><div class="scroll"><table>'
+            f'<thead><tr><th>dates</th><th>pair</th><th>narrative</th>'
+            f'<th>title</th><th>outcome</th><th>trades</th>'
+            f'<th class="num hide-narrow">WR</th><th class="num">Σ R</th>'
+            f'<th class="num hide-narrow">PnL</th><th class="hide-narrow">by narrative</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table></div>'
+            f'<p class="caption">{line}.{more}</p></div>')
 
 
-def plans_page():
+def plans_page(q=None):
     j = journal()
     problems = []
     plans = store.all_plans(ROOT, problems)
@@ -4250,33 +4415,20 @@ def plans_page():
                 'first one: the analysis, and what you will do with it.</p></div>')
         return page("Plans", body, "plans", right, problems)
     today = j.now()
-    rows = ""
-    for k in plans:
-        trades = plan_trades(j, k.id)
-        s = stats.summary(j, trades)
-        href = f"/plan/{U(k.id)}"
-        span = f"{k.day:%d.%m.%Y}"
-        if k.until and k.until != k.day:
-            span += f" - {k.until:%d.%m.%Y}"
-        cells = [(esc(span), ""), (H.pair(k.pair), ""),
-                 (esc(k.narrative) or "-", ""),
-                 (esc(k.title) or "-", ""),
-                 (plan_state(k, today), ""),
-                 (str(len(trades)), "num"),
-                 ("-" if not s.trades else f"{s.sum_r:+.2f}",
-                  f"num {sum_class(s.sum_r)}")]
-        rows += ("<tr>" + "".join(link_cell(href, inner, cls)
-                                  for inner, cls in cells) + "</tr>")
-    body = (f'<div class="card"><h2>Trading plans</h2>'
-            f'<table><thead><tr><th>dates</th><th>pair</th><th>narrative</th>'
-            f'<th>title</th><th></th><th class="num">trades</th>'
-            f'<th class="num">Σ R</th></tr></thead><tbody>{rows}</tbody></table>'
-            f'<p class="caption">A plan is written before the market opens; a '
-            f'trade is tied to it in its own form. Σ R counts the trades tied '
-            f'to the plan, which is the only honest answer to whether the plan '
-            f'was any good. A voided plan is one the market went against: it '
-            f'is kept, and read back later for where the analysis went wrong.'
-            f'</p></div>')
+    show_all = bool((q or {}).get("all", [""])[0])
+    # the explanation closes the last card on the page, as a caption does
+    # everywhere else, and not a paragraph left between the cards and the foot
+    note = ('<p class="caption">A plan is written before the market opens; a '
+            'trade is tied to it in its own form, under the plans that cover '
+            'the day of the entry. Σ R counts the trades tied to the plan, '
+            'which is the only honest answer to whether the plan was any '
+            'good. A voided plan is one the market went against: it is kept '
+            'under Past, and read back later for where the analysis went '
+            'wrong.</p>')
+    cards = (current_plans_card(j, plans, today),
+             past_plans_card(j, plans, today, show_all))
+    last = cards[1] or cards[0]
+    body = (cards[0] if cards[1] else "") + last[:-len("</div>")] + note + "</div>"
     return page("Plans", body, "plans", right, problems)
 
 
@@ -4632,6 +4784,71 @@ def example_picker(j, n):
             f'<div><button class="btn">Add</button></div></form>')
 
 
+def note_pairs(examples, limit=4):
+    """The flags of the pairs the examples were traded on, each once, in the
+    order the examples were tied; derived, so a note keeps no field for them."""
+    seen = []
+    for t in examples:
+        if t.pair not in seen:
+            seen.append(t.pair)
+    shown = " ".join(H.pair(name) for name in seen[:limit])
+    more = f' <span class="muted">+{len(seen) - limit}</span>' if len(seen) > limit else ""
+    return Safe(shown + more)
+
+
+def note_sum_r(j, examples):
+    """The total of the closed examples as a coloured figure, or nothing while
+    none of them has closed. It is only the sum of the trades picked for the
+    note, which are picked after the fact, not a verdict on the pattern."""
+    s = stats.summary(j, examples)
+    if not s.trades:
+        return ""
+    return f'<span class="{sum_class(s.sum_r)}">{s.sum_r:+.2f}</span>'
+
+
+def note_tile(j, n):
+    """One note of the list: its first screenshot whole, the title, the
+    takeaway (or the first line of the text while it has none), and a line of
+    facts. The whole tile is the link."""
+    examples = note_examples(j, n)
+    closed = [t for t in examples if not t.is_open]
+    running = [t for t in examples if t.is_open]
+    picture = next((src for b in n.blocks for src in b.images), None)
+    pic = (f'<div class="note-pic"><img src="{note_shots_base(n.id)}/'
+           f'{U(os.path.basename(picture))}" alt="" loading="lazy"></div>'
+           if picture else "")
+    if n.takeaway:
+        lead = f'<div class="note-lead">{esc(n.takeaway)}</div>'
+    else:
+        opening = first_line(n.blocks[0].text, 160) if n.blocks else ""
+        lead = f'<div class="note-lead muted">{esc(opening)}</div>' if opening else ""
+    # two lines: when and on what, then what the examples did, in words, since
+    # a tile has no caption to explain bare coloured figures
+    when = ['<span class="chip">pinned</span>'] if n.pinned else []
+    when.append(f"<span>{n.day:%d.%m.%Y}</span>")
+    if examples:
+        when.append(f"<span>{note_pairs(examples)}</span>")
+    cells = (f'<div class="note-when">{"".join(when)}</div>'
+             f'<div class="note-examples">{examples_line(j, examples)}</div>')
+    outdated = " outdated" if n.outdated else ""
+    return (f'<a class="note-tile{outdated}" href="/note/{U(n.id)}">{pic}'
+            f'<div class="note-text"><div class="note-title">{esc(n.title)}</div>'
+            f'{lead}</div><div class="note-facts">{cells}</div></a>')
+
+
+def examples_line(j, examples):
+    """What the examples of a note did, in one line of words: `2 examples: 1
+    won, 1 lost · Σ R +0.50`, or `no examples yet`. The tile and the page of
+    the note say it the same way."""
+    if not examples:
+        return '<span class="muted">no examples yet</span>'
+    split = breakdown_words(j, [t for t in examples if not t.is_open],
+                            [t for t in examples if t.is_open])
+    total = note_sum_r(j, examples)
+    return (plural(len(examples), "example") + (f": {split}" if split else "")
+            + (f' · <span class="muted">Σ R</span> {total}' if total else ""))
+
+
 def notes_page():
     j = journal()
     problems = []
@@ -4643,23 +4860,24 @@ def notes_page():
                 'first one: what you noticed about the market, with screenshots, '
                 'and the trades that show it.</p></div>')
         return page("Notes", body, "notes", right, problems)
-    rows = ""
-    for n in notes:
-        examples = note_examples(j, n)
-        href = f"/note/{U(n.id)}"
-        opening = n.blocks[0].text if n.blocks else ""
-        cells = [(f"{n.day:%d.%m.%Y}", ""), (esc(n.title), ""),
-                 (esc(first_line(opening)), "caption"),
-                 (str(len(examples)) if examples else "-", "num")]
-        rows += ("<tr>" + "".join(link_cell(href, inner, cls)
-                                  for inner, cls in cells) + "</tr>")
-    body = (f'<div class="card"><h2>Market notes</h2>'
-            f'<table><thead><tr><th>date</th><th>title</th><th></th>'
-            f'<th class="num">examples</th></tr></thead><tbody>{rows}</tbody></table>'
+    # pinned first, then by date; what no longer holds goes below, folded
+    current = [n for n in notes if not n.outdated]
+    current = [n for n in current if n.pinned] + [n for n in current if not n.pinned]
+    old = [n for n in notes if n.outdated]
+    grid = "".join(note_tile(j, n) for n in current)
+    tiles = (f'<div class="note-grid">{grid}</div>' if current else
+             '<p class="muted">No current notes: every note is marked outdated.</p>')
+    folded = ""
+    if old:
+        folded = (f'<details class="fold"><summary>Outdated '
+                  f'<span class="caption">{plural(len(old), "note")}</span></summary>'
+                  f'<div class="note-grid">{"".join(note_tile(j, n) for n in old)}'
+                  f'</div></details>')
+    body = (f'<h2>Market notes</h2>{tiles}{folded}'
             f'<p class="caption">A note is about the market, not about one trade: '
-            f'a level a pair keeps respecting, a pattern that came back, a lesson '
-            f'wider than a day. Examples are the trades tied to it on its page.'
-            f'</p></div>')
+            f'a level, a pattern, a lesson wider than a day. Examples are the '
+            f'trades tied to it, and their Σ R is only the total of those trades.'
+            f'</p>')
     return page("Notes", body, "notes", right, problems)
 
 
@@ -4691,21 +4909,40 @@ def note_page(note_id):
              '<p class="muted">No trade shows this yet. Pick one below: the row '
              'opens the trade, and the trade page leads back here.</p>')
     text = ""
-    for block in n.blocks:
+    for i, block in enumerate(n.blocks, 1):
         images = "".join(f'<img src="{base}/{U(os.path.basename(src))}" '
                          f'alt="screenshot">' for src in block.images)
-        text += (f'<div class="idea-block">'
+        text += (f'<div class="idea-block" id="block-{i}">'
                  f'{f"<h3>{esc(block.tf)}</h3>" if block.tf else ""}'
                  f'<div>{inline(block.text)}</div>'
                  f'<div class="shots">{images}</div></div>')
     text = text or '<p class="muted">Nothing written yet.</p>'
+    # a long note is read in pieces: its headings, each a link to its block
+    heads = [(i, b.tf) for i, b in enumerate(n.blocks, 1) if b.tf]
+    contents = ""
+    if len(heads) >= 3:
+        links = " · ".join(f'<a href="#block-{i}">{esc(tf)}</a>' for i, tf in heads)
+        contents = f'<p class="caption note-contents">Contents: {links}</p>'
+    lead = f'<div class="note-takeaway">{esc(n.takeaway)}</div>' if n.takeaway else ""
+    old = (f'<p class="muted">Marked outdated on {n.outdated:%d.%m.%Y}</p>'
+           if n.outdated else "")
+    # every piece is a date, a count or markup built here, so nothing is escaped twice
+    facts = [f"{n.day:%d.%m.%Y}"]
+    if examples:
+        facts.append(str(note_pairs(examples)))
+    facts_line = " · ".join(facts + [examples_line(j, examples)])
+    pin = ("unpin", "Unpin") if n.pinned else ("pin", "Pin")
+    dated = ("still-true", "Still true") if n.outdated else ("outdated", "Mark outdated")
     buttons = (f'<a class="btn" href="/note/{U(n.id)}/edit">Edit</a>'
-               f'<form method="post" action="/note/{U(n.id)}/delete" '
+               + "".join(f'<form method="post" action="/note/{U(n.id)}/{route}" '
+                         f'style="display:inline"><button class="btn">{word}</button></form>'
+                         for route, word in (pin, dated))
+               + f'<form method="post" action="/note/{U(n.id)}/delete" '
                f'style="display:inline" onsubmit="return confirm('
                f'\'Delete note {esc(n.id)}? The folder moves to .trash.\')">'
                f'<button class="btn danger">Delete</button></form>')
     body = (f'<div class="card"><h2>{esc(n.title)}</h2>'
-            f'<p class="caption">{n.day:%d.%m.%Y}</p>{text}</div>'
+            f'<p class="caption">{facts_line}</p>{old}{lead}{contents}{text}</div>'
             f'<div class="card"><h2>Examples</h2>{table}{example_picker(j, n)}</div>')
     return page(n.title, body, "notes", buttons)
 
@@ -4804,6 +5041,9 @@ def note_form(n=None, token=""):
  value="{f"{n.day:%Y-%m-%d}" if editing else today}"
  onclick="this.showPicker && this.showPicker()"></div>
 </div>
+<div class="field" style="margin-top:12px"><label>takeaway</label>
+<textarea name="takeaway" rows="2" style="min-height:54px;max-width:560px"
+ placeholder="what to remember, in a line or two">{esc(n.takeaway) if editing else ""}</textarea></div>
 </div>
 <div id="blocks">{blocks}</div>
 <template id="block-template">{note_block_inside("__N__")}</template>
@@ -4835,6 +5075,10 @@ def examples_from_form(data, held=()):
 def note_fields(n, data):
     n.title = one(data, "title")
     n.day = datetime.strptime(one(data, "date"), "%Y-%m-%d")
+    # a header holds one line; pinned and outdated are not in the form, so a
+    # save leaves them as they stand (invariant 14)
+    if "takeaway" in data:
+        n.takeaway = " ".join(one(data, "takeaway").split())
     n.trades = examples_from_form(data, n.trades)
     return n
 
@@ -4875,6 +5119,21 @@ def attach_example(n, data):
     n.trades.append(trade_id)
     store.save_note(ROOT, n)
     return "Example added"
+
+
+def pin_note(n, pinned):
+    n.pinned = pinned
+    store.save_note(ROOT, n)
+    return "Note pinned" if pinned else "Note unpinned"
+
+
+def mark_outdated(n, outdated):
+    """The day it was marked is kept, so the page can say since when; the
+    note stays in the journal and in Search."""
+    n.outdated = journal().now().replace(hour=0, minute=0, second=0,
+                                         microsecond=0) if outdated else None
+    store.save_note(ROOT, n)
+    return "Marked outdated" if outdated else "Marked as still true"
 
 
 def detach_example(n, data):
@@ -5989,6 +6248,17 @@ def trades_breakdown(j, closed, running=()):
     return f'<span class="breakdown" title="{esc(how)}">{figures}</span>'
 
 
+def breakdown_words(j, closed, running=()):
+    """The same split as `trades_breakdown`, each figure with its word, `3 won,
+    2 lost, 1 open`, for a list read with no caption to explain the colours:
+    a note tile and the Plans tab. Empty when there is nothing to split."""
+    s = stats.summary(j, list(closed))
+    counted = [(s.wins, "win", "won"), (s.losses, "lose", "lost"),
+               (s.be, "be", "break-even"), (len(running), "live", "open")]
+    return ", ".join(f'<span class="{cls}">{n} {word}</span>'
+                     for n, cls, word in counted if n)
+
+
 def cards_page():
     """Both report cards, the days over the weeks: two tables on one tab.
 
@@ -7062,8 +7332,8 @@ _ACCOUNT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}\Z")
 # the parts of Accounts a form there leads back to: the page comes back on
 # that part with its fold open, not at the top with every fold shut
 ACCOUNT_PARTS = ("account-list", "archived", "clock", "edition", "money",
-                 "corrections", "trash", "pairs", "words-styles",
-                 "words-timeframes", "words-execution")
+                 "corrections", "trash", "pairs", "list-styles",
+                 "list-timeframes", "list-execution")
 
 
 def accounts_page(message="", bad=False, at=""):
@@ -7135,7 +7405,7 @@ def accounts_page(message="", bad=False, at=""):
         return (f'<form method="post" action="/list/{action}" style="display:inline">'
                 f'<input type="hidden" name="kind" value="{esc(kind)}">'
                 f'<input type="hidden" name="word" value="{esc(word)}">'
-                f'{back_to("words-" + kind)}'
+                f'{back_to("list-" + kind)}'
                 f'<button class="btn">{label}</button></form>')
 
     def word_rows(kind, used, boxes):
@@ -7178,12 +7448,12 @@ def accounts_page(message="", bad=False, at=""):
                         "execution": lambda t: t.execution}[kind])
         n = len(store.all_words(ROOT, kind))
         drop = (f'<form method="post" action="/list/delete" id="drop-{kind}" class="drop">'
-                f'<input type="hidden" name="kind" value="{kind}">{back_to("words-" + kind)}'
+                f'<input type="hidden" name="kind" value="{kind}">{back_to("list-" + kind)}'
                 f'<button class="btn">Remove selected</button></form>' if n > 1 else "")
-        lists += f"""<details class="fold" id="words-{kind}"{opened("words-" + kind)}><summary>{label}
+        lists += f"""<details class="fold" id="list-{kind}"{opened("list-" + kind)}><summary>{label}
 <span class="caption">{n} in the list</span></summary>
 <form method="post" action="/list/new" class="filters">
-<input type="hidden" name="kind" value="{kind}">{back_to("words-" + kind)}
+<input type="hidden" name="kind" value="{kind}">{back_to("list-" + kind)}
 <div><label>add</label><input type="text" name="word" placeholder="{hint}"
  required style="width:160px"></div>
 <div><button class="btn primary">Add</button></div>
@@ -7407,10 +7677,10 @@ trades already recorded with it are not touched.</p></div>
 
 <div class="card"><h2>The trade form</h2>
 {lists}
-<p class="caption">These are the words the form offers: the style, the entry
-timeframe and the execution checkboxes. A new one goes to the end of its list,
-which is why the timeframes stay in the order you trade them. Removing a word
-only stops it being offered: the trades that carry it keep it, and it still
+<p class="caption">These are the lists the trade form offers: the styles, the entry
+timeframes and the execution formats. A new one goes to the end of its list,
+which is why the timeframes stay in the order you trade them. Removing a style,
+a timeframe or a format only stops it being offered: the trades that carry it keep it, and it still
 shows in the filters{" and the statistics" if reduced else ", the statistics and the reports"}. Every style in the list
 gets a winrate tile of its own on the journal page.</p></div>"""
     if at and not message:
@@ -7756,6 +8026,11 @@ def remove_pair(data):
 _WORD = re.compile(r"^[^\s][^\n\r:]{0,23}\Z")
 
 
+# what each list of the trade form holds, one and several, for the answers
+LIST_NOUNS = {"styles": ("style", "styles"), "timeframes": ("timeframe", "timeframes"),
+              "execution": ("execution format", "execution formats")}
+
+
 def _kind(data):
     kind = one(data, "kind")
     if kind not in store.VOCABULARY:
@@ -7775,7 +8050,7 @@ def set_stop_edge(data):
 def add_word(data):
     kind, word = _kind(data), one(data, "word")
     if not _WORD.match(word):
-        raise RecordError("a word of up to 24 characters, without a colon")
+        raise RecordError(f"a {LIST_NOUNS[kind][0]} of up to 24 characters, without a colon")
     words = store.all_words(ROOT, kind)
     if word.lower() in {w.lower() for w in words}:
         raise RecordError(f"{word} is already in the list")
@@ -7784,7 +8059,7 @@ def add_word(data):
 
 
 def remove_word(data):
-    """One word off a list, or every word ticked in it."""
+    """One entry off a list, or every entry ticked in it."""
     kind = _kind(data)
     picked = list(dict.fromkeys(w.strip() for w in data.get("word", []) if w.strip()))
     if not picked:
@@ -7799,7 +8074,7 @@ def remove_word(data):
     store.save_words(ROOT, kind, left)
     if len(picked) == 1:
         return f"{picked[0]} is no longer offered in the trade form."
-    return f"{len(picked)} words are no longer offered."
+    return f"{len(picked)} {LIST_NOUNS[kind][1]} are no longer offered."
 
 
 # --- sharing ---------------------------------------------------------------
@@ -8238,7 +8513,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # written; the page it belonged to is not shown in Lite
             where = "/turned-off"
         if said:
-            where += ("&" if "?" in where else "?") + "said=" + U(said)
+            # the word goes into the query, before an anchor
+            where, mark, anchor = where.partition("#")
+            where += ("&" if "?" in where else "?") + "said=" + U(said) + mark + anchor
         if any(ord(c) < 0x20 or ord(c) == 0x7f for c in where):
             where = "/"                        # no header splitting
         self._started = True
@@ -8448,7 +8725,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 f"/playbook/{U(parts[1])}" if store.safe_dir_name(parts[1])
                 and os.path.isdir(store.playbook_dir(ROOT, parts[1])) else "/playbooks")
         if path == "/plans":
-            return self._send(plans_page())
+            return self._send(plans_page(q))
         if path == "/plan/new":
             return self._send(page("New plan", plan_form(None, new_token()),
                                      "plans"))
@@ -8606,6 +8883,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     said = attach_example(n, data)
                 elif parts[2] == "detach":
                     said = detach_example(n, data)
+                elif parts[2] in ("pin", "unpin"):
+                    said = pin_note(n, parts[2] == "pin")
+                elif parts[2] in ("outdated", "still-true"):
+                    said = mark_outdated(n, parts[2] == "outdated")
                 else:
                     return self._gone("no such page")
                 return self._go(f"/note/{U(n.id)}", said)
@@ -8648,8 +8929,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path == "/settings/stop-edge":
                 said = set_stop_edge(data)
                 back = one(data, "back")
-                # the way back is a path of this journal or nothing at all
-                return self._go(back if _BACK.fullmatch(back) else "/stats", said)
+                # the way back is a path of this journal or nothing at all,
+                # and it ends on the card the slider is in
+                return self._go((back if _BACK.fullmatch(back) else "/stats")
+                                + "#past-stop", said)
             if len(parts) == 3 and parts[0] == "plan":
                 if not store.safe_dir_name(parts[1]):
                     return self._gone("bad plan id", status=400)

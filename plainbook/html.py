@@ -304,7 +304,7 @@ input[type=checkbox]:focus-visible,input[type=range]:focus-visible{{
  outline:2px solid {ACCENT};outline-offset:2px}}
 /* short colour changes on hover and focus, and the fade of an opened popover
    or fold; all of it is turned off under prefers-reduced-motion */
-.btn,.switch a,header nav a,td a,.tile .name a,.fold>summary,select,input[type=text],
+.btn,.switch a,header nav a,td a,.tile .name a,.fold>summary,.note-tile,select,input[type=text],
 input[type=number],input[type=date],textarea{{
  transition:color .12s,border-color .12s,background-color .12s}}
 .filters-box[open]>.popover,.fold[open]>summary~*{{animation:pop .12s ease-out}}
@@ -353,7 +353,7 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 /* a message that flies is still a message: with motion turned off it simply
    stands and goes */
 @media (prefers-reduced-motion: reduce){{
- .btn,.switch a,header nav a,td a,.tile .name a,.fold>summary,select,
+ .btn,.switch a,header nav a,td a,.tile .name a,.fold>summary,.note-tile,select,
  input[type=text],input[type=number],input[type=date],textarea{{transition:none}}
  .popover,.fold[open]>summary~*{{animation:none}}
  .toggle .track,.toggle .knob{{transition:none}}
@@ -403,19 +403,43 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .dropzone .pick{{order:10;margin:6px 6px 0 0}}
 .idea-block{{border-left:2px solid {AXIS};padding-left:12px;margin-bottom:16px}}
 .idea-block:last-child{{margin-bottom:0}}
+/* the takeaway of a note: the lead of its page, the same flat rule as a block
+   but at reading size */
+.idea-block{{scroll-margin-top:calc(var(--head,49px) + 12px)}}
+.note-takeaway{{border-left:2px solid {AXIS};padding-left:12px;margin:0 0 18px;
+ font-size:16px;line-height:1.5;color:{INK};max-width:760px}}
+.note-contents{{margin:0 0 16px}}
+/* the list of notes: tiles, each one link; the first screenshot is shown whole
+   on a dark backing, never cropped, because a scheme is read in its corners */
+.note-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));
+ gap:14px;margin-bottom:16px;align-items:start}}
+.note-tile{{display:flex;flex-direction:column;min-width:0;background:{SURFACE};
+ border:1px solid {AXIS};border-radius:5px;overflow:hidden;color:{INK}}}
+.note-tile:hover{{border-color:{DIM};color:{INK}}}
+.note-tile:focus-visible{{outline-offset:-2px}}
+.note-tile.outdated{{opacity:.55}}
+.note-pic{{aspect-ratio:16/10;background:{GROUND};border-bottom:1px solid {AXIS}}}
+.note-pic img{{display:block;width:100%;height:100%;object-fit:contain}}
+.note-text{{padding:11px 14px 0}}
+.note-title{{font-weight:600;font-size:14px;line-height:1.35;overflow:hidden;
+ display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}}
+.note-lead{{margin-top:6px;font-size:13px;line-height:1.5;color:{INK2};overflow:hidden;
+ display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3}}
+.note-lead.muted{{color:{DIM}}}
+.note-facts{{margin-top:auto;padding:12px 14px 11px;font-size:12px;color:{INK2}}}
+.note-when{{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}}
+.note-examples{{margin-top:6px}}
+.note-facts .pair{{gap:5px}}
+.note-facts .chip{{vertical-align:0}}
 .example{{display:flex;align-items:center;gap:10px;margin:4px 0}}
 .is-open{{border-left:2px solid {WARN}}}
 .is-void{{border-left:2px solid {BAD}}}
 .is-void > h2{{color:{DIM}}}
 .is-void .badge{{background:{BAD};color:#fff}}
-/* the state of a plan in the list, a pill in the colour of a button: red for
-   a voided one, green for the one running now, blue for one whose days have
-   not come yet; a plan that has run its course wears nothing */
+/* the pill of a voided plan in the list of past plans, in the red of a button */
 .state{{display:inline-block;font:600 11px/1 {MONO};border-radius:7px;
  padding:4px 8px;color:#fff}}
 .state.voided{{background:{BAD}}}
-.state.current{{background:{GOOD}}}
-.state.ahead{{background:{ACCENT};color:#07080c}}
 .props{{max-width:660px}}
 
 /* playbooks: the rules on paper, a line each with its number in the margin */
@@ -690,6 +714,7 @@ table.shelf .spark{{display:block}}
  tr.group td{{padding:7px 7px;white-space:normal}}
  tr.group .label,tr.group .dates{{display:inline-block;white-space:nowrap}}
  .breakdown{{white-space:nowrap}}
+ th.hide-narrow,td.hide-narrow{{display:none}}
  .row-actions{{flex-wrap:wrap;justify-content:flex-end}}
  .setup-form .field input{{max-width:100%}}
 }}
@@ -842,6 +867,17 @@ document.addEventListener('DOMContentLoaded', () => {
   if (bar && window.ResizeObserver)
     new ResizeObserver(e => document.documentElement.style.setProperty(
       '--head', e[0].target.offsetHeight + 'px')).observe(bar);
+  // an address with an anchor was scrolled to before the header was measured:
+  // a wrapped header would cover what it names, so it is scrolled to again,
+  // on a fresh visit only (a reload or Back keeps where the reader was)
+  const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+  let mark = null;
+  try { mark = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1))); }
+  catch (e) {}                       // a hash typed by hand need not decode
+  if (bar && mark && (!nav || nav.type === 'navigate')) {
+    document.documentElement.style.setProperty('--head', bar.offsetHeight + 'px');
+    mark.scrollIntoView();
+  }
 });
 function close_popovers(except){
   document.querySelectorAll('details.filters-box[open]').forEach(box => {

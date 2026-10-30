@@ -14,6 +14,7 @@ import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
+from html import unescape
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -734,6 +735,51 @@ class ServerCase(unittest.TestCase):
         self.assertTrue(where.startswith(self.url("/stats")))
         self.assertEqual(store.stop_edge(self.root), 1.2)
 
+    def test_30b_the_slider_comes_back_to_its_card_in_its_column(self):
+        """Releasing the slider lands on Past the stop, not at the top of the
+        page, and the card stays in its column whatever the edge: dealt by
+        its rows, it jumped to the other column under the hand moving it."""
+        def column(html):
+            # the column of the card: the twin's divs counted open and shut,
+            # the seam is where the first column closes
+            start = html.index('<div class="twin">')
+            depth, seam = 0, None
+            for m in re.finditer(r"<div\b|</div>", html[start:]):
+                depth += 1 if m.group(0) == "<div" else -1
+                if depth == 1 and m.group(0) == "</div>" and seam is None:
+                    seam = start + m.end()
+            at = html.index('id="past-stop"')
+            self.assertGreater(at, start)
+            return "left" if at < seam else "right"
+        sides = set()
+        for edge in ("1", "1.5", "2"):
+            _, where = self.post("/settings/stop-edge",
+                                 {"stop_edge": edge, "back": "/stats?axis=trade"})
+            # the word of the toast stays in the query, the anchor after it
+            self.assertTrue(where.startswith(self.url("/stats?axis=trade&said=")))
+            self.assertTrue(where.endswith("#past-stop"))
+            _, html = self.get("/stats?axis=trade")
+            sides.add(column(html))
+        self.assertEqual(len(sides), 1)
+        # the card is dealt at its full height, the same for any edge
+        S = self.S
+        self.assertGreaterEqual(S.past_stop_tall(), S.guess_height(re.search(
+            r'<div class="card" id="past-stop">.*?</p></div>', html, re.S).group(0)))
+        # dealt by its rows, three losses and eleven send it to different
+        # columns; dealt at its full height, both stand in the same one
+        def card(name, rows):
+            body = "".join(f"<tr><td>{i}</td></tr>" for i in range(rows))
+            return f'<div class="card"><h2>{name}</h2><table>{body}</table></div>'
+
+        def side(cards):
+            html = S.deal([card("a", 6), card("b", 4)] + cards
+                          + [card(n, 2) for n in "wxyz"], pinned=2)
+            left = html[len('<div class="twin"><div>'):].split("</div><div>")[0]
+            return "left" if "<h2>p</h2>" in left else "right"
+        self.assertNotEqual(side([card("p", 3)]), side([card("p", 11)]))
+        self.assertEqual(side([(card("p", 3), S.past_stop_tall())]),
+                         side([(card("p", 11), S.past_stop_tall())]))
+
     def test_31_the_pair_field_offers_pairs_with_their_flags(self):
         """The browser's own list cannot carry the flags, so the form has its
         own. Typing a pair that is not in it still has to work."""
@@ -1004,31 +1050,31 @@ class ServerCase(unittest.TestCase):
     def test_39a_several_words_go_at_once_and_the_page_comes_back_to_the_list(self):
         for word in ("X1", "X2", "X3"):
             self.post("/list/new", {"kind": "timeframes", "word": word,
-                                    "at": "words-timeframes"})
+                                    "at": "list-timeframes"})
         _, page = self.get("/accounts")
         # every offered word has a box that belongs to the form under its table
         self.assertIn('value="X1" form="drop-timeframes"', page)
         self.assertIn('<form method="post" action="/list/delete" id="drop-timeframes"', page)
-        self.assertNotIn('id="words-timeframes" open', page)    # shut when nothing led here
+        self.assertNotIn('id="list-timeframes" open', page)    # shut when nothing led here
         _, where = self.post("/list/delete", {"kind": "timeframes", "word": ["X1", "X3"],
-                                              "at": "words-timeframes"})
+                                              "at": "list-timeframes"})
         words = store.all_words(self.root, "timeframes")
         self.assertNotIn("X1", words)
         self.assertNotIn("X3", words)
         self.assertIn("X2", words)                           # the one not ticked stays
-        self.assertIn("at=words-timeframes", where)
-        self.assertIn("2 words are no longer offered", urllib.parse.unquote(where))
+        self.assertIn("at=list-timeframes", where)
+        self.assertIn("2 timeframes are no longer offered", urllib.parse.unquote(where))
         _, page = self.get(urllib.parse.urlparse(where).path + "?"
                            + urllib.parse.urlparse(where).query)
         # the page comes back on that list, open, and scrolls to it
-        self.assertIn('id="words-timeframes" open', page)
-        self.assertIn('getElementById("words-timeframes")', page)
-        self.assertNotIn('id="words-styles" open', page)
+        self.assertIn('id="list-timeframes" open', page)
+        self.assertIn('getElementById("list-timeframes")', page)
+        self.assertNotIn('id="list-styles" open', page)
         # nothing ticked is refused, and the list is open on the refusal too
         _, where = self.post("/list/delete", {"kind": "timeframes",
-                                              "at": "words-timeframes"})
+                                              "at": "list-timeframes"})
         self.assertIn("nothing was selected", urllib.parse.unquote(where))
-        self.assertIn("at=words-timeframes", where)
+        self.assertIn("at=list-timeframes", where)
         # a part the page does not have is not carried
         _, where = self.post("/list/delete", {"kind": "timeframes", "word": "X2",
                                               "at": "nowhere"})
@@ -1232,11 +1278,11 @@ class ServerCase(unittest.TestCase):
         self.assertNotIn(f'action="/plan/{plan_id}/void"', html)
         self.assertIn("price broke the range down", html)
         # the trades tied to it are still there, and the list says voided
-        self.assertIn(">1<", re.findall(r'<tr>.*?</tr>', self.get("/plans")[1],
-                                        re.S)[1].replace("</td>", "<"))
+        self.assertIn(">1 · ", re.findall(r'<tr>.*?</tr>', self.get("/plans")[1],
+                                          re.S)[1])
         self.assertIn('class="state voided"', self.get("/plans")[1])
-        # the trade form still offers it, under a label that says so
-        self.assertIn("voided</option>", self.get("/new")[1])
+        # a voided plan is never offered by the trade form, not even in its data
+        self.assertNotIn(plan_id, self.get("/new")[1])
         # a second void is refused, the plan is voided already
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.post(f"/plan/{q}/void", {"reason": "again"})
@@ -1256,9 +1302,160 @@ class ServerCase(unittest.TestCase):
         # has run its course wears nothing
         self.new_plan(title="ahead", **{"from": "2099-01-05", "until": "2099-01-09"})
         html = self.get("/plans")[1]
-        self.assertIn('class="state ahead"', html)
+        self.assertIn("starts in", html.split("<h2>Past</h2>")[0])
         row = [r for r in re.findall(r'<tr>.*?</tr>', html, re.S) if plan_id in r][0]
         self.assertNotIn('class="state', row)          # 2026-08-31 to 09-06 is past
+
+    def plan_menu(self, path):
+        """The plan menu of a trade form: its option values, the value picked,
+        the text of the empty one, and the data the page script redraws it from."""
+        _, html = self.get(path)
+        tag = re.search(r'<select name="plan"([^>]*)>(.*?)</select>', html, re.S)
+        options = re.findall(r'<option value="([^"]*)"( selected)?>([^<]*)</option>',
+                             tag.group(2))
+        data = json.loads(unescape(re.search(r'data-plans="([^"]*)"',
+                                             tag.group(1)).group(1)))
+        return ([v for v, _, _ in options if v],
+                ([v for v, sel, _ in options if sel] or [""])[0],
+                [text for v, _, text in options if not v][0], data)
+
+    def test_43b_the_plans_tab_keeps_current_and_past_apart(self):
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        day = lambda n: (today + timedelta(days=n)).strftime("%Y-%m-%d")
+        now = self.new_plan(title="now", **{"from": day(-1), "until": day(1)})
+        ahead = self.new_plan(title="soon", **{"from": day(3), "until": day(4)})
+        past = self.new_plan(title="over", **{"from": day(-20), "until": day(-18)})
+        empty = self.new_plan(title="quiet", narrative="no trade",
+                              **{"from": day(-30), "until": day(-29)})
+        gone = self.new_plan(title="called off", **{"from": day(-1), "until": day(1)})
+        self.post(f"/plan/{urllib.parse.quote(gone)}/void", {"reason": "wrong way"})
+        # two trades under the past plan, one won with the narrative and one
+        # lost against it, both long ago: a trade opened today would be open
+        won = Trade(id=store.new_id(self.root, today - timedelta(days=19), "EURUSD"),
+                    account="broker", pair="EURUSD", direction="long", style="swing",
+                    risk=1.0, opened=today - timedelta(days=19),
+                    closed=today - timedelta(days=18), result="Win", pnl=200,
+                    plan=past)
+        lost = Trade(id=store.new_id(self.root, today - timedelta(days=18), "EURUSD"),
+                     account="broker", pair="EURUSD", direction="short", style="swing",
+                     risk=1.0, opened=today - timedelta(days=18),
+                     closed=today - timedelta(days=18), result="Lose", pnl=-100,
+                     plan=past)
+        for t in (won, lost):
+            store.save_trade(self.root, t)
+        self.S.drop_cache()
+        kept = self.S.PAST_PLANS
+        try:
+            _, html = self.get("/plans")
+            current = html.split("<h2>Current</h2>")[1].split("<h2>Past</h2>")[0]
+            earlier = html.split("<h2>Past</h2>")[1]
+            for k in (now, ahead):
+                self.assertIn(f'href="/plan/{k}"', current)
+                self.assertNotIn(f'href="/plan/{k}"', earlier)
+            for k in (past, empty, gone):
+                self.assertIn(f'href="/plan/{k}"', earlier)
+                self.assertNotIn(f'href="/plan/{k}"', current)
+            # the current one runs one more day after today, the ahead one
+            # starts in three, and the current ones come first
+            self.assertIn("1 day", current)
+            self.assertIn("starts in 3 days", current)
+            self.assertLess(current.index(now), current.index(ahead))
+            # the past row says its figures without opening the plan
+            row = [r for r in re.findall(r'<tr>.*?</tr>', earlier, re.S)
+                   if f'/plan/{past}"' in r][0]
+            self.assertIn('2 · <span class="win">1 won</span>, <span class="lose">1 lost</span>', row)
+            self.assertIn("50.0%", row)
+            self.assertIn("+100 $", row)
+            self.assertIn("1 with", row)
+            self.assertIn("1 against", row)
+            # a plan with no trades says so, a voided one wears its pill
+            quiet = [r for r in re.findall(r'<tr>.*?</tr>', earlier, re.S)
+                     if f'/plan/{empty}"' in r][0]
+            self.assertIn("no trades", quiet)
+            called = [r for r in re.findall(r'<tr>.*?</tr>', earlier, re.S)
+                      if f'/plan/{gone}"' in r][0]
+            self.assertIn('class="state voided"', called)
+            self.assertNotIn("no trades", called)
+            # the narrow window drops WR, PnL and the narrative column
+            self.assertEqual(len(re.findall(r"<th[ >]", earlier)), 10)
+            self.assertNotIn("<th></th>", earlier)
+            self.assertEqual(len(re.findall(r'<th class="[^"]*hide-narrow', earlier)), 3)
+            # the total counts every past plan, and Show all lifts the cut
+            self.assertIn("past plans", earlier)
+            self.assertIn("1 ended in profit", earlier)
+            self.S.PAST_PLANS = 2
+            _, html = self.get("/plans")
+            self.assertIn("Show all", html)
+            self.assertIn('href="/plans?all=1"', html)
+            self.assertNotIn(f'href="/plan/{empty}"', html)     # the oldest is cut
+            _, html = self.get("/plans?all=1")
+            self.assertNotIn("Show all", html)
+            self.assertIn(f'href="/plan/{empty}"', html)
+        finally:
+            self.S.PAST_PLANS = kept
+            for t in (won, lost):
+                shutil.rmtree(store.trade_dir(self.root, t.id))
+            for k in (now, ahead, past, empty, gone):
+                shutil.rmtree(store.plan_dir(self.root, k))
+            self.S.drop_cache()
+
+    def test_43c_the_trade_form_offers_the_plans_of_the_day_of_the_trade(self):
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        day = lambda n: (today + timedelta(days=n)).strftime("%Y-%m-%d")
+        now = self.new_plan(title="now", **{"from": day(-1), "until": day(1)})
+        old = self.new_plan(title="old", **{"from": day(-40), "until": day(-36)})
+        gone = self.new_plan(title="called off", **{"from": day(-1), "until": day(1)})
+        self.post(f"/plan/{urllib.parse.quote(gone)}/void", {"reason": "wrong way"})
+        trade = Trade(id=store.new_id(self.root, today - timedelta(days=38), "EURUSD"),
+                      account="broker", pair="EURUSD", direction="long", style="swing",
+                      risk=1.0, opened=today - timedelta(days=38),
+                      closed=today - timedelta(days=37), result="Win", pnl=50,
+                      plan=old)
+        bare = Trade(id="2020-03-03-01-eurusd", account="broker", pair="EURUSD",
+                     direction="long", style="swing", risk=1.0,
+                     opened=datetime(2020, 3, 3), closed=datetime(2020, 3, 4),
+                     result="Win", pnl=50)
+        for t in (trade, bare):
+            store.save_trade(self.root, t)
+        self.S.drop_cache()
+        try:
+            # a new trade is opened today: only the plans that cover today
+            shown, picked, _, data = self.plan_menu("/new")
+            self.assertIn(now, shown)
+            self.assertNotIn(old, shown)
+            self.assertNotIn(ServerCase.plan_id, shown)         # ran out in September
+            # the page carries every plan with its days, so that the date
+            # of an entry written in afterwards finds its own plans
+            days = {k["id"]: (k["from"], k["to"]) for k in data}
+            self.assertEqual(days[old], (day(-40), day(-36)))
+            self.assertEqual(days[now], (day(-1), day(1)))
+            # a voided plan covers nothing and is never offered
+            self.assertNotIn(gone, shown)
+            self.assertNotIn(gone, days)
+            # editing a trade of the old plan keeps it picked, and offered,
+            # and not today's: the plan is the day's of the trade
+            shown, picked, _, data = self.plan_menu(f"/edit/{trade.id}")
+            self.assertEqual(picked, old)
+            self.assertIn(old, shown)
+            self.assertNotIn(now, shown)
+            # a day with no plan says so, and the empty choice is still there
+            shown, picked, empty, _ = self.plan_menu(f"/edit/{bare.id}")
+            self.assertEqual((shown, picked), ([], ""))
+            self.assertEqual(empty, "no plan covers this day")
+            # saving the edited trade does not untie it from its old plan
+            _, form = self.get(f"/edit/{trade.id}")
+            self.post(f"/edit/{trade.id}", {
+                "token": self.form_token(form), "blocks": "1", "account": "broker",
+                "pair": "EURUSD", "direction": "long", "style": "swing",
+                "risk": "1", "entry": f"{day(-38)}T00:00", "plan": old,
+                "idea_text_1": "kept"})
+            self.assertEqual(store.load_trade(self.root, trade.id).plan, old)
+        finally:
+            for t in (trade, bare):
+                shutil.rmtree(store.trade_dir(self.root, t.id))
+            for k in (now, old, gone):
+                shutil.rmtree(store.plan_dir(self.root, k))
+            self.S.drop_cache()
 
     def test_44_the_header_offers_a_plan_and_not_a_report(self):
         _, html = self.get("/")
@@ -3654,7 +3851,9 @@ class ServerCase(unittest.TestCase):
         # the list names the note and counts its examples; search finds it
         _, html = self.get("/notes")
         self.assertIn("London sweep", html)
-        self.assertIn('<td class="cell num"><a href="/note/' + note_id + '">2</a>', html)
+        self.assertIn(f'<a class="note-tile" href="/note/{note_id}">', html)
+        self.assertIn("2 examples: ", html)
+        self.assertNotIn("<table", html)
         _, html = self.get("/search?q=asian+high")
         self.assertIn(f'href="/note/{note_id}"', html)
         ServerCase.note_id, ServerCase.note_trade = note_id, tid
@@ -3730,6 +3929,128 @@ class ServerCase(unittest.TestCase):
         self.post("/trash/restore", {"name": name})
         self.assertTrue(os.path.exists(store.note_dir(self.root, note_id)))
         self.assertEqual(self.get(f"/note/{note_id}")[0], 200)
+
+    def test_98b_a_note_has_a_takeaway_a_pin_and_an_outdated_mark(self):
+        """The list is tiles: the takeaway under the title, the first picture
+        whole, the pinned ones first, the outdated ones folded below; the form
+        and the buttons keep what the other one wrote."""
+        _, form = self.get("/note/new")
+        self.assertIn('name="takeaway"', form)
+        self.assertIn('placeholder="what to remember, in a line or two"', form)
+        token = self.form_token(form)
+        shot = self.paste_shot(token, "idea-1")
+        old_trade = self.open_trade(entry="2026-09-04T09:00", pair="USDCAD")
+
+        def write(title, day, **kw):
+            data = {"token": self.form_token(self.get("/note/new")[1]), "title": title,
+                    "date": day, "blocks": "1", "idea_text_1": "Circumstances first."}
+            data.update(kw)
+            return self.landed(self.post("/note/new", data)[1])
+
+        first = write("Tile one", "2026-09-10", takeaway="Wait for the\r\nclose.",
+                      trade=[old_trade], idea_text_1="Opening words of the text.",
+                      **{"file_idea-1": shot["file"]}, token=token)
+        second = write("Tile two", "2026-09-11")
+        third = write("Tile three", "2026-09-12")
+        n = store.load_note(self.root, first)
+        self.assertEqual(n.takeaway, "Wait for the close.")    # one line in the file
+        self.assertFalse(n.pinned)
+        self.assertIsNone(n.outdated)
+        _, page = self.get(f"/note/{first}")
+        self.assertIn('<div class="note-takeaway">Wait for the close.</div>', page)
+        self.assertIn("1 example", page)
+        self.assertNotIn("Marked outdated", page)
+        _, bare = self.get(f"/note/{second}")
+        self.assertNotIn('class="note-takeaway"', bare)        # empty: nothing drawn
+        self.assertIn("no examples yet", bare)
+        self.assertNotIn('class="caption note-contents"', bare)
+        # the tile: the picture whole and lazy, the takeaway, no table
+        _, html = self.get("/notes")
+        tile = re.search(r'<a class="note-tile" href="/note/%s">.*?</a>' % first, html, re.S).group(0)
+        self.assertIn(f'<img src="/note-shot/{first}/idea-01-01.png" alt="" loading="lazy">', tile)
+        self.assertIn('<div class="note-lead">Wait for the close.</div>', tile)
+        self.assertIn("USDCAD", tile)
+        self.assertIn('<div class="note-pic">', html)
+        # no takeaway: the first line of the text, muted, and no picture area
+        tile = re.search(r'<a class="note-tile" href="/note/%s">.*?</a>' % second, html, re.S).group(0)
+        self.assertIn('<div class="note-lead muted">Circumstances first.</div>', tile)
+        self.assertNotIn("note-pic", tile)
+        self.assertIn('<div class="note-examples"><span class="muted">no examples yet</span>', tile)
+        # a search finds the takeaway and says it first
+        _, found = self.get("/search?q=wait+for+the+close")
+        self.assertIn(f'href="/note/{first}"', found)
+        # pin: first in the list, with a mark; the form keeps the pin on a save
+        _, where = self.post(f"/note/{first}/pin", {})
+        self.assertIn("Note%20pinned", where)
+        _, html = self.get("/notes")
+        order = [m for m in re.findall(r'<a class="note-tile[^"]*" href="/note/([^"]+)"', html)
+                 if m in (first, second, third)]
+        self.assertEqual(order, [first, third, second])      # pinned, then newest first
+        self.assertIn('<span class="chip">pinned</span>', html)
+        _, form = self.get(f"/note/{first}/edit")
+        self.assertIn("Wait for the close.</textarea>", form)
+        self.post(f"/note/{first}/edit", {
+            "token": self.form_token(form), "title": "Tile one", "date": "2026-09-10",
+            "blocks": "1", "idea_text_1": "Opening words of the text.",
+            "have_idea-1": "shots/idea-01-01.png", "takeaway": "", "trade": old_trade})
+        n = store.load_note(self.root, first)
+        self.assertTrue(n.pinned)
+        self.assertEqual(n.takeaway, "")                      # sent blank: cleared
+        self.post(f"/note/{first}/edit", {
+            "token": self.form_token(self.get(f"/note/{first}/edit")[1]),
+            "title": "Tile one", "date": "2026-09-10", "blocks": "1",
+            "idea_text_1": "Opening words of the text.", "takeaway": "Back again.",
+            "have_idea-1": "shots/idea-01-01.png", "trade": old_trade})
+        _, page = self.get(f"/note/{first}")
+        self.assertIn(f'action="/note/{first}/unpin"', page)
+        self.post(f"/note/{first}/unpin", {})
+        self.assertFalse(store.load_note(self.root, first).pinned)
+        # outdated: folded below and dimmed, still found, the page says since when
+        _, where = self.post(f"/note/{third}/outdated", {})
+        self.assertIn("Marked%20outdated", where)
+        stamp = store.load_note(self.root, third).outdated
+        self.assertIsNotNone(stamp)
+        _, html = self.get("/notes")
+        folded = html[html.index('<details class="fold">'):]
+        self.assertIn(f'href="/note/{third}"', folded)
+        self.assertIn('class="note-tile outdated"', folded)
+        self.assertNotIn(f'href="/note/{second}"', folded)
+        self.assertNotIn(f'href="/note/{third}"', html[:html.index('<details class="fold">')])
+        _, page = self.get(f"/note/{third}")
+        self.assertIn(f"Marked outdated on {stamp:%d.%m.%Y}", page)
+        self.assertIn(f'action="/note/{third}/still-true"', page)
+        _, found = self.get("/search?q=tile+three")
+        self.assertIn(f'href="/note/{third}"', found)
+        self.post(f"/note/{third}/still-true", {})
+        self.assertIsNone(store.load_note(self.root, third).outdated)
+        _, html = self.get("/notes")
+        self.assertNotIn('<details class="fold">', html)
+        # both marks and the takeaway ride into the trash and back
+        self.post(f"/note/{second}/pin", {})
+        self.post(f"/note/{second}/outdated", {})
+        note_file = os.path.join(store.note_dir(self.root, second), "note.md")
+        with open(note_file, encoding="utf-8") as fh:
+            before = fh.read()
+        self.post(f"/note/{second}/delete", {})
+        name = next(x[0] for x in store.trash_list(self.root)
+                    if x[1] == "note" and x[2] == second)
+        self.post("/trash/restore", {"name": name})
+        with open(note_file, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), before)
+        self.assertIn("pinned: yes", before)
+        # a note with three headings gets a contents line
+        _, form = self.get("/note/new")
+        wide = self.landed(self.post("/note/new", {
+            "token": self.form_token(form), "title": "Long one", "date": "2026-09-13",
+            "blocks": "3", "idea_tf_1": "One", "idea_text_1": "a",
+            "idea_tf_2": "Two", "idea_text_2": "b", "idea_tf_3": "Three",
+            "idea_text_3": "c"})[1])
+        _, page = self.get(f"/note/{wide}")
+        self.assertIn('<a href="#block-2">Two</a>', page)
+        self.assertIn('id="block-3"', page)
+        for nid in (first, second, third, wide):
+            self.post(f"/note/{nid}/delete", {})
+        self.post(f"/trade/{urllib.parse.quote(old_trade)}/delete", {})
 
     def test_99_a_trade_opened_from_a_filtered_list_keeps_the_selection(self):
         """The filter of the front page used to be lost the moment a trade

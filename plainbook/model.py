@@ -658,6 +658,9 @@ NOTE_KEYS = [
     ("id", "id"),
     ("title", "title"),
     ("day", "date"),
+    ("takeaway", "takeaway"),
+    ("pinned", "pinned"),
+    ("outdated", "outdated"),
     ("trades", "trades"),
 ]
 
@@ -667,6 +670,9 @@ class Note:
     id: str
     title: str = ""
     day: date = None                                # the day it was written
+    takeaway: str = ""                              # what to remember, in a line or two
+    pinned: bool = False                            # read first, at the top of the list
+    outdated: date = None                           # the day it was marked, None while it holds
     blocks: list = field(default_factory=list)      # IdeaBlock: heading, text, shots
     trades: list = field(default_factory=list)      # ids of the example trades
     extra: dict = field(default_factory=dict)
