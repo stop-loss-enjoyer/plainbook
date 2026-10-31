@@ -534,7 +534,7 @@ closes it.
 ## The daily card
 
 **+ DRC** opens today's card; if there already is one for that day, it opens
-that one. The **Cards** tab lists them, the daily ones in the upper table.
+that one. The **Cards** tab shows them on a calendar of the quarter.
 
 - **date**: you can change it when reviewing yesterday. Changing the date
   moves the card rather than creating a second one; if the new day already
@@ -549,7 +549,9 @@ that one. The **Cards** tab lists them, the daily ones in the upper table.
   table as the weekly card below. The trade field suggests the trades you
   closed that day; pick one, or type its pair, and the result fills in with
   what the journal knows, `Win +1.20 R`, and stays yours to change. An empty
-  line is not saved.
+  line is not saved. The table opens with three lines, or one for every
+  trade of the day when there were more; **+ line** under it adds another
+  and **×** at the end of a line takes it away.
 - **A position still in the market can be graded too.** The list offers what
   the day held and did not close, as `USDJPY long, open since 01.09`. Its
   result says `open`, and it does not have to be corrected later: a line you
@@ -564,7 +566,10 @@ that one. The **Cards** tab lists them, the daily ones in the upper table.
   trade beside the assessment, and the overview under them.
 - **best trade** is your text, and over it stands **pick a trade**, a
   drop-down of the day's trades: choose one and its name is put into the text
-  where the cursor stands, spelled as the assessment spells it. The list goes
+  where the cursor stands, spelled as the assessment spells it. Every line of
+  the list says how its trade ended, `USDCHF short, 29.10 · Win +2.76 R`, in
+  the colour of it: green won, red lost, amber break-even, blue still open.
+  Only the name goes into the text, not the result. The list goes
   back to empty and saves nothing of its own; the words after the name are
   yours. It offers what the assessment offers, the open positions among them,
   and is not shown on a day the journal held no trade at all.
@@ -572,8 +577,8 @@ that one. The **Cards** tab lists them, the daily ones in the upper table.
 ## The weekly card
 
 **+ WRC** opens the card of the week that is running; if there already is one,
-it opens that one. They are listed under the daily ones on the **Cards** tab,
-and both kinds are stored side by side in `journal/cards`.
+it opens that one. On the **Cards** tab it ends the row of its week, and both
+kinds are stored side by side in `journal/cards`.
 
 - **week**: the calendar week, Monday to Sunday, the same week the journal
   groups the trades by. Changing it moves the card, exactly as the date moves a
@@ -606,11 +611,38 @@ and both kinds are stored side by side in `journal/cards`.
 
 ## Both cards on the Cards tab
 
-The **trades** column of both tables is the same row of figures: green won,
-red lost, amber break-even, blue what was still in the market when the day or
-the week ended. Hover for the words. A card brought in from before the journal
-held those trades has nothing to count: the weekly table then shows the number
-written on the card, the daily one a hyphen.
+The tab is a calendar of one quarter, the running one when it opens:
+thirteen weeks, a row a week, the month named in the margin where it
+begins. It takes the height of the window, whatever the window, and the page
+does not scroll: a taller screen gives the squares more lines of the
+overview, a low one keeps the figures and leaves the text to the tip.
+
+- **A square a day**, Monday to Friday. A day with a daily card shows its
+  PnL, its trades, the process grade on the right and the first line of the
+  overview. **Point at it** for the whole card: the day, the process and
+  opportunity grades, the money and the overview in full. A click opens it.
+- **A dashed square that says traded, no card** is a day you entered a trade
+  and wrote no card for; a click on it, or on any past day, starts the card
+  of that day. Today is outlined in blue; the days after it are dimmed.
+- **The last column is the week**: the weekly card with its PnL, trades,
+  grade and key lesson, the whole of it under the pointer, or **+ weekly
+  card** where none is written yet.
+- **Saturday and Sunday** get their columns in a quarter where a card was
+  written or a trade entered on one.
+- **The year and Q1 to Q4** above choose the quarter: the one shown is
+  filled, the running one underlined in blue, and the quarters after
+  anything written cannot be chosen yet. The line on the right counts the
+  daily and weekly cards of the quarter shown, and **?** beside it says what
+  the squares mean. A week belongs to the quarter of its Thursday, the way
+  it belongs to a year, so its row is in one quarter only.
+- A card whose date was typed with a wrong year, `1026`, cannot stand on any
+  calendar; it is named beside the counts, **dated outside the calendar**,
+  with a link to put the date right.
+
+The trades of a square are the same figures as everywhere: green won, red
+lost, amber break-even, blue what was still in the market when the day or
+the week ended. A weekly card brought in from before the journal held those
+trades has nothing to count and shows the number written on it.
 
 ## On every page
 

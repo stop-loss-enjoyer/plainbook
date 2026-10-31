@@ -1080,4 +1080,4 @@ def week(date):
     week that straddles New Year belongs wholly to the year ISO gives it.
     """
     year, number, _ = date.isocalendar()
-    return f"{year}-W{number:02d}"
+    return f"{year:04d}-W{number:02d}"

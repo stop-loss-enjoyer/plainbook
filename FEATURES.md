@@ -120,7 +120,11 @@ top or marked outdated and folded away.
 Daily Report Card, the weekly card a Weekly Report Card: process grade,
 opportunity quality, focus, what went well, errors, the best trade, the
 trades assessment with the mark of every trade next to its result. The PnL
-and the counts come from the trades and stay editable.
+and the counts come from the trades and stay editable. The tab is a calendar
+of a quarter on one screen: a square a day with its card on it and the
+whole card under the pointer, a dashed square where a trade was entered and
+no card written, the weekly card at the end of each row, the year and four
+quarter buttons above.
 
 **Statistics**, any cut of the history. A cut by account,
 pair, style, direction, result, period, and the page opens on what

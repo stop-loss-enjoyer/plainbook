@@ -375,9 +375,10 @@ class Playbook:
 
 # --- the trades assessment -------------------------------------------------
 # Both report cards end with the same table: the trades of the period and the
-# mark each one earned, on numbered lines, as many as the paper has.
+# mark each one earned, on numbered lines. The form opens with this many, or
+# one for each trade of a busier period, and lines are added and removed there.
 
-ASSESSMENT_ROWS = 5
+ASSESSMENT_ROWS = 3
 
 
 @dataclass

@@ -489,9 +489,9 @@ textarea.lines{{font-family:{MONO};font-size:12px}}
  overflow:hidden;line-height:1.45;padding:6px 9px}}
 .rule-row textarea.short{{flex:0 0 300px;color:{INK};font-weight:500}}
 .rules .detail{{display:block;color:{DIM};font-size:12px;line-height:1.45;margin-top:2px}}
-.rule-row .x{{background:transparent;border:0;color:{DIM};cursor:pointer;
+.rule-row .x,table.assessment .x{{background:transparent;border:0;color:{DIM};cursor:pointer;
  font-size:17px;line-height:1;padding:6px 6px}}
-.rule-row .x:hover{{color:{BAD}}}
+.rule-row .x:hover,table.assessment .x:hover{{color:{BAD}}}
 .btn.small{{padding:3px 9px;font-size:11px;margin-top:4px}}
 /* the checklist in the trade form: a row per rule, the whole rule behind ? */
 .checklist h3{{margin-top:0}}
@@ -654,6 +654,54 @@ ul.errors li a:hover .when{{color:{ACCENT}}}
 form.inline{{display:inline-block;margin:0}}
 .row-actions{{display:inline-flex;gap:7px;align-items:center}}
 table.shelf td.report{{white-space:nowrap}}
+/* the cards tab: a calendar of a quarter, thirteen low rows of a week, a
+   square a day with its card written on it and the weekly card at the end
+   of the row; the whole text of a card is in its tip */
+.cal-nav{{display:flex;align-items:center;gap:10px;margin-bottom:10px}}
+.cal-nav .switch a,.cal-nav .switch .off{{padding:4px 14px;border-bottom:2px solid transparent}}
+.cal-nav .switch .off{{font-size:12px;color:{HINT};border-right:1px solid {AXIS}}}
+.cal-nav .switch .off:last-child{{border-right:none}}
+.cal-nav .switch a.now{{border-bottom-color:{ACCENT}}}
+.cal-nav .caption{{margin:0 0 0 auto;display:flex;align-items:center;gap:6px}}
+.cal-how{{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;
+ border:1px solid {AXIS};border-radius:50%;font-size:10px;color:{DIM};cursor:help}}
+/* the calendar takes the height of the window, whatever the window: the
+   page is a column as tall as the screen, and the rows share what the
+   header, a notice and the switches leave, so no window scrolls it */
+body:has(.cal-card) .wrap{{height:100vh;height:100dvh;display:flex;flex-direction:column;
+ padding-bottom:12px}}
+body:has(.cal-card) header{{flex:none}}
+.cal-card{{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}}
+.cal-card .cal-nav{{flex:none;flex-wrap:wrap}}
+.cal-card>.scroll{{flex:1;min-height:0;overflow:hidden}}
+.cal-card .calendar{{height:100%}}
+.calendar{{display:grid;gap:4px}}
+.cal-head{{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.07em;
+ color:{DIM};padding:0 2px 1px}}
+.cal-side{{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+ color:{INK2};padding-top:8px}}
+.cal-day,.cal-week{{display:flex;flex-direction:column;gap:2px;min-height:0;min-width:0;
+ overflow:hidden;padding:3px 8px;container-type:size;border:1px solid {GRID};border-radius:4px;color:{INK2}}}
+a.cal-day:hover,a.cal-week:hover{{border-color:{DIM};color:{INK2}}}
+.cal-day.written,.cal-week{{background:{RAISED};border-color:{AXIS}}}
+.cal-day.other{{opacity:.45}}
+.cal-day.missing,.cal-week.unwritten{{background:none;border:1px dashed {AXIS}}}
+.cal-day.later,.cal-week.later{{opacity:.35}}
+.cal-day.today{{border-color:{ACCENT}}}
+.cal-top{{display:flex;align-items:baseline;gap:8px;white-space:nowrap}}
+.cal-num{{font:600 12px/14px {MONO};color:{DIM}}}
+.written .cal-num,.cal-week .cal-num{{color:{INK}}}
+.cal-figs{{display:flex;gap:8px;font:12px/14px {MONO};overflow:hidden}}
+.cal-grade{{margin-left:auto;font:600 13px/14px {MONO};color:{INK}}}
+.cal-text{{font-size:12px;line-height:15px;color:{INK2};overflow:hidden;
+ display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;line-clamp:1}}
+/* the overview takes as many whole lines as its square has room for, and
+   none in a square too low for one: the tip has all of it */
+@container (max-height:30px){{.cal-text{{display:none}}}}
+@container (min-height:46px){{.cal-text{{-webkit-line-clamp:2;line-clamp:2}}}}
+@container (min-height:61px){{.cal-text{{-webkit-line-clamp:3;line-clamp:3}}}}
+@container (min-height:91px){{.cal-text{{-webkit-line-clamp:5;line-clamp:5}}}}
+.missing .cal-text,.unwritten .cal-text{{color:{DIM}}}
 table.shelf td.report .caption{{margin-right:8px}}
 table.shelf .btn.small{{margin-top:0}}
 table.shelf tr.quarter td:first-child{{font-weight:600}}

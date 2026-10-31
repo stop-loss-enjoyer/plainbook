@@ -297,6 +297,25 @@ async function run(p) {
   check((await p.url()).startsWith("/card/" + DAY), "the card saved: " + (await p.url()));
   check(await has(`document.querySelector('textarea[name=best]').value`, label),
     "the card came back with the trade in the best trade");
+  check(await p.evaluate(`[...document.querySelectorAll('select.pick option[class]')].some(o => o.textContent.includes(' · ') && o.className)`),
+    "the picker says how each closed trade ended, in its colour");
+  // lines of the assessment are added and taken away on the form
+  const LINES = `document.querySelectorAll('table.assessment tbody tr').length`;
+  const lines = await p.evaluate(LINES);
+  await p.evaluate(`document.querySelector('.add-line').click()`);
+  check(await p.evaluate(LINES) === lines + 1, "+ line adds a line to the assessment");
+  check(await p.evaluate(`document.activeElement.name === 'assess_trade' && document.activeElement.value === '' && document.activeElement.closest('tr').querySelector('.n').textContent === '${lines + 1}.'`),
+    "the new line is empty, numbered and has the cursor");
+  await p.evaluate(`document.querySelector('table.assessment tbody tr:first-child .x').click()`);
+  check(await p.evaluate(LINES) === lines
+        && await p.evaluate(`document.querySelector('table.assessment tbody tr:first-child .n').textContent`) === "1.",
+    "a line is removed and the rest renumbered");
+  check(await p.evaluate(`document.activeElement.name === 'assess_trade'`),
+    "and the cursor stays in the table");
+  // a line added or taken away is a change to save: the card is saved, or
+  // leaving it would rightly ask first
+  await p.submit();
+  check((await p.url()).startsWith("/card/" + DAY), "the card saved with its lines");
 
   // ---- the Download button of a preview, the one place a page fetches a
   // file for itself. The anchor click is caught, so a checking run saves
@@ -391,6 +410,22 @@ async function run(p) {
     return scrollY > 0 && r.top >= document.querySelector('header').getBoundingClientRect().bottom && r.top < innerHeight; })()`),
     "and the page stands on it, below the wrapped header");
   check(await p.evaluate(`document.querySelector('#past-stop output').textContent`) === "-1.5 R", "with the new edge");
+  await send("Emulation.clearDeviceMetricsOverride");
+
+  // ---- the Cards tab is one screen in any window: the calendar of the
+  // quarter takes the height there is, the page never scrolls, and no square
+  // shows a line cut through
+  for (const [width, height] of [[800, 600], [1280, 720], [1440, 900], [1920, 1080], [3840, 2160]]) {
+    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+    await p.goto(B + "/cards");
+    check(await p.evaluate(`(() => {
+      const d = document.documentElement;
+      const cells = [...document.querySelectorAll('.cal-day, .cal-week')];
+      const cut = cells.some(c => [...c.children].some(k => getComputedStyle(k).display !== 'none'
+        && k.getBoundingClientRect().bottom > c.getBoundingClientRect().bottom - 1));
+      return cells.length > 0 && d.scrollHeight <= innerHeight && d.scrollWidth <= innerWidth && !cut;
+    })()`), `the Cards tab fits ${width}x${height} without a scroll or a cut line`);
+  }
   await send("Emulation.clearDeviceMetricsOverride");
 
   // ---- the plan menu follows the date of the entry: today it offers the

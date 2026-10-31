@@ -193,7 +193,9 @@ where every trade of the day gets its mark next to its result, the result
 offered by the journal. The PnL of the day is filled in from the trades you
 closed and stays yours to change. The weekly card does the same for a
 trading week, with the progress on the focus and the key lesson of the week.
-**+ DRC** and **+ WRC** in the header open them.
+**+ DRC** and **+ WRC** in the header open them, and the **Cards** tab lays
+them out as a calendar of a quarter on one screen: every day with its card,
+the days you traded without one, and the weekly card at the end of its row.
 
 ## Statistics
 

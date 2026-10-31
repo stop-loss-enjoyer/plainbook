@@ -2,6 +2,27 @@
 
 What changed and why. Newest first.
 
+## v1.11.0, 31.10.2026
+
+The report cards at a glance. The Cards tab is a calendar of a quarter on
+one screen, with every day's card on its square and the days you traded
+without one marked, and a card's trade lists say how each trade ended.
+
+- The **pick a trade** list over the best trade of a daily or weekly card
+  says how each trade ended, `USDCHF short, 29.10 · Win +2.76 R`, and
+  colours the line by it: green won, red lost, amber break-even, blue still
+  open. The text it puts into the field is the name alone, as before.
+- The **trades assessment** of a card opens with three lines, or one for
+  every trade of the period when there were more, and **+ line** adds
+  another, **×** takes one away. It had five fixed lines, and a week with a
+  sixth trade could not grade it.
+- The **Cards** tab is a calendar of a quarter instead of two long tables,
+  one screen in any window. A day with a card shows its PnL, trades, grade
+  and the start of the overview, and the whole card under the pointer; a
+  dashed square is a day you entered a trade and wrote no card for; the
+  weekly card ends the row of its week. A click opens a card or starts one,
+  and the year and four quarter buttons above choose the quarter.
+
 ## v1.10.0, 30.10.2026
 
 Notes and plans you can read without opening them. A note tile shows its

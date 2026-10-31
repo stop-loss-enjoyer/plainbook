@@ -24,6 +24,7 @@ import math
 import os
 import re
 import shutil
+import textwrap
 import subprocess
 import sys
 import threading
@@ -6106,6 +6107,33 @@ document.querySelectorAll('table.assessment').forEach(table => {
       result.value = hit; result.dataset.auto = '1';
     }
   });
+  // lines come and go on the form; an empty one is dropped when it is saved
+  const body = table.tBodies[0];
+  const renumber = () => [...body.rows].forEach((row, n) => {
+    row.querySelector('.n').textContent = (n + 1) + '.';
+  });
+  const clear = row => row.querySelectorAll('input').forEach(input => {
+    input.value = ''; delete input.dataset.auto;
+  });
+  table.addEventListener('click', e => {
+    const x = e.target.closest('.x');
+    if (!x) return;
+    const row = x.closest('tr');
+    const next = row.nextElementSibling || row.previousElementSibling || row;
+    if (body.rows.length === 1) clear(row); else row.remove();
+    renumber();
+    window.form_changed(table);
+    next.querySelector('[name=assess_trade]').focus();
+  });
+  const add = table.nextElementSibling;
+  if (add && add.classList.contains('add-line')) add.addEventListener('click', () => {
+    const row = body.rows[body.rows.length - 1].cloneNode(true);
+    clear(row);
+    body.appendChild(row);
+    renumber();
+    window.form_changed(table);
+    row.querySelector('[name=assess_trade]').focus();
+  });
 });
 """
 
@@ -6129,17 +6157,29 @@ document.querySelectorAll('.pick').forEach(pick => {
 """
 
 
-def trade_picker(field, hint, labels):
+def trade_picker(j, field, hint, closed, running=(), period=None):
     """The list that offers the trades of the period to a text box.
 
     A drop-down and not a suggestion field: the trades of a week are few, and
     a list you can open is a list you can see. It writes nothing of its own,
     what you pick is inserted into the box named by `field` at the cursor and
-    the picker goes back to empty, so the text stays one text."""
-    options = "".join(f'<option value="{esc(label)}">{esc(label)}</option>'
-                      for label in labels)
+    the picker goes back to empty, so the text stays one text.
+
+    Each line says how its trade ended and wears the colour of it, the way the
+    front page does, so the best trade is chosen by the result and not by
+    memory. What goes into the box is the label alone: the result changes
+    while a trade runs, the text should not."""
+    labels = trade_labels(closed, running)
+    options = ""
+    for t in list(closed) + list(running):
+        label = labels[t.id]
+        live = t.is_open or not t.closed
+        # an open trade's label already says it is open
+        shown = label if live else f"{label} · {outcome_of(j, t, period)}"
+        options += (f'<option class="{"live" if live else result_class(t)}" '
+                    f'value="{esc(label)}">{esc(shown)}</option>')
     return (f'<select class="pick" data-into="{field}" '
-            f'style="width:100%;max-width:300px;margin-bottom:8px">'
+            f'style="width:100%;max-width:360px;margin-bottom:8px">'
             f'<option value="">{esc(hint)}</option>{options}</select>'
             f'<script>{PICK_SCRIPT}</script>')
 
@@ -6159,9 +6199,12 @@ def assessment_rows(j, k, closed, running=(), period=None):
     run all week can be graded in the week it was run. Its line says "open"
     while it is open and says what it made once it closes, because the line
     keeps the trade and not the answer."""
-    listed = list(k.assessment) + [Graded() for _ in range(ASSESSMENT_ROWS)]
     known = outcomes(j, closed, running, period)
     labels = trade_labels(closed, running)
+    # a line for every trade of the period, however busy it was, and never
+    # fewer than the few a quiet day needs; more are added on the form
+    rows = max(ASSESSMENT_ROWS, len(labels), len(k.assessment))
+    listed = list(k.assessment) + [Graded() for _ in range(rows)]
     ids = {label: tid for tid, label in labels.items()}
     live = results_by_id(j, k.assessment, period)
     options = "".join(f'<option value="{esc(label)}">' for label in labels.values())
@@ -6171,22 +6214,24 @@ def assessment_rows(j, k, closed, running=(), period=None):
         return (row.result or live.get(row.id) or known.get(text)
                 or known.get(text.upper()) or "")
     body = "".join(
-        f'<tr><td class="muted">{n}.</td>'
+        f'<tr><td class="muted n">{n}.</td>'
         f'<td><input type="text" name="assess_trade" list="assesstrades" '
         f'autocomplete="off" style="width:100%" value="{esc(row.trade)}">'
         f'<input type="hidden" name="assess_id" value="{esc(row.id)}"></td>'
         f'<td><input type="text" name="assess_grade" list="grades" '
         f'autocomplete="off" style="width:90px" value="{esc(row.grade)}"></td>'
         f'<td><input type="text" name="assess_result" '
-        f'autocomplete="off" style="width:100%" value="{esc(result_of(row))}"></td></tr>'
-        for n, row in enumerate(listed[:max(ASSESSMENT_ROWS, len(k.assessment))], 1))
+        f'autocomplete="off" style="width:100%" value="{esc(result_of(row))}"></td>'
+        f'<td><button type="button" class="x" title="remove the line">&times;</button></td></tr>'
+        for n, row in enumerate(listed[:rows], 1))
     return (f'<h3>trades assessment</h3>'
             f'<datalist id="assesstrades">{options}</datalist>'
             f'<table class="assessment" data-known="{esc(json.dumps(known))}" '
             f'data-ids="{esc(json.dumps(ids))}">'
             f'<thead><tr><th style="width:24px"></th><th>trade</th>'
             f'<th style="width:110px">grade</th><th style="width:150px">result</th>'
-            f'</tr></thead><tbody>{body}</tbody></table>'
+            f'<th style="width:28px"></th></tr></thead><tbody>{body}</tbody></table>'
+            f'<button type="button" class="btn small add-line">+ line</button>'
             f'<script>{ASSESSMENT_SCRIPT}</script>')
 
 
@@ -6259,22 +6304,31 @@ def breakdown_words(j, closed, running=()):
                      for n, cls, word in counted if n)
 
 
-def cards_page():
-    """Both report cards, the days over the weeks: two tables on one tab.
+def cards_page(q=None):
+    """Both report cards on one tab, as a calendar of a quarter: thirteen weeks
+    on one screen, a square a day with its daily card written on it, and the
+    weekly card at the end of the row of its week.
 
-    They are one kind of record kept in two rhythms, and they sit in one folder,
-    so the tab that lists them shows them one under the other."""
+    Where a card stands and where one is missing is seen before anything is
+    read, the whole text of a card is under the pointer, and the tab is one
+    screen however many cards there are: the year and the four quarters above
+    choose which."""
     problems = []
     j = journal()
     cards = store.all_cards(ROOT, problems)
     weeks = store.all_weeks(ROOT, problems)
 
-    # One pass over the journal for every row, where each row used to scan it
+    # One pass over the journal for every square, where each used to scan it
     # three times: the trades each day and week closed, in the order of the
     # journal, and the two sorted lists that count the trades in the market
-    # at an hour (opened before it, minus closed before it).
+    # at an hour (opened before it, minus closed before it). A day asks for
+    # a card when a trade was entered on it, the way the reports count the
+    # days with cards; a position that closed on its own asks for none.
     by_day, by_week = defaultdict(list), defaultdict(list)
+    entered = set()
     for t in j.trades:
+        if t.opened:
+            entered.add(t.opened.date())
         if not t.is_open and t.closed:
             by_day[t.closed.date()].append(t)
             by_week[stats.week(t.closed)].append(t)
@@ -6285,63 +6339,164 @@ def cards_page():
     def running_count(until):
         return bisect_left(opened, until) - bisect_left(closed_at, until)
 
-    def day_figures(k):
-        return trades_breakdown(j, by_day.get(k.day.date(), ()),
-                                running_count(day_period(k.day)[1])) or "-"
+    now = j.now()
+    today = now.date()
+    running = stats.quarter(today)
+    asked = (q or {}).get("quarter", [""])[0]
+    # a quarter the calendar can turn both ways from; anything else, a typo
+    # or a year no journal holds, opens the running one
+    if not (re.fullmatch(r"(19\d\d|[2-8]\d\d\d)-Q[1-4]", asked)):
+        asked = running
+    start = reports.parse_period(asked)[0].date()
+    after = (start + timedelta(days=100)).replace(day=1)
+    by_date = {k.day.date(): k for k in cards}
+    week_cards = {k.week: k for k in weeks}
 
-    def week_figures(k):
-        counted = trades_breakdown(j, by_week.get(k.week, ()),
-                                   running_count(week_period(k.week)[1]))
-        # a card from before the journal held those trades has nothing to
-        # break down, and keeps the count it was written with
-        return counted or ("-" if k.trades is None else str(k.trades))
+    # the rows are the weeks whose Thursday falls in the quarter, so that a
+    # week stands in one quarter only, the way ISO gives a week its year
+    monday = start - timedelta(days=start.weekday())
+    if (monday + timedelta(days=3)) < start:
+        monday += timedelta(days=7)
+    mondays = []
+    while monday + timedelta(days=3) < after:
+        mondays.append(monday)
+        monday += timedelta(days=7)
+    # Saturday and Sunday get their columns when a card was written or a
+    # trade entered on one: a crypto account trades them
+    seen = {mondays[0] + timedelta(days=n) for n in range(len(mondays) * 7)}
+    weekend = any(d.weekday() > 4 for d in (set(by_date) | entered) & seen)
+    columns = 7 if weekend else 5
 
-    now = journal().now()
-    today = now.strftime("%Y-%m-%d")
-    right = (f'<a class="btn primary" href="/card/{today}" title="the daily '
+    def tip_of(when, k, text):
+        said = [when]
+        if k.grade:
+            said.append(f"process {k.grade}")
+        if k.quality:
+            said.append(f"opportunity {k.quality}")
+        lines = [" · ".join(said)]
+        if k.pnl is not None:
+            lines.append(f"{H.money(k.pnl, signed=True)} {H.sign(j.currency())}")
+        text = (text or "").strip()
+        if text:
+            lines += textwrap.wrap(text[:600], 64)
+        return H.tip("\n".join(lines))
+
+    def figures(pnl, counted):
+        money = (f'<span class="{sum_class(pnl or 0)}">{H.money(pnl, signed=True)}</span>'
+                 if pnl is not None else "")
+        return money + counted
+
+    def day_cell(d):
+        k = by_date.get(d)
+        cls = "cal-day" + ("" if start <= d < after else " other") + (
+            " today" if d == today else "")
+        num = f"{d.day}" if d.day > 1 else f"1 {d:%b}"
+        if k:
+            counted = trades_breakdown(j, by_day.get(d, ()),
+                                       running_count(day_period(k.day)[1]))
+            text = k.overview or k.focus
+            return (f'<a class="{cls} written" href="/card/{U(k.id)}"'
+                    f'{tip_of(f"{d:%a %d.%m}", k, text)}>'
+                    f'<span class="cal-top"><span class="cal-num">{num}</span>'
+                    f'<span class="cal-figs">{figures(k.pnl, counted)}</span>'
+                    f'<span class="cal-grade">{esc(k.grade)}</span></span>'
+                    f'<span class="cal-text">{esc(first_line(text, 160))}</span></a>')
+        if d > today:
+            return (f'<span class="{cls} later"><span class="cal-top">'
+                    f'<span class="cal-num">{num}</span></span></span>')
+        # a day traded and not reviewed says so; any past day opens its card
+        missing = d in entered
+        return (f'<a class="{cls}{" missing" if missing else ""}" href="/card/{d:%Y-%m-%d}">'
+                f'<span class="cal-top"><span class="cal-num">{num}</span></span>'
+                + ('<span class="cal-text">traded, no card</span>' if missing else "")
+                + '</a>')
+
+    def week_cell(monday):
+        key = stats.week(monday)
+        k = week_cards.get(key)
+        num = f'<span class="cal-num">W{int(key.split("-W")[1])}</span>'
+        if k:
+            counted = trades_breakdown(j, by_week.get(key, ()),
+                                       running_count(week_period(key)[1]))
+            if not counted and k.trades is not None:
+                # a card from before the journal held those trades keeps the
+                # count it was written with
+                counted = f'<span>{k.trades}</span>'
+            text = k.lesson or k.focus
+            return (f'<a class="cal-week" href="/week/{U(key)}"'
+                    f'{tip_of(f"Week {k.number}", k, text)}>'
+                    f'<span class="cal-top">{num}'
+                    f'<span class="cal-figs">{figures(k.pnl, counted)}</span>'
+                    f'<span class="cal-grade">{esc(k.grade)}</span></span>'
+                    f'<span class="cal-text">{esc(first_line(text, 160))}</span></a>')
+        if monday > today:
+            return (f'<span class="cal-week unwritten later"><span class="cal-top">'
+                    f'{num}</span></span>')
+        return (f'<a class="cal-week unwritten" href="/week/{U(key)}">'
+                f'<span class="cal-top">{num}</span>'
+                f'<span class="cal-text">+ weekly card</span></a>')
+
+    names = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")[:columns]
+    grid = '<span class="cal-head"></span>'
+    grid += "".join(f'<span class="cal-head">{n}</span>' for n in names)
+    grid += '<span class="cal-head">week</span>'
+    month = None
+    for monday in mondays:
+        # the month is named in the margin at the first week that runs into it
+        thursday = monday + timedelta(days=3)
+        label = "" if thursday.month == month else f"{thursday:%b}"
+        month = thursday.month
+        grid += f'<span class="cal-side">{label}</span>'
+        grid += "".join(day_cell(monday + timedelta(days=n)) for n in range(columns))
+        grid += week_cell(monday)
+    daily = sum(1 for d in by_date if start <= d < after)
+    weekly = sum(1 for m in mondays if stats.week(m) in week_cards)
+    # a card dated where no quarter of the calendar reaches, a year typed
+    # wrong, is still named, or it could not be found again
+    lost = [k for k in cards if not 1900 <= k.day.year <= 8999]
+    held = [k.day.date() for k in cards if k not in lost]
+    held += [k.monday.date() for k in weeks] + list(entered)
+    later = max([today] + held)
+
+    # the years the journal holds a card or an entry in, then the four
+    # quarters of the one shown: the quarter shown filled, the running one
+    # underlined, the ones after anything written shut
+    last = stats.quarter(later)
+
+    def go(key, label, current, now):
+        if key > last:
+            return f'<span class="off">{label}</span>'
+        cls = " ".join(name for name, on in (("current", current), ("now", now)) if on)
+        attr = f' class="{cls}"' if cls else ""
+        return f'<a{attr} href="/cards?quarter={key}">{label}</a>'
+    # a year opens on the quarter of the same number, or on the last one
+    # anything is written in
+    years = "".join(go(min(f"{y}-Q{asked[-1]}", last), str(y),
+                       y == start.year, y == today.year)
+                    for y in range(min([today] + held).year, later.year + 1))
+    quarters = "".join(go(f"{start.year}-Q{n}", f"Q{n}", f"{start.year}-Q{n}" == asked,
+                          f"{start.year}-Q{n}" == running) for n in range(1, 5))
+    how = ("A square a day: the daily card with its PnL, trades,\n"
+           "process grade and the first line of the overview;\n"
+           "point at it for the whole card. A dashed square is a day\n"
+           "you entered a trade and wrote no card for. The weekly\n"
+           "card ends the row of its week. A click opens a card,\n"
+           "or starts one on a day that has none.")
+    nav = (f'<div class="switch years">{years}</div>'
+           f'<div class="switch">{quarters}</div>'
+           f'<span class="caption">{plural(daily, "daily card")} · '
+           f'{plural(weekly, "weekly card")}'
+           + ("" if not lost else ' · dated outside the calendar: ' + ", ".join(
+               f'<a href="/card/{U(k.id)}">{k.day:%d.%m.%Y}</a>' for k in lost))
+           + f'<span class="cal-how"{H.tip(how)}>?</span></span>')
+    right = (f'<a class="btn primary" href="/card/{today:%Y-%m-%d}" title="the daily '
              f'report card: the day reviewed">+ DRC</a>'
              f'<a class="btn" href="/week/{stats.week(now)}" '
              f'title="the weekly report card: the week reviewed">+ WRC</a>')
-    sign = H.sign(journal().currency())
-    if cards:
-        rows = "".join(
-            "<tr>" + "".join(link_cell(f"/card/{U(k.id)}", inner, cls) for inner, cls in
-                             [(f"{k.day:%d.%m.%Y}", ""),
-                              (esc(k.grade) or "-", ""),
-                              (H.money(k.pnl, signed=True) if k.pnl is not None
-                               else "-", f"num {sum_class(k.pnl or 0)}"),
-                              (day_figures(k), "num"),
-                              (esc(k.quality) or "-", ""),
-                              (esc(first_line(k.overview or k.focus)), "muted")])
-            + "</tr>" for k in cards)
-        daily = (f'<table><thead><tr><th>date</th><th>process</th>'
-                 f'<th class="num">PnL {sign}</th><th class="num">trades</th>'
-                 f'<th>opportunity</th>'
-                 f'<th>overview</th></tr></thead><tbody>{rows}</tbody></table>')
-    else:
-        daily = ('<p class="muted">No daily cards yet. <b>+ DRC</b>, the daily '
-                 'report card, opens today&rsquo;s; <b>+ WRC</b> the week&rsquo;s.</p>')
-    if weeks:
-        rows = "".join(
-            "<tr>" + "".join(link_cell(f"/week/{U(k.id)}", inner, cls) for inner, cls in
-                             [(f'{k.number}<span class="muted" '
-                               f'style="margin-left:8px">{week_dates(k)}</span>', ""),
-                              (esc(k.grade) or "-", ""),
-                              (H.money(k.pnl, signed=True) if k.pnl is not None
-                               else "-", f"num {sum_class(k.pnl or 0)}"),
-                              (week_figures(k), "num"),
-                              (esc(k.quality) or "-", ""),
-                              (esc(first_line(k.lesson or k.focus)), "muted")])
-            + "</tr>" for k in weeks)
-        weekly = (f'<table><thead><tr><th>week</th><th>process</th>'
-                  f'<th class="num">PnL {sign}</th><th class="num">trades</th>'
-                  f'<th>opportunity</th><th>key lesson</th>'
-                  f'</tr></thead><tbody>{rows}</tbody></table>')
-    else:
-        weekly = ('<p class="muted">No weekly cards yet. <b>+ WRC</b> opens '
-                  'the week that is running.</p>')
-    body = (f'<div class="card"><h2>Daily report cards</h2>{daily}</div>'
-            f'<div class="card"><h2>Weekly report cards</h2>{weekly}</div>')
+    body = (f'<div class="card cal-card"><div class="cal-nav">{nav}</div>'
+            f'<div class="scroll"><div class="calendar" style="grid-template-columns:'
+            f'34px repeat({columns},minmax(0,1fr)) minmax(0,1.3fr);grid-template-rows:'
+            f'auto repeat({len(mondays)},minmax(0,1fr))">{grid}</div></div></div>')
     return page("Cards", body, "cards", right, problems)
 
 
@@ -6367,8 +6522,8 @@ def card_page(day, report=""):
 
     def section(name):
         # the best trade of the day names a trade: the day's are offered to it
-        pick = (trade_picker(name, "pick a trade of the day",
-                             trade_labels(closed, running).values())
+        pick = (trade_picker(j, name, "pick a trade of the day",
+                             closed, running, period)
                 if name == "best" and (closed or running) else "")
         return (f'<h3>{esc(labels[name])}</h3>{pick}'
                 f'<textarea name="{name}" style="min-height:'
@@ -6494,8 +6649,8 @@ def week_page(key, report=""):
     sections = ""
     for name, _, label in WEEK_SECTIONS:
         # the best trade of the week names a trade: the week's are offered to it
-        pick = (trade_picker(name, "pick a trade of the week",
-                             trade_labels(closed, running).values())
+        pick = (trade_picker(j, name, "pick a trade of the week",
+                             closed, running, period)
                 if name == "best" and (closed or running) else "")
         sections += (f'<h3>{esc(label)}</h3>{pick}'
                      f'<textarea name="{name}" style="min-height:'
@@ -8676,7 +8831,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/reports":
             return self._send(reports_page())
         if path == "/cards":
-            return self._send(cards_page())
+            return self._send(cards_page(q))
         if len(parts) == 2 and parts[0] == "card":
             try:
                 day = day_from_url(parts[1])

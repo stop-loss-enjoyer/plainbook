@@ -523,8 +523,8 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(k.overview, "an even day")
         _, html = self.get("/card/2026-08-29")
         self.assertIn("waited for the retest", html)   # the form came back filled
-        _, html = self.get("/cards")
-        self.assertIn("29.08.2026", html)
+        _, html = self.get("/cards?quarter=2026-Q3")
+        self.assertIn('href="/card/2026-08-29"', html)
         self.assertIn("an even day", html)
 
     def test_21a_a_daily_card_carries_a_trades_assessment(self):
@@ -570,9 +570,9 @@ class ServerCase(unittest.TestCase):
         # empty fields have to stay empty, not become "[]"
         self.assertRegex(html, r'name="quality"[^>]*value=""')
         self.assertRegex(html, r'name="pnl"[^>]*value=""')
-        code, html = self.get("/cards")
+        code, html = self.get("/cards?quarter=2026-Q3")
         self.assertEqual(code, 200)
-        self.assertIn("26.08.2026", html)
+        self.assertIn('href="/card/2026-08-26"', html)
 
     def test_24_a_broken_card_date_does_not_break_the_server(self):
         with self.assertRaises(urllib.error.HTTPError) as e:
@@ -2444,8 +2444,8 @@ class ServerCase(unittest.TestCase):
         _, html = self.get("/week/2026-W35")
         self.assertIn("waited for the retest", html)   # the form came back filled
         self.assertIn('value="XAU short"', html)
-        _, html = self.get("/cards")
-        self.assertIn("24.08 - 30.08.2026", html)
+        _, html = self.get("/cards?quarter=2026-Q3")
+        self.assertIn('<a class="cal-week" href="/week/2026-W35"', html)
         self.assertIn("the plan is written before the open", html)
 
     # --- the word the journal says after a form ---
@@ -2579,19 +2579,95 @@ class ServerCase(unittest.TestCase):
         self.assertIn("one", k.updates)
 
     def test_62a_both_cards_are_listed_on_the_cards_tab(self):
-        """One tab, one folder, two tables: the days and the weeks apart."""
-        _, html = self.get("/cards")
-        self.assertIn("Daily report cards", html)
-        self.assertIn("Weekly report cards", html)
+        """One tab, one folder: a quarter as a calendar, the weekly card at the
+        end of the row of its week."""
+        _, html = self.get("/cards?quarter=2026-Q3")
+        self.assertIn('href="/cards?quarter=2026-Q3">Q3</a>', html)
         self.assertIn('href="/card/', html)
-        self.assertIn('href="/week/2026-W35"', html)
-        # a row is opened by clicking anywhere on it
-        self.assertIn('<td class="cell"><a href="/week/2026-W35"', html)
+        # a card is opened by clicking anywhere on its square
+        self.assertIn('<a class="cal-week" href="/week/2026-W35"', html)
         # and the header of the journal offers both cards by their names
         _, home = self.get("/")
         self.assertIn("+ DRC", home)
         self.assertIn("+ WRC", home)
         self.assertNotIn("+ Card", home)
+
+    def test_62ab_the_cards_tab_is_a_calendar_of_a_quarter(self):
+        """A square a day with its card on it, a dashed square where a trade
+        was entered and no card written, the weekly card at the end of the
+        row, and one quarter at a time, turned by the arrows."""
+        S = self.S
+        j = S.journal()
+        have = set(os.listdir(os.path.join(self.root, "journal", "cards")))
+
+        def free(day):
+            return f"{day:%Y-%m-%d}.md" not in have
+        # a weekday a trade was entered on with no card, and another weekday
+        # of the same week with none either, to write one on
+        t, other = next((x, side) for x in j.trades if x.opened and free(x.opened)
+                        and x.opened.weekday() < 5
+                        for side in (x.opened.date() + timedelta(days=1),
+                                     x.opened.date() - timedelta(days=1))
+                        if free(side) and side.weekday() < 5)
+        d = t.opened.date()
+        self.post("/card/save", {"date": f"{other:%Y-%m-%d}", "previous": f"{other:%Y-%m-%d}",
+                                 "grade": "B", "quality": "A", "pnl": "-5",
+                                 "overview": "read on the tab"})
+        self.addCleanup(self.post, f"/card/{other:%Y-%m-%d}/delete", {})
+        quarter = stats.quarter(d)
+        _, html = self.get(f"/cards?quarter={quarter}")
+        square = re.search(rf'<a class="cal-day[^"]*" href="/card/{other:%Y-%m-%d}".*?</a>',
+                           html, re.S).group(0)
+        self.assertIn("written", square)
+        self.assertIn('<span class="cal-grade">B</span>', square)
+        self.assertIn('<span class="lose">', square)
+        self.assertIn("read on the tab", square)
+        # the whole card is under the pointer, the opportunity with it
+        self.assertIn("opportunity A", square)
+        self.assertRegex(html, rf'<a class="cal-day[^"]* missing" href="/card/{d:%Y-%m-%d}">')
+        # the row of the week ends with its weekly card, written or waiting
+        week = stats.week(t.opened)
+        row = html[html.index(f'href="/card/{d:%Y-%m-%d}"'):]
+        self.assertIn(f'href="/week/{week}"', row[:row.find('class="cal-side"')])
+        # four buttons choose the quarter of the year shown, the one shown
+        # filled, and the tab is that quarter alone
+        year, number = quarter[:4], quarter[-1]
+        self.assertRegex(html, rf'<a class="current[^"]*" href="/cards\?quarter={quarter}">Q{number}</a>')
+        for n in range(1, 5):
+            self.assertIn(f">Q{n}<", html)
+        self.assertNotIn(f'href="/card/{other + timedelta(days=120):%Y-%m-%d}"', html)
+        # no quarter asked for, or one that does not read, opens the running
+        # one: filled, and underlined as the running one; the quarters after
+        # anything written cannot be chosen
+        running = stats.quarter(j.now())
+        for ask in ("", "?quarter=2026-Q5", "?quarter=0001-Q1", "?quarter=9999-Q4"):
+            code, page = self.get(f"/cards{ask}")
+            self.assertEqual(code, 200, ask)
+            self.assertIn(f'<a class="current now" href="/cards?quarter={running}">'
+                          f'Q{running[-1]}</a>', page, ask)
+        if running[-1] != "4":
+            self.assertIn('<span class="off">Q4</span>', self.get("/cards")[1])
+        # a quarter of another year is shown with its year chosen above
+        _, html = self.get(f"/cards?quarter={quarter}")
+        self.assertRegex(html, rf'<div class="switch years">.*?class="current[^"]*"[^>]*>{year}</a>')
+
+    def test_62ac_the_calendar_shows_the_weekend_traded_and_the_card_mistyped(self):
+        """Saturday and Sunday open when a trade was entered on one, not
+        only when a card was written, and a card whose year was typed wrong
+        is still named on the tab, or it could not be found again."""
+        tid = self.open_trade(entry="2026-08-22T10:00", pair="BTCUSDT")
+        self.addCleanup(self.post, f"/trade/{urllib.parse.quote(tid)}/delete", {})
+        _, html = self.get("/cards?quarter=2026-Q3")
+        self.assertIn('<span class="cal-head">Sat</span>', html)
+        self.assertRegex(html, r'<a class="cal-day[^"]* missing" href="/card/2026-08-22">')
+        self.post("/card/save", {"date": "1026-10-30", "previous": "1026-10-30",
+                                 "grade": "C"})
+        self.addCleanup(self.post, "/card/1026-10-30/delete", {})
+        _, html = self.get("/cards")
+        self.assertIn('dated outside the calendar: <a href="/card/1026-10-30">30.10.1026</a>',
+                      html)
+        # and the week of such a year still has the key of a week
+        self.assertEqual(stats.week(datetime(26, 10, 30)), "0026-W44")
 
     def test_62b_the_two_cards_share_the_cards_folder(self):
         names = sorted(os.listdir(os.path.join(self.root, "journal", "cards")))
@@ -2721,6 +2797,25 @@ class ServerCase(unittest.TestCase):
         self.assertIn('name="assess_result"', html)
         # the same list is offered to the best trade, which is written by hand
         self.assertIn('class="pick" data-into="best"', html)
+        # each line of it says how the trade ended, in the colour of it, and
+        # still inserts the bare label
+        self.assertIn(f'<option class="{self.S.result_class(t)}" value="{label}">'
+                      f'{label} · {self.S.outcome_of(j, t, self.S.day_period(t.closed))}'
+                      f'</option>', html)
+        # a busy period gets a line for every trade, not the paper's five
+        many = [x for x in j.trades if not x.is_open and x.closed][:7]
+        self.assertEqual(len(many), 7)
+        card = self.S.Card(day=t.closed)
+        html = self.S.assessment_rows(j, card, many)
+        self.assertEqual(html.count('name="assess_trade"'), 7)
+        first = self.S.trade_labels(many)[many[0].id]
+        card.assessment = [self.S.Graded(trade=first, id=many[0].id),
+                           self.S.Graded(trade="XAU short")]
+        html = self.S.assessment_rows(j, card, many)
+        self.assertEqual(html.count('name="assess_trade"'), 7)
+        self.assertEqual(self.S.assessment_rows(j, self.S.Card(day=t.closed), many[:2])
+                         .count('name="assess_trade"'), 3)
+        _, html = self.get(f"/card/{day}")
         # and is not offered on a day the journal held no trade at all: the
         # list behind it would be empty
         self.assertNotIn('class="pick"', self.get("/card/2000-01-01")[1])
@@ -2854,10 +2949,10 @@ class ServerCase(unittest.TestCase):
         # week 29 held it and did not close it, so it is the blue one there,
         # and week 30, where it closed in the money, has it green
         def row(week, html):
-            return re.search(rf'href="/week/{week}".*?</tr>', html, re.S).group(0)
+            return re.search(rf'href="/week/{week}"[^>]*>.*?</a>', html, re.S).group(0)
         self.post("/week/save", {"week": "2026-W30", "previous": "2026-W30",
                                  "grade": "A", "focus": "let it run"})
-        _, html = self.get("/cards")
+        _, html = self.get("/cards?quarter=2026-Q3")
         self.assertIn('<span class="live">', row("2026-W29", html))
         self.assertNotIn('<span class="win">', row("2026-W29", html))
         self.assertIn('<span class="win">1</span>', row("2026-W30", html))
@@ -2870,10 +2965,10 @@ class ServerCase(unittest.TestCase):
         nothing to break down, and the number written on it stands."""
         self.post("/week/save", {"week": "2026-W20", "previous": "2026-W20",
                                  "grade": "C", "trades": "6", "focus": "imported"})
-        _, html = self.get("/cards")
-        row = re.search(r'href="/week/2026-W20".*?</tr>', html, re.S).group(0)
+        _, html = self.get("/cards?quarter=2026-Q2")
+        row = re.search(r'href="/week/2026-W20"[^>]*>.*?</a>', html, re.S).group(0)
         self.assertNotIn("breakdown", row)
-        self.assertIn(">6</a>", row)
+        self.assertIn("<span>6</span>", row)
         self.post("/week/2026-W20/delete", {})
 
     def test_76_the_reports_tab_is_a_shelf_of_every_period(self):
