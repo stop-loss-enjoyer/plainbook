@@ -183,7 +183,10 @@ class BackupFile(unittest.TestCase):
                 manifest["files"][bad] = {"sha256": "0" * 64, "size": 1}
                 entries[-1][1] = json.dumps(manifest).encode()
                 entries.insert(0, [bad, b"x"])
-            self.assertIn("may not", self.refused(rewrite(self.data, change)), bad)
+            said = self.refused(rewrite(self.data, change))
+            # zipfile on Windows reads a backslash in a name as a slash, so
+            # there the name no longer matches its manifest: refused all the same
+            self.assertTrue("may not" in said or "changed after" in said, (bad, said))
         self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "evil.md")))
 
     def test_a_newer_format(self):
@@ -315,16 +318,26 @@ class BackupFile(unittest.TestCase):
         self.assertEqual(found["trades"], 2)
 
     def test_a_name_another_system_cannot_keep_is_left_out_and_named(self):
+        for bad in ("journal/notes/note 12:30.txt", "journal/notes/a\\b.md",
+                    "journal/notes/caf\udce9.txt", "journal/.git"):
+            self.assertFalse(backup._writable_name(bad), bad)
+        self.assertTrue(backup._writable_name("journal/notes/café.txt"))
+        # on the disk, as far as this one lets such names be made: Windows
+        # takes a colon for a stream of another file, and macOS keeps one
+        # file for two names that differ in capitals
         notes = os.path.join(self.a, "journal", "notes")
         os.makedirs(notes, exist_ok=True)
         for name in ("note 12:30.txt", "Chart.png", "chart.png"):
             with open(os.path.join(notes, name), "wb") as f:
                 f.write(b"x")
+        there = os.listdir(notes)
         data = made(self.a)
         manifest = json.loads(zipfile.ZipFile(io.BytesIO(data)).read("manifest.json"))
-        self.assertIn("journal/notes/note 12:30.txt", manifest["skipped"])
-        self.assertEqual(sum(1 for n in manifest["skipped"]
-                             if n.lower() == "journal/notes/chart.png"), 1)
+        if "note 12:30.txt" in there:
+            self.assertIn("journal/notes/note 12:30.txt", manifest["skipped"])
+        if {"Chart.png", "chart.png"} <= set(there):
+            self.assertEqual(sum(1 for n in manifest["skipped"]
+                                 if n.lower() == "journal/notes/chart.png"), 1)
         backup.restore(self.b, self.take(data))         # and it restores
 
     def test_any_failure_of_the_zip_is_a_reason(self):
