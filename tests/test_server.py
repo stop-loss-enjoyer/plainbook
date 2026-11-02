@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import stats, store
-from plainbook.model import Account, Playbook, Setup, Rule, Trade
+from plainbook.model import Account, Playbook, Setup, Rule, Trade, Week
 
 # a one-pixel PNG, enough to exercise the whole screenshot path
 PNG = bytes.fromhex(
@@ -2686,7 +2686,10 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn("pennies", html)
         self.assertRegex(html, r'name="quality"[^>]*value=""')
-        self.assertRegex(html, r'name="trades"[^>]*value=""')
+        # an empty count is not a figure of the owner's: it follows the journal
+        k = store.load_week(self.root, "2026-W34")
+        self.assertIsNone(k.trades)
+        self.assertIsNone(k.pnl)
 
     def test_64_changing_the_week_moves_the_card(self):
         self.post("/week/save", {"week": "2026-W33", "previous": "2026-W34",
@@ -2950,17 +2953,18 @@ class ServerCase(unittest.TestCase):
         # and in week 30, where the money is, it is offered as a closed trade
         _, html = self.get("/week/2026-W30")
         self.assertIn('<option value="USDJPY long, 22.07">', html)
-        # the cards tab counts the trades of a week by colour and no words:
-        # week 29 held it and did not close it, so it is the blue one there,
-        # and week 30, where it closed in the money, has it green
+        # the weekly card counts the trades it entered: the swing taken in
+        # week 29 brings its money to week 29 once it closes, green there, and
+        # week 30, where it only closed, does not count it
         def row(week, html):
             return re.search(rf'href="/week/{week}"[^>]*>.*?</a>', html, re.S).group(0)
         self.post("/week/save", {"week": "2026-W30", "previous": "2026-W30",
                                  "grade": "A", "focus": "let it run"})
         _, html = self.get("/cards?quarter=2026-Q3")
-        self.assertIn('<span class="live">', row("2026-W29", html))
-        self.assertNotIn('<span class="win">', row("2026-W29", html))
-        self.assertIn('<span class="win">1</span>', row("2026-W30", html))
+        self.assertIn('<span class="win">1</span>', row("2026-W29", html))
+        self.assertIn('<span class="win">+200</span>', row("2026-W29", html))
+        self.assertNotIn('<span class="live">', row("2026-W29", html))
+        self.assertNotIn('<span class="win">', row("2026-W30", html))
         self.post(f"/week/2026-W30/delete", {})
         self.post(f"/week/2026-W29/delete", {})
         self.post(f"/trade/{q}/delete", {})
@@ -3162,7 +3166,9 @@ class ServerCase(unittest.TestCase):
         self.assertIn("&lt;b&gt;one&lt;/b&gt; setup", html)
         self.assertIn("line one\nline two", html)
         self.assertIn("7/10", html)
-        self.assertIn('<span class="lose">-80', html)
+        # the week holds a trade of the journal still open: its figure is the
+        # journal's, and the one typed stands beside it
+        self.assertIn("written on the card: -80", html)
         self.assertIn('<td class="lose">Lose</td>', html)
         self.assertNotIn("<textarea", html)
         _, html = self.get(f"/week/{key}/edit?report=2026-06")
@@ -3174,6 +3180,67 @@ class ServerCase(unittest.TestCase):
                                             "focus": "again", "report": "2026-06"})
         self.assertEqual(urllib.parse.urlparse(where).path, f"/week/{key}")
         self.assertIn("report=2026-06", where)
+
+    def test_75g_a_weekly_card_counts_the_trades_it_entered_as_they_close(self):
+        """A swing taken on Friday and closed on Monday: the card of the week
+        it was taken in gets its money once it closes, without being edited,
+        and the week it closed in does not count it."""
+        S = self.S
+        tid = self.open_trade(pair="AUDUSD", entry="2026-07-03T10:00")
+        q = urllib.parse.quote(tid)
+        self.addCleanup(self.post, f"/trade/{q}/delete", {})
+        for key in ("2026-W27", "2026-W28"):
+            self.addCleanup(self.post, f"/week/{key}/delete", {})
+        before = S.WeekFigures(S.journal(True), Week(week="2026-W27"))
+        self.assertIn(tid, [t.id for t in before.running])
+        # written while the swing runs, the figures left as the form offers them
+        _, html = self.get("/week/2026-W27")
+        offered = {name: re.search(rf'name="{name}"[^>]*value="([^"]*)"', html).group(1)
+                   for name in ("pnl", "trades")}
+        self.post("/week/save", {"week": "2026-W27", "previous": "2026-W27",
+                                 "grade": "B", "focus": "hold it", **offered})
+        k = store.load_week(self.root, "2026-W27")
+        self.assertIsNone(k.pnl)
+        self.assertIsNone(k.trades)
+        # it closes on Monday, in week 28
+        _, form = self.get(f"/close/{q}")
+        self.post(f"/close/{q}", {"token": self.form_token(form), "result": "Win",
+                                  "pnl": "150", "exit": "2026-07-06T12:00"})
+        j = S.journal(True)
+        after = S.WeekFigures(j, store.load_week(self.root, "2026-W27"))
+        self.assertAlmostEqual(after.pnl - (before.live_pnl or 0), 150)
+        self.assertIsNone(after.written_pnl)
+        _, html = self.get("/week/2026-W27")
+        self.assertIn(S.amount(j, after.pnl, signed=True), html)
+        self.assertNotIn(tid, [t.id for t in S.WeekFigures(j, Week(week="2026-W28")).done])
+        # a figure the owner types is kept and shown beside the journal's,
+        # which stays the figure of the card
+        self.post("/week/save", {"week": "2026-W27", "previous": "2026-W27",
+                                 "grade": "B", "pnl": "999", "focus": "hold it"})
+        self.assertEqual(store.load_week(self.root, "2026-W27").pnl, 999)
+        _, html = self.get("/week/2026-W27")
+        self.assertIn(f"written on the card: {S.amount(j, 999, signed=True)}", html)
+        self.assertIn(S.amount(j, after.pnl, signed=True), html)
+        _, html = self.get("/week/2026-W27/edit")
+        self.assertRegex(html, r'name="pnl"[^>]*value="999"')
+        # a form drawn with the journal's figure and saved after a trade
+        # moved it, or moved to another week, does not keep that figure
+        self.post("/week/save", {"week": "2026-W27", "previous": "2026-W27",
+                                 "pnl": "12.5", "pnl_journal": "12.5",
+                                 "trades": "7", "trades_journal": "7"})
+        k = store.load_week(self.root, "2026-W27")
+        self.assertIsNone(k.pnl)
+        self.assertIsNone(k.trades)
+        # a card saved by the form of before holds what its week closed as a
+        # figure; nobody typed it, and it follows the journal
+        closed = S.week_trades(j, "2026-W28")
+        store.save_week(self.root, Week(week="2026-W28", focus="old",
+                                        pnl=round(sum(t.pnl or 0 for t in closed), 2),
+                                        trades=len(closed)))
+        old = S.WeekFigures(j, store.load_week(self.root, "2026-W28"))
+        self.assertIsNone(old.written_pnl)
+        self.assertIsNone(old.written_trades)
+        self.assertEqual(old.pnl, old.live_pnl)
 
     def test_75f_a_card_that_does_not_read_is_named_in_both_views(self):
         path = os.path.join(self.root, "journal", "cards", "2026-06-12.md")

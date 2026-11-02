@@ -575,9 +575,9 @@ keeps its way back to that report in both.
   result says `open`, and it does not have to be corrected later: a line you
   picked from the list remembers which trade it is, so when the trade closes,
   in a fortnight if that is how long the swing runs, the line says what it
-  made and the day it closed on, `Win +2.40 R, 18.09`. The money of the card
-  is untouched by it: a period counts the trades it closed, and the R of that
-  swing belongs to the week it closed in. Type your own words into the result
+  made and the day it closed on, `Win +2.40 R, 18.09`. The money of the daily
+  card is untouched by it: a day counts the trades it closed. The weekly card
+  counts the trades it entered, see below. Type your own words into the result
   and they are kept as typed, exactly as before.
 - Then, laid out as on paper: *current focus (goal)*, *trading process*,
   *what I learned / did well today?*, *errors & improvement*, then the best
@@ -602,12 +602,18 @@ to be read, with **Edit** at the top right, the same way as the daily one.
 - **week**: the calendar week, Monday to Sunday, the same week the journal
   groups the trades by. Changing it moves the card, exactly as the date moves a
   daily one, and the journal refuses to write one week over another.
-- **PnL** and **trades** are filled in from the trades that week closed. Both
-  are editable, because the count you review by is yours. Under the
-  count stand the week's trades in figures and colour, no words: green won,
-  red lost, amber break-even, blue still in the market when the week ended.
-  That is why the field can say 3 while the colours say `2 / 1 / 1`: the field
-  counts what the week closed, the colours count everything it held.
+- **PnL** and **trades** come from the trades you entered that week, closed
+  then or later. A swing taken on Friday and closed on Monday belongs to the
+  card of the week it was taken in, the one that grades it, and its money
+  arrives there when it closes, with no editing: the card follows the journal
+  on every look. Under the count stand those trades in figures and colour, no
+  words: green won, red lost, amber break-even, blue still open. A figure you
+  type in the form instead is kept, and the card shows it under the
+  journal's as **written on the card**; it does not take the journal's
+  place. A card of a week the journal holds no trades of, one brought in
+  from before, shows the figures written on it. The Reports and Statistics
+  tabs still count a trade in the week it closed, so a week there and its
+  card can differ by such a swing.
 - **progress** under the focus says how far the thing you are working on has
   moved this week, out of 10, and every number carries the word for what it
   means, from `1 · not moved` to `10 · done, take a new focus`. A 10 is a focus
@@ -659,8 +665,9 @@ overview, a low one keeps the figures and leaves the text to the tip.
   with a link to put the date right.
 
 The trades of a square are the same figures as everywhere: green won, red
-lost, amber break-even, blue what was still in the market when the day or
-the week ended. A weekly card brought in from before the journal held those
+lost, amber break-even, blue what was still in the market when the day
+ended. A week counts the trades entered in it, and blue are the ones of
+them still open. A weekly card brought in from before the journal held those
 trades has nothing to count and shows the number written on it.
 
 ## On every page

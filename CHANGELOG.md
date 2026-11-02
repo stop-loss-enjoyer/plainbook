@@ -23,6 +23,14 @@ What changed and why. Newest first.
   playbook pages a picture is at most half the card and 480 pixels wide, the
   pictures of one block stand side by side, and a click opens the chart
   whole, as before. A narrow window still gives them the full width.
+- **A weekly card follows its trades.** Its PnL and trade count come from
+  the trades entered that week and are worked out again on every look, so a
+  swing still open when the card was written brings its result in when it
+  closes, the week after included, and the card agrees with its own
+  assessment. A figure typed in the form, or one an earlier card was saved
+  with before its trades closed, is kept and shown under the journal's as
+  "written on the card", without taking its place. Reports and Statistics
+  still count a trade in the week it closed.
 - Fixed: on the edit page of a playbook the screenshots of the review could
   not be taken out or pasted in. The cross and Ctrl+V work there now.
 

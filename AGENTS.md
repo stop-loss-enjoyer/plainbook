@@ -124,11 +124,14 @@ Break one of these and something breaks quietly, days later, in the owner's
 data. Each one is followed by what it prevents.
 
 1. **Nothing computable is stored.** Balance and R are worked out on every load.
-   The one exception is written down: a card keeps the PnL of its day, and a
-   weekly card its PnL and its count of trades, prefilled from the journal and
-   saved as the owner left them, because the figure a day is reviewed by is the
-   owner's. *Prevents:* a stored number drifting away from the history that
-   produced it.
+   The one exception is written down: a daily card keeps the PnL of its day,
+   prefilled from the journal and saved as the owner left them, because the
+   figure a day is reviewed by is the owner's. A weekly card does not: its PnL
+   and count are worked out on every look from the trades it entered
+   (`WeekFigures`), a figure the form offered and got back is not saved, and
+   one the owner typed is saved and shown beside the journal's, never in its
+   place. *Prevents:* a stored number drifting away from the history that
+   produced it, as a weekly card written while its swings ran once did.
 2. **A trade's `shots/` folder is rewritten whole** from what the form sent
    (`apply_shots`). Every form that edits a trade must therefore send back
    **all** of its screenshot zones, including the ones it does not display.
@@ -188,7 +191,9 @@ data. Each one is followed by what it prevents.
     existed.
 
 12. **A period is measured by the exit** in a report, in the period tile of
-    the front page and in the cards; the list of trades, its filters and the
+    the front page and in the daily cards; a weekly card counts the trades
+    entered in its week (the owner's decision: it grades them, so their money
+    goes there, closed that week or later); the list of trades, its filters and the
     totals of its groups go by the entry. The one figure of a report that is
     not money and not measured by the exit is `days_traded`, the days a card
     is written against: it counts entries, because a card is written on the

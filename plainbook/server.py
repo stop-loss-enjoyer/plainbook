@@ -6155,9 +6155,9 @@ def running_trades(j, until):
     and still in the market then.
 
     A swing entered on Monday and closed a fortnight later was in the market
-    all that week, and the week is reviewed with it in the market. It is not
-    in the money of the card: a period is measured by the exit, and the R of
-    that swing belongs to the week it closed in."""
+    all that week, and the week is reviewed with it in the market. The money
+    of a daily card is measured by the exit; a weekly card counts the trades
+    it entered, closed later or not, see `week_opened`."""
     return [t for t in j.trades if t.opened and t.opened < until
             and (t.is_open or not t.closed or t.closed >= until)]
 
@@ -6477,11 +6477,12 @@ def cards_page(q=None):
     # at an hour (opened before it, minus closed before it). A day asks for
     # a card when a trade was entered on it, the way the reports count the
     # days with cards; a position that closed on its own asks for none.
-    by_day, by_week = defaultdict(list), defaultdict(list)
+    by_day, by_week, by_entry = defaultdict(list), defaultdict(list), defaultdict(list)
     entered = set()
     for t in j.trades:
         if t.opened:
             entered.add(t.opened.date())
+            by_entry[stats.week(t.opened)].append(t)
         if not t.is_open and t.closed:
             by_day[t.closed.date()].append(t)
             by_week[stats.week(t.closed)].append(t)
@@ -6520,15 +6521,15 @@ def cards_page(q=None):
     weekend = any(d.weekday() > 4 for d in (set(by_date) | entered) & seen)
     columns = 7 if weekend else 5
 
-    def tip_of(when, k, text):
+    def tip_of(when, k, text, pnl):
         said = [when]
         if k.grade:
             said.append(f"process {k.grade}")
         if k.quality:
             said.append(f"opportunity {k.quality}")
         lines = [" · ".join(said)]
-        if k.pnl is not None:
-            lines.append(f"{H.money(k.pnl, signed=True)} {H.sign(j.currency())}")
+        if pnl is not None:
+            lines.append(f"{H.money(pnl, signed=True)} {H.sign(j.currency())}")
         text = (text or "").strip()
         if text:
             lines += textwrap.wrap(text[:600], 64)
@@ -6549,7 +6550,7 @@ def cards_page(q=None):
                                        running_count(day_period(k.day)[1]))
             text = k.overview or k.focus
             return (f'<a class="{cls} written" href="/card/{U(k.id)}"'
-                    f'{tip_of(f"{d:%a %d.%m}", k, text)}>'
+                    f'{tip_of(f"{d:%a %d.%m}", k, text, k.pnl)}>'
                     f'<span class="cal-top"><span class="cal-num">{num}</span>'
                     f'<span class="cal-figs">{figures(k.pnl, counted)}</span>'
                     f'<span class="cal-grade">{esc(k.grade)}</span></span>'
@@ -6569,17 +6570,17 @@ def cards_page(q=None):
         k = week_cards.get(key)
         num = f'<span class="cal-num">W{int(key.split("-W")[1])}</span>'
         if k:
-            counted = trades_breakdown(j, by_week.get(key, ()),
-                                       running_count(week_period(key)[1]))
-            if not counted and k.trades is not None:
+            f = WeekFigures(j, k, by_entry.get(key, []), by_week.get(key, []))
+            counted = trades_breakdown(j, f.done, f.running)
+            if not counted and f.trades is not None:
                 # a card from before the journal held those trades keeps the
                 # count it was written with
-                counted = f'<span>{k.trades}</span>'
+                counted = f'<span>{f.trades}</span>'
             text = k.lesson or k.focus
             return (f'<a class="cal-week" href="/week/{U(key)}"'
-                    f'{tip_of(f"Week {k.number}", k, text)}>'
+                    f'{tip_of(f"Week {k.number}", k, text, f.pnl)}>'
                     f'<span class="cal-top">{num}'
-                    f'<span class="cal-figs">{figures(k.pnl, counted)}</span>'
+                    f'<span class="cal-figs">{figures(f.pnl, counted)}</span>'
                     f'<span class="cal-grade">{esc(k.grade)}</span></span>'
                     f'<span class="cal-text">{esc(first_line(text, 160))}</span></a>')
         if monday > today:
@@ -6876,18 +6877,84 @@ def week_period(key):
     return monday, monday + timedelta(days=7)
 
 
+def week_opened(j, key):
+    """The trades entered in the week: the ones its card counts.
+
+    A swing taken on Friday and closed on Monday is graded on the card of the
+    week it was taken in, so its money goes there too, and the card agrees
+    with its own assessment. The reports and the statistics still count a
+    trade in the week it closed."""
+    start, end = week_period(key)
+    return [t for t in j.trades if t.opened and start <= t.opened < end]
+
+
+class WeekFigures:
+    """The PnL and the trade count a weekly card shows, worked out from the
+    journal on every look, so that a trade closing later moves them.
+
+    A figure written on the card that says otherwise is not lost and does not
+    take their place: it is shown beside them as `written`. A card of a week
+    the journal holds no trades of has only its written figures, and shows
+    those."""
+
+    def __init__(self, j, k, own=None, old=None):
+        # `own` and `old`, the trades the week entered and closed, are given
+        # by the calendar, which sorts the whole journal into weeks at once
+        own = week_opened(j, k.week) if own is None else own
+        self.done = [t for t in own if not t.is_open and t.closed]
+        self.running = [t for t in own if t.is_open or not t.closed]
+        self.live_pnl = (round(sum(t.pnl or 0.0 for t in self.done), 2)
+                         if self.done else None)
+        self.live_trades = len(own) or None
+        # the form of before filled in what the week closed and saved it as
+        # a figure; one still equal to that was never typed, and is not shown
+        old = week_trades(j, k.week) if old is None else old
+        old_pnl = round(sum(t.pnl or 0.0 for t in old), 2) if old else None
+        entered = bool(own)
+        self.pnl, self.written_pnl = self._pick(k.pnl, self.live_pnl, old_pnl, entered)
+        self.trades, self.written_trades = self._pick(k.trades, self.live_trades,
+                                                      len(old) or None, entered)
+
+    @staticmethod
+    def _pick(stored, live, before, entered):
+        """The figure shown, and the one written on the card beside it."""
+        if stored is None or same_figure(stored, live) or same_figure(stored, before):
+            return live, None
+        return (live, stored) if entered else (stored, None)
+
+
+def same_figure(a, b):
+    return a is not None and b is not None and abs(a - b) < 0.005
+
+
+def figure_sent(data, name):
+    """A figure the form was drawn with, sent back hidden; none if absent or
+    not a number, since it only ever decides what is not kept."""
+    try:
+        return float(one(data, name))
+    except (TypeError, ValueError):
+        return None
+
+
 def week_read(j, k, report=""):
     closed = week_trades(j, k.week)
     period = week_period(k.week)
     running = running_trades(j, period[1])
+    f = WeekFigures(j, k)
     facts = [read_field("week", f"Week {k.number}", week_dates(k))]
     if k.grade:
         facts.append(read_field("process grade", esc(k.grade)))
-    if k.pnl is not None:
-        facts.append(read_field(f"PnL, {H.sign(j.currency())}", read_pnl(j, k.pnl)))
-    if k.trades is not None:
-        facts.append(read_field("trades", str(k.trades),
-                                trades_breakdown(j, closed, running)))
+    if f.pnl is not None or f.written_pnl is not None:
+        facts.append(read_field(
+            f"PnL, {H.sign(j.currency())}",
+            read_pnl(j, f.pnl) if f.pnl is not None else "-",
+            f"written on the card: {amount(j, f.written_pnl, signed=True)}"
+            if f.written_pnl is not None else ""))
+    if f.trades is not None:
+        written = (f"<br>written on the card: {f.written_trades}"
+                   if f.written_trades is not None else "")
+        facts.append(read_field("trades", str(f.trades),
+                                trades_breakdown(j, f.done, f.running) + written))
     if k.quality:
         facts.append(read_field("opportunity quality", esc(k.quality)))
     if k.progress is not None:
@@ -6918,8 +6985,8 @@ def week_page(key, report="", edit=False):
     running = running_trades(j, period[1])
     is_new = k is None
     if is_new:
-        k = Week(week=key, pnl=sum(t.pnl or 0.0 for t in closed) if closed else None,
-                 trades=len(closed) if closed else None)
+        k = Week(week=key)
+    f = WeekFigures(j, k)
     options = "".join(f'<option value="{g}">' for g in GRADES)
     progress = "".join(
         f'<option value="{n}"{" selected" if k.progress == n else ""}>'
@@ -6945,7 +7012,7 @@ def week_page(key, report="", edit=False):
                          f'</div></div>')
     # the trades of the week under the field that counts them: won, lost and
     # the ones still in the market, by colour, the way the front page says it
-    counted = trades_breakdown(j, closed, running)
+    counted = trades_breakdown(j, f.done, f.running)
     delete = "" if is_new else (
         f'<span class="right"><button class="btn danger" '
         f'formaction="/week/{U(k.id)}/delete" formnovalidate '
@@ -6965,19 +7032,22 @@ def week_page(key, report="", edit=False):
  placeholder="A" style="width:110px"><datalist id="grades">{options}</datalist></div>
 <div class="field"><label>PnL, {H.sign(j.currency())}</label>
 <input type="text" name="pnl" inputmode="decimal" style="width:130px"
- value="{as_stored(k.pnl)}"></div>
+ value="{as_stored(f.pnl if f.written_pnl is None else f.written_pnl)}">
+<input type="hidden" name="pnl_journal" value="{as_stored(f.live_pnl)}"></div>
 <div class="field"><label>trades</label>
 <input type="number" name="trades" step="1" min="0" style="width:90px"
- value="{"" if k.trades is None else k.trades}">
+ value="{"" if (f.trades if f.written_trades is None else f.written_trades) is None
+         else (f.trades if f.written_trades is None else f.written_trades)}">
+<input type="hidden" name="trades_journal" value="{"" if f.live_trades is None else f.live_trades}">
 {counted and f'<p class="caption">{counted}</p>'}</div>
 <div class="field"><label>opportunity quality</label>
 <input type="text" name="quality" list="grades" value="{esc(k.quality)}"
  placeholder="B" style="width:150px"></div>
 </div>
-<p class="caption">{week_dates(k)}. The week closed {len(closed)}
-{"trade" if len(closed) == 1 else "trades"} for
-{amount(j, sum(t.pnl or 0.0 for t in closed), signed=True)}. The fields are
-yours to override.</p>
+<p class="caption">{week_dates(k)}. {plural(f.live_trades or 0, "trade")} entered
+this week{f", the closed ones for {amount(j, f.live_pnl, signed=True)}" if f.done else ""}.
+The card shows these, worked out again as the trades close; a figure you
+type in their place is kept and shown beside them.</p>
 </div>
 <div class="card">{sections}</div>
 <div class="card">{assessment_rows(j, k, closed, running, period)}</div>
@@ -6995,6 +7065,16 @@ def save_week(data):
     k.pnl = figure(pnl, "PnL") if pnl else None
     trades = one(data, "trades")
     k.trades = int(figure(trades, "trades")) if trades else None
+    # a figure the form offered from the journal and left alone is not kept,
+    # so that it goes on following the trades as they close: the one the
+    # journal gives now, and the one the form was drawn with, which differs
+    # when a trade closed meanwhile or the card was moved to another week
+    f = WeekFigures(journal(), Week(week=key))
+    if same_figure(k.pnl, f.live_pnl) or same_figure(k.pnl, figure_sent(data, "pnl_journal")):
+        k.pnl = None
+    if (same_figure(k.trades, f.live_trades)
+            or same_figure(k.trades, figure_sent(data, "trades_journal"))):
+        k.trades = None
     progress = one(data, "progress")
     k.progress = int(progress) if progress else None
     for name, _, _ in WEEK_SECTIONS:
