@@ -147,6 +147,19 @@ header .right{{margin-left:auto;display:flex;gap:7px;align-items:center}}
 .btn.danger{{border-color:rgba(208,92,85,.45);color:{BAD}}}
 .btn.danger:hover{{border-color:{BAD};color:#fff;background:rgba(208,92,85,.16)}}
 
+input[type=file]{{color:{DIM};font:12px/1.4 system-ui,sans-serif;max-width:100%}}
+input[type=file]::file-selector-button{{background:transparent;border:1px solid {AXIS};
+ color:{INK2};padding:5px 11px;border-radius:4px;cursor:pointer;font:inherit;margin-right:10px}}
+input[type=file]::file-selector-button:hover{{border-color:{DIM};color:{INK}}}
+
+/* the catalogue of instruments on Accounts */
+fieldset.catalogue{{border:0;margin:0 0 12px;padding:0;min-width:0}}
+fieldset.catalogue legend{{font-size:10px;color:{DIM};font-weight:600;padding:0;
+ margin-bottom:6px;text-transform:uppercase;letter-spacing:.09em}}
+.catalogue .tick{{display:inline-flex;align-items:center;gap:6px;width:148px;
+ padding:3px 0;cursor:pointer;font-size:12px;color:{INK2}}}
+.catalogue .tick.had{{color:{DIM};cursor:default}}
+
 /* filters behind a funnel button */
 .filters-box{{display:inline-block}}
 .filters-box > summary{{list-style:none;display:inline-flex;align-items:center;gap:6px}}
@@ -574,6 +587,9 @@ td .pair{{vertical-align:middle}}
  border:none;color:{INK};padding:5px 8px;border-radius:4px;cursor:pointer;
  font:13px/1.4 system-ui,sans-serif;white-space:nowrap}}
 .picker .option:hover,.picker .option.at{{background:{SURFACE};color:{INK}}}
+/* the rule above sets display, which outweighs the hidden attribute: without
+   this the filter hid nothing and typing never narrowed the list */
+.picker .option[hidden]{{display:none}}
 
 /* a block that opens on a click: the forms are needed rarely, the page is
    read often */
@@ -944,8 +960,14 @@ function filter_picker(picker){
   const typed = picker.querySelector('input').value.trim().toUpperCase();
   let shown = 0;
   picker.querySelectorAll('.option').forEach(option => {
-    const fits = !typed || option.dataset.value.includes(typed);
+    // the catalogue waits for a letter and then goes by the start of the
+    // name: "U" would otherwise bring every pair with USD in it
+    const fits = 'more' in option.dataset
+      ? !!typed && option.dataset.value.startsWith(typed)
+      : !typed || option.dataset.value.includes(typed);
     option.hidden = !fits;
+    // a hidden option keeps no mark, or Enter would take what is not shown
+    if (!fits) option.classList.remove('at');
     if (fits) shown++;
   });
   return shown;
@@ -990,10 +1012,13 @@ document.addEventListener('keydown', e => {
                                 here + (e.key === 'ArrowDown' ? 1 : -1)))];
     shown.forEach(o => o.classList.toggle('at', o === next));
     if (next) next.scrollIntoView({block: 'nearest'});
-  } else if (e.key === 'Enter' && here >= 0 &&
-             !picker.querySelector('.options').hidden) {
+  } else if (e.key === 'Enter' && !picker.querySelector('.options').hidden) {
+    // with the list open Enter answers the list and never sends the form
+    // with a half-typed pair: the marked option, the only one left, or
+    // nothing but closing the list
     e.preventDefault();
-    picker.querySelector('input').value = shown[here].dataset.value;
+    const pick = here >= 0 ? shown[here] : shown.length === 1 ? shown[0] : null;
+    if (pick) picker.querySelector('input').value = pick.dataset.value;
     open_picker(picker, false);
   }
 });

@@ -1754,19 +1754,32 @@ def _trash_target(root, stem, suffix=""):
         when += timedelta(seconds=1)
 
 
-def trash_list(root):
-    """[(name in the trash, kind, id, deleted at)], newest first."""
-    base = os.path.join(root, TRASH)
+def trashed(name):
+    """(kind, id, deleted at) of a name in the trash, or None for a name the
+    trash does not hold records under."""
+    m = _TRASHED.match(name)
+    if not m:
+        return None
+    kind = m.group(1) or "trade"
+    if (kind in ("trade", "plan", "playbook", "note")) == bool(m.group(4)):
+        return None                      # a folder record with .md, or the reverse
+    try:
+        when = datetime.strptime(m.group(3), "%Y%m%d-%H%M%S")
+    except ValueError:
+        return None                      # digits that are no date: put in by hand
+    return kind, m.group(2), when
+
+
+def trash_list(root, base=None):
+    """[(name in the trash, kind, id, deleted at)], newest first. `base` is
+    another folder laid out as the trash, such as the one of a backup being
+    looked at before it is restored."""
+    base = base or os.path.join(root, TRASH)
     items = []
     for name in os.listdir(base) if os.path.isdir(base) else []:
-        m = _TRASHED.match(name)
-        if not m:
-            continue
-        kind = m.group(1) or "trade"
-        if (kind in ("trade", "plan", "playbook", "note")) == bool(m.group(4)):
-            continue                     # a folder record with .md, or the reverse
-        when = datetime.strptime(m.group(3), "%Y%m%d-%H%M%S")
-        items.append((name, kind, m.group(2), when))
+        found = trashed(name)
+        if found:
+            items.append((name, *found))
     # within one second, by name: os.listdir has an order of its own on every
     # file system, and the trash should read the same on all of them
     items.sort(key=lambda x: x[0])

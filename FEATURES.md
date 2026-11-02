@@ -51,7 +51,7 @@ exists, where it stands, and which requests it answers, so that the answer to
 | trade management, position management, exit rules, stop rules, trailing, partials, holding rules | **Playbooks, management.** Rules of holding the position, ticked at the close of the trade; the page of an open trade lists them to be kept in mind. |
 | risk management, risk per trade, max trades, max loss, max positions, exposure, sizing | **Playbooks, limits** (risk per trade, trades per week and per month, loss per week in R, positions open at once, the longest hold, the least RR, any other of your own), counted above the checklist of a new trade and turned red when this trade would go past them. **Accounts, daily loss limit** for a prop account, counted on its row on the Accounts tab. The sizing formula in words is a section of the playbook's notes. |
 | drawdown, max drawdown, losing streak | **Statistics, Deepest fall from a high**: how far the selection went under its own high in R, between which dates, whether it was made back, the longest run of losses. The reports carry the figure against the period before. |
-| instruments, markets, pairs, watchlist | **Accounts, Pairs**: the list the trade form offers. Which markets a playbook is for is a section of its notes; its **styles** are the styles of the trade form it applies to. |
+| instruments, markets, pairs, watchlist, symbols, tickers | **Accounts, Pairs**: the list the trade form offers, typed in or ticked in its catalogue of instruments. Which markets a playbook is for is a section of its notes; its **styles** are the styles of the trade form it applies to. |
 | timeframes, higher timeframe, entry timeframe, top down | **Accounts, the trade form lists** (the entry timeframes the form offers); the trade's **entry tf** and the timeframes of its idea; a plan's analysis by timeframe; a playbook rule such as "level on W or D". |
 | analysis method, narrative, context, market model, theory, fundamentals, the why behind the rules | **Playbooks, the intro** (what the playbook is) and **the notes**, where any `## heading` becomes a section of the page: the markets, the math, the model, what is still being decided. Knowledge wider than one system is a **Note**. |
 | performance, edge analysis, what works, optimization, which setup earns, what a rule costs | **Statistics, By playbook** (a row per playbook with its setups, the clean and held shares); **the page of a playbook**: By setup, What a rule costs (trades that broke a rule and what they brought in R against the trades that kept every rule), Reasons given. The whole **Statistics** tab for any cut of the history. |
@@ -72,10 +72,10 @@ exists, where it stands, and which requests it answers, so that the answer to
 | deposits, withdrawals, payouts, fees, balance does not match the broker | **Accounts, money**: deposits, withdrawals and fees written apart from trading, withdrawals with a running total; a correction records the difference to the broker without editing history. |
 | custom fields, my own words in the form, styles, entry formats | **Accounts, the trade form lists**: styles, entry timeframes, execution formats are lists you edit; one taken out stops being offered and stays on the trades that carry it. |
 | screenshots, charts, pictures | Paste with Ctrl+V into any drop zone: the idea and the exit of a trade, its updates, a plan and its updates, a note, a playbook review. |
-| export, spreadsheet, CSV, backup | **CSV** next to the filters of the list; the records themselves are markdown and PNG files in `journal/`, a copy of that folder is the backup. |
+| export, spreadsheet, CSV, backup | **CSV** next to the filters of the list. **Accounts, Backup** downloads the whole journal as one `.plainbook` file and restores from it, the journal it replaces going to `.trash`; the records themselves are markdown and PNG files in `journal/`, and a copy of that folder is a backup too. |
 | share with a mentor, send a trade, send a plan, print a report, PDF | **Share** on a trade, on a plan, on the filtered list, on the Statistics tab and on a report: one HTML file with the screenshots inside and no money in it, opens offline, prints to PDF. Over the list it is cut to a stretch first: the last 10 or 25 trades, the last week to year, or two dates. Each line of the file opens its trade, with or without the screenshots. |
 | search | **Search**: every idea, conclusion, update, note, plan, playbook, review and card. |
-| delete, undo, restore | Nothing is shredded: a deleted record goes to `.trash` and the **Trash** card on Accounts restores it. |
+| delete, undo, restore | Nothing is shredded: a deleted record goes to `.trash` and the **Trash** card on Accounts restores it. A whole journal replaced by a restore of a backup is put back from the **Backup** card. |
 | import old trades, history from Notion or a spreadsheet | `tools/import_csv.py` writes trades the way the interface does. |
 | count the trades I already took under this system | `tools/attach_playbook.py` ties the trades of the playbook's styles opened from its *counts from* date. |
 | the app, a window, a hotkey, autostart, install without Python | The file per system on the releases page (opens the journal as a window of its own, records in `~/Plainbook`), the `plainbook` command of a pipx install, [INSTALL.md](INSTALL.md) and the `desktop/` folder: the autostart of each system (the Linux service, the macOS LaunchAgent, the Windows startup shortcut), the toggle script, the launcher. |
@@ -141,8 +141,9 @@ conclusions; its figures are read off the journal at every look.
 
 **Accounts**, what is set once. Accounts with a start balance, a
 currency, a daily loss limit, archive; money in and out; corrections; the
-vocabularies of the trade form; the pairs; the trash; the switch between the
-full Plainbook and Plainbook Lite.
+vocabularies of the trade form; the pairs; the trash; the backup, one file of
+the whole journal and the restore from it; the switch between the full
+Plainbook and Plainbook Lite.
 
 **Search** finds every word ever written into the journal, with the record
 it stands in; in Lite, among the trades only.
@@ -151,7 +152,7 @@ it stands in; in Lite, among the trades only.
 
 Everything is a markdown file with a header and, where there are pictures,
 a `shots/` folder next to it. `journal/` is the whole journal; a copy of it
-is a backup; any editor reads it.
+is a backup, and so is the file of **Accounts, Backup**; any editor reads it.
 
     journal/
       accounts/       one file per account
@@ -165,8 +166,9 @@ is a backup; any editor reads it.
       vocabulary.md   the styles, timeframes and execution formats the form offers
       pairs.md        the pairs the form offers
       settings.md     the stop edge, the journal's clock, the edition (lite)
-    .trash/           next to journal/: what was deleted, restorable from Accounts
+    .trash/           next to journal/: what was deleted and the journals a restore replaced, restorable from Accounts
     .drafts/          next to journal/: pictures pasted into forms not yet submitted
+    .restore/         next to journal/: a backup file being looked at before it is restored
 
 Nothing computable is stored: balances, R, the figures of every table are
 worked out from the history on every load. A field a record does not have

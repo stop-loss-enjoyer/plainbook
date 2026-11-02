@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Plainbook backup
+Comment=Restore a Plainbook backup into the journal
+# The pipx install. From the source, with the records in a folder of their own:
+# Exec=sh -c 'cd "$HOME/plainbook" && PLAINBOOK_ROOT="$HOME/plainbook-data" exec python3 -m plainbook.server "$1"' sh %f
+Exec=plainbook %f
+MimeType=application/x-plainbook-backup;
+NoDisplay=true
+Terminal=false

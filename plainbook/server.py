@@ -27,6 +27,7 @@ import shutil
 import textwrap
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -35,7 +36,7 @@ import webbrowser
 from datetime import datetime, timedelta
 
 from . import html as H
-from . import reports, share, stats, store
+from . import __version__, backup, flags, reports, share, stats, store
 from .balances import Journal
 from .model import (Trade, Account, Adjustment, IdeaBlock, Card, Week, Graded,
                     Playbook, Setup, Rule, PLAYBOOK_STATUSES, LIMITS,
@@ -3041,8 +3042,6 @@ def trade_form(t=None, token="", keep=""):
         accounts.append(t.account)
     risks = last_risks(j)
     risk = t.risk if editing else risks.get(accounts[0] if accounts else "", 1.0)
-    pairs = sorted(set(store.all_pairs(ROOT)) |
-                   {x.pair for x in j.trades if x.pair != PAIR_NOT_SET})
     now = journal().now().strftime("%Y-%m-%dT%H:%M")
     entry = (t.opened.strftime("%Y-%m-%dT%H:%M") if editing else now)
     chosen = t.execution if editing else []
@@ -3051,12 +3050,7 @@ def trade_form(t=None, token="", keep=""):
         f'<input type="checkbox" name="execution" value="{esc(v)}"'
         f'{" checked" if v in chosen else ""}> {esc(v)}</label>'
         for v in offered("execution", *chosen))
-    # A list of pairs drawn by the browser cannot carry the flags, and it does
-    # not close on a second click on the field. This one is ours: the same
-    # coins as everywhere else, and it opens and shuts on the field.
-    pair_options = "".join(
-        f'<button type="button" class="option" data-value="{esc(p)}">'
-        f'{H.pair(p)}</button>' for p in pairs)
+    pair_options = pair_picker_options(j)
 
     # The plan menu offers the plans that cover the day the trade is opened
     # on, not today: a trade written in for last Tuesday sees Tuesday's plans,
@@ -4376,7 +4370,8 @@ def past_plans_card(j, plans, today, show_all):
                  (esc(k.title) or "-", ""),
                  (outcome, ""),
                  (plan_trades_cell(j, closed, running), ""),
-                 (wr, "num hide-narrow" + (" muted" if s.thin else "")),
+                 (f'<span{thin_title(s)}>{wr}</span>',
+                  "num hide-narrow" + (" muted" if s.thin else "")),
                  ("-" if not s.trades else f"{s.sum_r:+.2f}",
                   f"num {sum_class(s.sum_r)}"),
                  ("-" if not s.trades else amount(j, s.sum_pnl, signed=True),
@@ -4546,14 +4541,31 @@ def plan_page(plan_id):
     return page(k.label, body, "plans", buttons)
 
 
+def pair_picker_options(j):
+    """The options of the pair field in the trade and plan forms.
+
+    A list of pairs drawn by the browser cannot carry the flags, and it does
+    not close on a second click on the field. This one is ours: the same
+    coins as everywhere else, and it opens and shuts on the field. The
+    owner's pairs come first; after them the catalogue, which stays out of
+    sight until a letter is typed, so a first trade on a fresh journal is
+    suggested its pair too and a click on the empty field still shows only
+    the owner's short list."""
+    own = sorted(set(store.all_pairs(ROOT)) |
+                 {x.pair for x in j.trades if x.pair != PAIR_NOT_SET})
+    have = set(own)
+    more = [s for _, symbols in flags.CATALOGUE for s in symbols if s not in have]
+    return ("".join(f'<button type="button" class="option" data-value="{esc(p)}">'
+                    f'{H.pair(p)}</button>' for p in own)
+            + "".join(f'<button type="button" class="option" data-more '
+                      f'data-value="{esc(p)}">{H.pair(p)}</button>'
+                      for p in sorted(more)))
+
+
 def plan_form(k=None, token=""):
     """One form for writing a plan and for editing it: the fields are the same."""
     editing = k is not None
-    pairs = sorted(set(store.all_pairs(ROOT)) |
-                   {x.pair for x in journal().trades if x.pair != PAIR_NOT_SET})
-    pair_options = "".join(
-        f'<button type="button" class="option" data-value="{esc(p)}">'
-        f'{H.pair(p)}</button>' for p in pairs)
+    pair_options = pair_picker_options(journal())
     today = journal().now().strftime("%Y-%m-%d")
     base = plan_shots_base(k.id) if editing else None
     if editing and k.analysis:
@@ -5311,6 +5323,17 @@ def playbook_trades_card(j, trades):
             f'<p class="caption">{esc(plan_result(j, trades))}</p></div>')
 
 
+def thin_title(s):
+    """The hover text of a grey winrate, which says why it is grey."""
+    return (f' title="{esc(thin_reason(s))}"' if s.thin and s.decided else "")
+
+
+def thin_reason(s):
+    trades = "trade" if s.decided == 1 else "trades"
+    return (f"{s.decided} {trades} won or lost, fewer than {stats.THIN}: too few "
+            f"to read as a rate. Break-even trades are not counted")
+
+
 def figures_head():
     return ('<th class="num">trades</th><th class="num">WR</th>'
             '<th class="num">Σ R</th><th class="num">EV</th>')
@@ -5325,7 +5348,7 @@ def figures_cells(s):
     in it gets a hyphen and not 0.0%, which would read as a run of losses."""
     wr = f"{s.wr:.1f}%" if s.decided else "-"
     return (f'<td class="num">{s.trades}</td>'
-            f'<td class="num{" muted" if s.thin else ""}">{wr}</td>'
+            f'<td class="num{" muted" if s.thin else ""}"{thin_title(s)}>{wr}</td>'
             f'<td class="num {sum_class(s.sum_r)}">{s.sum_r:+.2f}</td>'
             f'<td class="num">{s.average_r:+.2f}</td>')
 
@@ -7487,7 +7510,7 @@ _ACCOUNT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}\Z")
 # the parts of Accounts a form there leads back to: the page comes back on
 # that part with its fold open, not at the top with every fold shut
 ACCOUNT_PARTS = ("account-list", "archived", "clock", "edition", "money",
-                 "corrections", "trash", "pairs", "list-styles",
+                 "corrections", "trash", "backup", "pairs", "pair-catalogue", "list-styles",
                  "list-timeframes", "list-execution")
 
 
@@ -7552,6 +7575,18 @@ def accounts_page(message="", bad=False, at=""):
             if p not in from_trades else '')
         + '</td></tr>'
         for p in sorted(set(pairs) | from_trades))
+    # the instruments traders usually have, to tick instead of typing; the
+    # ones the list holds already stand ticked and greyed
+    have = set(pairs) | from_trades
+    catalogue = "".join(
+        f'<fieldset class="catalogue"><legend>{esc(group)}</legend>' + "".join(
+            f'<label class="tick{" had" if s in have else ""}"><input type="checkbox" '
+            f'name="pair" value="{esc(s)}"{" checked disabled" if s in have else ""}>'
+            f'{H.pair(s)}</label>' for s in symbols) + '</fieldset>'
+        for group, symbols in flags.CATALOGUE)
+    offered = sum(len(symbols) for _, symbols in flags.CATALOGUE)
+    suggested = "".join(f'<option value="{esc(s)}">' for _, symbols in flags.CATALOGUE
+                        for s in symbols if s not in have)
 
     def times(n):
         return "not used yet" if not n else f"{n} trade" if n == 1 else f"{n} trades"
@@ -7819,12 +7854,20 @@ rules next: the limits, the target and the day of its firm.</p></div>
 
 {trash}
 
+{backup_card(back_to)}
+
 <div class="card" id="pairs"><h2>Trading pairs</h2>
 <form method="post" action="/pair/new" class="filters">{back_to("pairs")}
 <div><label>pair</label><input type="text" name="pair" placeholder="EURJPY"
- required style="width:130px"></div>
+ required style="width:130px" list="pair-suggestions" autocomplete="off"></div>
 <div><button class="btn primary">Add pair</button></div>
 </form>
+<datalist id="pair-suggestions">{suggested}</datalist>
+<details class="fold" id="pair-catalogue" style="margin-top:12px"{opened("pair-catalogue")}><summary>Add from the catalogue
+<span class="caption">{offered} instruments: forex, metals, energy, commodities, indices, crypto</span></summary>
+<form method="post" action="/pair/catalogue">{back_to("pair-catalogue")}
+{catalogue}
+<p><button class="btn primary">Add the ticked ones</button></p></form></details>
 <table><thead><tr><th>pair</th><th>source</th><th></th></tr></thead>
 <tbody>{pair_rows}</tbody></table>
 <p class="caption">Removing a pair only takes it out of the suggestion list;
@@ -8163,12 +8206,190 @@ def delete_money(data):
     return f"Record {adjustment_id} moved to .trash."
 
 
+# --- the backup --------------------------------------------------------------
+
+def backup_card(back_to):
+    rows = "".join(
+        f'<tr><td>the journal replaced on {when:%d.%m.%Y %H:%M}</td>'
+        f'<td class="num"><form method="post" action="/backup/put-back" style="display:inline" '
+        f'onsubmit="if (!confirm(this.dataset.ask)) return false; this.querySelector(\'button\').disabled = true" '
+        f'data-ask="{esc(f"Put back the journal replaced on {when:%d.%m.%Y %H:%M}? The journal you have now goes to the trash the same way.")}">'
+        f'<input type="hidden" name="name" value="{esc(name)}">{back_to("backup")}'
+        f'<button class="btn">Put back</button></form></td></tr>'
+        for name, when in backup.replaced(ROOT))
+    replaced = (f'<h3>Replaced by a restore</h3>'
+                f'<table><tbody>{rows}</tbody></table>' if rows else "")
+    return f"""<div class="card" id="backup"><h2>Backup</h2>
+<div class="twin"><div><h3>Save</h3>
+<p class="muted">The whole journal in one file: the trades and their
+screenshots, the accounts and the money moved, the playbooks, plans, notes,
+cards and reports, the lists, the settings and the trash. Keep a copy on a drive
+of its own.</p>
+<p><a class="btn primary" href="/backup{backup.SUFFIX}">Download backup</a></p></div>
+<div><h3>Restore</h3>
+<p class="muted">The journal comes back from such a file as it was. You see what
+the file holds before anything changes, and the journal it replaces goes to the
+trash whole.</p>
+<form method="post" action="/backup/upload" enctype="multipart/form-data">
+<p><input type="file" name="backup" accept="{backup.SUFFIX}" required>
+<button class="btn">Restore</button></p></form></div></div>
+{replaced}</div>"""
+
+
+def restore_page(token):
+    """What a backup file holds against the journal now, before it is taken."""
+    try:
+        reason = backup.refused(ROOT, token)
+        info = None if reason else backup.staged(ROOT, token)
+    except backup.BackupError:
+        reason, info = None, None
+    cancel = (f'<form method="post" action="/restore/{U(token)}/cancel" '
+              f'style="display:inline"><button class="btn">{"Back" if reason else "Cancel"}</button></form>')
+    if reason:
+        body = (f'<div class="card"><h2>This file cannot be restored</h2>'
+                f'<p>{esc(reason[0].upper() + reason[1:])}.</p>'
+                f'<p class="muted">Nothing in the journal has changed.</p>{cancel}</div>')
+        return page("Restore", body, "accounts")
+    if info is None:
+        return None
+    manifest, then, problems = info
+    now, _ = backup.counts(ROOT)
+    made = manifest.get("made")
+    made = made if isinstance(made, str) else ""
+    try:
+        made = datetime.fromisoformat(made).strftime("%d.%m.%Y %H:%M")
+    except ValueError:
+        pass
+    if not isinstance(then, dict):
+        then = {}
+    skipped = manifest.get("skipped") if isinstance(manifest.get("skipped"), list) else []
+    shown = (("trades", "trades"), ("accounts", "accounts"),
+             ("money records", "adjustments"), ("playbooks", "playbooks"),
+             ("plans", "plans"), ("notes", "notes"), ("daily cards", "cards"),
+             ("weekly cards", "weeks"), ("screenshots", "screenshots"),
+             ("records in the trash", "trash"))
+    rows = "".join(f'<tr><td>{word}</td><td class="num">{now.get(key, 0)}</td>'
+                   f'<td class="num">{then.get(key, 0)}</td></tr>' for word, key in shown)
+    notes = []
+    if backup.newer(manifest):
+        notes.append(f'It was made by a newer Plainbook ({esc(manifest.get("version"))}) '
+                     f'than this one ({esc(__version__)}): update this one first if you '
+                     f'can, so that nothing in it goes unseen.')
+    if then.get("trades", 0) < now.get("trades", 0):
+        notes.append("It holds fewer trades than the journal now: the trades written "
+                     "since it was made go to the trash with the journal it replaces.")
+    if skipped:
+        names = "".join(f"<li><code>{esc(str(n))}</code></li>" for n in skipped[:10])
+        one = len(skipped) == 1
+        notes.append(f'{len(skipped)} file{"" if one else "s"} of the journal '
+                     f'could not be read when it was made, {"was a link" if one else "were links"} '
+                     f'or had a name a backup cannot carry (a colon, a backslash, '
+                     f'a twin differing only in capitals), and {"is" if one else "are"} '
+                     f'not in it:<ul>{names}</ul>')
+    if problems:
+        names = "".join(f"<li><code>{esc(path)}</code>: {esc(why)}</li>"
+                        for path, why in problems[:10])
+        notes.append(f'{len(problems)} file{"" if len(problems) == 1 else "s"} in it '
+                     f'{"does" if len(problems) == 1 else "do"} not read; '
+                     f'{"it is" if len(problems) == 1 else "they are"} restored as '
+                     f'{"it is" if len(problems) == 1 else "they are"} and named on every '
+                     f'page, the way the journal names such a file:<ul>{names}</ul>')
+    warn = "".join(f'<p class="notice">{n}</p>' for n in notes)
+    body = f"""<div class="card"><h2>Restore a backup</h2>
+<p>Made on {esc(made)} by Plainbook {esc(manifest.get("version") or "?")}.</p>
+{warn}
+<table><thead><tr><th></th><th class="num">the journal now</th>
+<th class="num">the backup</th></tr></thead><tbody>{rows}</tbody></table>
+<p><form method="post" action="/restore/{U(token)}" style="display:inline"
+ onsubmit="this.querySelector('button').disabled = true">
+<button class="btn primary">Restore this journal</button></form> {cancel}</p>
+<p class="caption">The journal you have now is not deleted: it goes to the trash
+whole, and Accounts, Backup puts it back.</p></div>"""
+    return page("Restore", body, "accounts")
+
+
+def multipart_file(path, kind, out):
+    """Takes the one file a form sent out of the body saved at `path` into
+    `out`. The backup form holds nothing but the file, so the body is one part;
+    the manifest of the backup checks every byte of what comes out."""
+    m = re.search(r'boundary="?([^";]+)"?', kind)
+    if not m:
+        raise backup.BackupError("the form did not send a file")
+    mark = b"--" + m.group(1).encode("latin-1")
+    with open(path, "rb") as f:
+        head = f.read(16384)
+        start = head.find(b"\r\n\r\n") + 4
+        if not head.startswith(mark + b"\r\n") or start < 4:
+            raise backup.BackupError("the form did not send a file")
+        size = os.fstat(f.fileno()).st_size
+        at = max(0, size - len(mark) - 1024)
+        f.seek(at)
+        close = f.read().rfind(b"\r\n" + mark + b"--")
+        if close < 0 or at + close < start:
+            raise backup.BackupError("the file did not arrive whole")
+        f.seek(start)
+        left = at + close - start
+        with open(out, "wb") as target:
+            while left:
+                chunk = f.read(min(left, 1 << 20))
+                if not chunk:
+                    raise backup.BackupError("the file did not arrive whole")
+                target.write(chunk)
+                left -= len(chunk)
+
+
+def put_back_journal(data):
+    try:
+        backup.put_back(ROOT, one(data, "name"))
+    except backup.BackupError as e:
+        raise RecordError(str(e))
+    except OSError as e:
+        raise RecordError(f"the journal could not be moved ({e.strerror or e})")
+    drop_cache()
+    return "Journal put back. The one it replaced is in the trash, and can be put back too."
+
+
+def hand_over(url, path):
+    """Sends a backup file the journal was opened with (a double click on it)
+    to the journal running at url, and opens the page that shows it."""
+    import http.client
+    where = "/accounts"
+    try:
+        with open(path, "rb") as f:
+            port = urllib.parse.urlsplit(url).port
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=600)
+            conn.request("POST", "/backup/upload", body=f, headers={
+                "Host": f"localhost:{port}",
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(os.fstat(f.fileno()).st_size)})
+            answer = conn.getresponse()
+            if answer.status == 303 and (answer.getheader("Location") or "").startswith("/restore/"):
+                where = answer.getheader("Location")
+            else:
+                print(f"The program at port {port} did not take {path}: "
+                      f"is it an older Plainbook, or not Plainbook at all?")
+    except OSError as e:
+        print(f"Plainbook could not hand {path} to the journal: {e}")
+    open_journal(url + where)
+
+
 def add_pair(data):
     pair = one(data, "pair").upper()
     if not re.match(r"^[A-Z0-9.\-]{2,20}$", pair):
         raise RecordError("pair: latin letters, digits, dot or dash")
     store.save_pairs(ROOT, store.all_pairs(ROOT) + [pair])
     return f"Pair {pair} added."
+
+
+def add_catalogue_pairs(data):
+    known = {s for _, symbols in flags.CATALOGUE for s in symbols}
+    ticked = [p for p in data.get("pair", []) if p in known]
+    if not ticked:
+        raise RecordError("nothing was ticked")
+    had = set(store.all_pairs(ROOT))
+    store.save_pairs(ROOT, store.all_pairs(ROOT) + ticked)
+    n = len(set(ticked) - had)
+    return f"{n} pair{'' if n == 1 else 's'} added."
 
 
 def remove_pair(data):
@@ -8732,6 +8953,75 @@ class Handler(http.server.BaseHTTPRequestHandler):
                           [("Content-Disposition",
                             f'attachment; filename="{name}"')])
 
+    def _send_backup(self):
+        """The backup, written to a nameless file next to the journal and sent
+        from there: a journal of screenshots is too big to hold in memory."""
+        # .restore, not the root: on Windows the file has a name, and a
+        # journal killed while writing it would leave the whole of it there
+        folder = os.path.join(ROOT, backup.STAGE)
+        os.makedirs(folder, exist_ok=True)
+        with tempfile.TemporaryFile(dir=folder) as f:
+            backup.make(ROOT, f)
+            size = f.tell()
+            f.seek(0)
+            self._started = True
+            self.send_response(200)
+            for name, value in (("Content-Type", "application/octet-stream"),
+                                ("Content-Length", str(size)),
+                                ("Content-Disposition",
+                                 f'attachment; filename="{backup.file_name()}"'),
+                                ("Cache-Control", "no-store"),
+                                ("X-Content-Type-Options", "nosniff"),
+                                ("Cross-Origin-Resource-Policy", "same-origin")):
+                self.send_header(name, value)
+            self.end_headers()
+            try:
+                shutil.copyfileobj(f, self.wfile, 1 << 20)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    def _receive_backup(self):
+        """Saves an uploaded backup, unpacks it and leads to the page that
+        shows it: the form of the Backup card sends it as a form, a double
+        click on the file (hand_over) as the bare file."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            return self._send("bad length", 400, "text/plain; charset=utf-8")
+        token, base = backup.new_stage(ROOT)
+        upload, source = os.path.join(base, "upload"), os.path.join(base, "file")
+        try:
+            # the body, the file taken out of it, then the files unpacked
+            if 2 * length + (64 << 20) > shutil.disk_usage(ROOT).free:
+                self.close_connection = True       # the body is not read
+                raise backup.BackupError("not enough free space to receive it")
+            left = length
+            with open(upload, "wb") as out:
+                while left:
+                    chunk = self.rfile.read(min(left, 1 << 20))
+                    if not chunk:
+                        raise backup.BackupError("the file did not arrive whole")
+                    out.write(chunk)
+                    left -= len(chunk)
+            kind = self.headers.get("Content-Type") or ""
+            if kind.startswith("multipart/form-data"):
+                multipart_file(upload, kind, source)
+                os.remove(upload)
+            else:
+                os.rename(upload, source)
+            backup.unpack(ROOT, token, source)
+        except backup.BackupError as e:
+            backup.refuse(ROOT, token, str(e))
+        except OSError as e:
+            backup.refuse(ROOT, token, f"the file could not be saved ({e.strerror or e})")
+        finally:
+            for path in (upload, source):
+                if os.path.exists(path):
+                    os.remove(path)
+        return self._go(f"/restore/{U(token)}")
+
     def _same_origin(self):
         """A simple guard against another page in the same browser."""
         origin = self.headers.get("Origin") or self.headers.get("Referer") or ""
@@ -8818,6 +9108,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(search_page(q))
         if parts and parts[0] == "share":
             return self._share(parts, q)
+        if path == "/backup" + backup.SUFFIX:
+            # a page of another site may not start a download of the journal
+            if self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
+                return self._send("foreign origin", 403, "text/plain; charset=utf-8")
+            return self._send_backup()
+        if len(parts) == 2 and parts[0] == "restore":
+            shown = restore_page(parts[1])
+            return self._send(shown) if shown else self._gone(
+                "no such restore", "accounts", "/accounts")
         if path == "/export.csv":
             j = journal()
             stamp = datetime.now().strftime("%Y-%m-%d")
@@ -8974,6 +9273,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         LITE_OFF.hit = lite_route(path)
         q = urllib.parse.parse_qs(parsed.query)
         parts = [c for c in path.split("/") if c]
+        if path == "/backup/upload":
+            # a backup is the size of the journal, so it goes to the disk as
+            # it arrives instead of into memory under the limit of a form
+            return self._receive_backup()
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
@@ -9193,16 +9496,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not _BACK.fullmatch(back) or lite_route(back.split("?")[0]):
                     back = "/"
                 return self._go(back, message.rstrip("."))
+            if len(parts) in (2, 3) and parts[0] == "restore":
+                try:
+                    if len(parts) == 3:
+                        if parts[2] != "cancel":
+                            return self._gone("no such page")
+                        backup.discard(ROOT, parts[1])
+                        return self._go("/accounts?at=backup", "Restore cancelled")
+                    backup.restore(ROOT, parts[1])
+                except backup.BackupError as e:
+                    drop_cache()
+                    if backup.taken(parts[1]):
+                        return self._go("/", "Journal restored")    # a second press
+                    return self._go("/accounts?m=" + U(str(e)) + "&bad=1&at=backup")
+                drop_cache()
+                return self._go("/", "Journal restored")
             for route, action in (("/account/new", create_account),
                                   ("/settings/clock", save_clock),
                                   ("/settings/edition", save_edition),
                                   ("/account/archive", toggle_archive),
                                   ("/account/delete", delete_account),
                                   ("/trash/restore", restore_record),
+                                  ("/backup/put-back", put_back_journal),
                                   ("/money/new", record_money),
                                   ("/money/correct", correct_balance),
                                   ("/money/delete", delete_money),
                                   ("/pair/new", add_pair),
+                                  ("/pair/catalogue", add_catalogue_pairs),
                                   ("/pair/delete", remove_pair),
                                   ("/list/new", add_word),
                                   ("/list/delete", remove_word)):
@@ -9267,7 +9587,9 @@ def refused_page(reason, data):
 
 class Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # on Windows the same option lets a second journal take a port the first
+    # one holds, and a double-clicked backup would go to either of them
+    allow_reuse_address = os.name != "nt"
 
 
 # A Chromium-family browser opens the journal as a window of its own with
@@ -9376,8 +9698,12 @@ def main(open_browser=False, argv=None):
         sys.stdout = open(os.devnull, "w")
     url = f"http://localhost:{PORT}"
     show = False if background else wants_browser(open_browser)
+    # a backup file the journal was opened with: a double click on it
+    given = next((a for a in argv if a.lower().endswith(backup.SUFFIX)
+                  and os.path.isfile(a)), None)
     os.makedirs(DRAFTS, exist_ok=True)
     store.make_layout(ROOT)
+    backup.sweep(ROOT)
     try:
         server = Server(("127.0.0.1", PORT), Handler)
     except OSError as e:
@@ -9385,13 +9711,16 @@ def main(open_browser=False, argv=None):
         # already running, not a traceback
         print(f"Plainbook could not take port {PORT} ({e.strerror or e}): "
               f"it is probably already running at {url}")
-        if show:
+        if given:
+            hand_over(url, os.path.abspath(given))
+        elif show:
             open_journal(url)
         return
     print(f"Plainbook: {url}  (Ctrl+C to stop)")
     print(f"records: {ROOT}")
-    if show:
-        t = threading.Timer(0.5, open_journal, [url])
+    if given or show:
+        t = (threading.Timer(0.5, hand_over, [url, os.path.abspath(given)]) if given
+             else threading.Timer(0.5, open_journal, [url]))
         t.daemon = True
         t.start()
     try:

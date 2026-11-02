@@ -34,9 +34,13 @@ than it was.
 
 - **account**: archived accounts are not offered.
 - **pair**: the list under the field carries the same flags the journal does,
-  and it opens and shuts on a click on the field. Typing filters it; a pair
-  that is not in the list is simply typed in and saved with the trade, in
-  capitals whatever way it was typed, so `eurusd` and `EURUSD` are one pair.
+  and it opens and shuts on a click on the field. It holds your pairs and the
+  ones you have traded. Typing filters it, and from the first letter it also
+  offers the instruments of the catalogue whose names start with what you
+  typed, after your own: `XA` brings `XAUUSD` and `XAGUSD` on a journal that
+  has never traded them. A pair that is in neither is simply typed in and
+  saved with the trade, in capitals whatever way it was typed, so `eurusd`
+  and `EURUSD` are one pair.
 - **direction**, **style**, **entry TF**: the styles and the timeframes come
   from your own lists, edited on the Accounts tab.
 - **risk, % or money**: the risk as a percent of the computed balance of
@@ -826,8 +830,10 @@ has no month before it, but it always has a rest.
 - **Best and worst trade** by R, each a link to the trade.
 
 A winrate or a payoff worked out from fewer than five decided trades is grey,
-because a percentage of two trades says little. An empty tile is a hyphen
-with the reason under it.
+because a percentage of two trades says little. Decided means won or lost:
+break-even trades are left out, so a row of eight trades with six of them at
+zero is grey. Point at a grey winrate in a table and it says how many trades
+it stands on. An empty tile is a hyphen with the reason under it.
 
 **Trade by trade, or week by week.** The left chart under the strip, the
 tape, is the selection over time. With thirty closed trades or fewer, and on
@@ -1122,12 +1128,20 @@ The **Accounts** tab.
   `.trash` like everything else.
 - **Trash** lists everything deleted, newest first, with a **Restore** button.
   The card is folded, the count on it; a click opens the list.
+- **Backup** saves the whole journal as one file and takes it back; see
+  [Backup](#backup).
 - **Pairs** are the suggestions for the form. Taking a pair out of the list does
   not touch the trades already recorded with it. Every pair is shown with its
   flags: two round ones for a currency pair, one for an index, a lettered coin
   for gold, silver, copper or a crypto coin. A symbol the journal does not
   recognise gets a plain coin with its first letters, and is written out in
   full as before, so nothing depends on the icon.
+  **Add from the catalogue**, folded under the field, offers the instruments
+  traders usually have, in groups from the forex majors to crypto, each with
+  its icon: tick the ones you trade and press **Add the ticked ones**. The
+  pairs the list holds already stand ticked and grey. Typing into the field
+  suggests the same names. A pair your broker writes another way
+  (`EURUSD.pro`, `XTIUSD`) is typed in as it is, and the icon still finds it.
 
 - **The trade form** holds the other three lists: the trading styles, the
   timeframes of the entry TF field and the execution checkboxes. Each opens on a
@@ -1153,6 +1167,92 @@ The **Accounts** tab.
   Every style you keep in the list gets a winrate tile of its own on the journal
   page, as soon as it has trades. **Winrate overall** counts every trade of the
   selection, whatever its style, retired or not.
+
+## Backup
+
+The **Backup** card on the Accounts tab holds the journal in one file, and
+brings the journal back from it.
+
+**Making one.** **Download backup**, under *Save*, gives a file named
+`Plainbook-` and the day, `Plainbook-2026-10-31.plainbook`. It holds
+everything: the trades with their screenshots, the accounts and the money
+moved, the playbooks, plans, notes, daily and weekly cards and reports, the
+lists of pairs, styles, timeframes and execution formats, the settings, and
+the records that are in the trash. A journal with many screenshots makes a
+big file, and it takes a few seconds to write. The file is a ZIP in
+everything but its name: renamed to `.zip`, any archiver opens it and the
+records inside are the same plain text files and pictures as in the folder.
+
+**Where to keep it.** Not on the disk the journal is on. A drive of its own,
+a second computer or a folder of a cloud service all do; the journal itself
+sends nothing anywhere. Make one after a session in which you wrote a lot,
+and before anything you are unsure of: updating the program, moving the
+folder, trying a file by hand.
+
+**Restoring by the button.** Under *Restore*, choose a `.plainbook` file and
+press **Restore**. Nothing has changed yet. The journal first checks the
+file, every file of it one by one, and opens a page that puts what you have
+now beside what the backup holds: trades, accounts, money records,
+playbooks, plans, notes, daily and weekly cards, screenshots and records in
+the trash, with the day the file was made and the Plainbook that made it.
+**Restore this journal** takes it; **Cancel** leaves everything as it was.
+A restore you started and never took is cleared once it is a day old, at
+the next start of the journal or the next restore.
+
+When `journal/` is itself a link to a folder somewhere else, a synced folder
+say, a restore puts a real folder in its place, and the link goes to the
+trash with the journal it pointed at; **Put back** brings the link back.
+
+The page warns when:
+
+- the file was made by a newer Plainbook than yours. Update yours first if
+  you can, so that nothing in it goes unseen;
+- the file holds fewer trades than the journal now. The trades written since
+  it was made go to the trash with the journal it replaces, not into the
+  new one;
+- some files in it do not read, because they were edited by hand and
+  something in them does not parse. They are restored as they are, and the
+  yellow box at the top of every page names them, as it does for any such
+  file.
+- some files of the journal were left out when it was made: a file that
+  could not be opened at that moment (a save in another window), a link
+  to a folder somewhere else, which a backup does not follow, or a file put
+  in by hand under a name a backup cannot carry to every system (a colon or
+  a backslash in it, or a twin that differs only in capitals). The page
+  names them.
+
+A file that is not a whole backup, that was cut off on the way or that is
+not a Plainbook file at all, or that holds two files whose names differ
+only in capitals (which Windows and macOS cannot keep apart), gets the page
+*This file cannot be restored* with the reason. Nothing in the journal has changed then.
+
+**By a double click.** A `.plainbook` file opens by a double click, once
+the file type is tied to the journal (INSTALL.md says how on Windows and
+Linux). The journal that is running shows the same restore page; a journal
+that is not running starts and shows it. The file stays where it is. A copy
+of the program started with the file on the command line, `plainbook
+file.plainbook`, does the same. On Windows the double click on the
+downloaded program's file type leaves its console window open while the
+journal runs, when it was not running before; closing that window stops it.
+On macOS there is no double click: the
+download there is a program, not an application, and the system ties a file
+type only to an application. Use the button on the Accounts tab.
+
+**What happens to the journal you had.** It is not deleted and not written
+over. The whole journal, with the records of its trash, goes into `.trash` in
+a folder named `journal-<date and time>.before-restore`, and the backup takes
+its place. The Backup card then lists it under *Replaced by a restore*, as
+*the journal replaced on* its date and time, with a **Put back** button.
+Put back swaps the two again: the journal standing now goes aside the same
+way, so a restore done by mistake is undone, and so is the undoing. Those
+folders are yours to delete by hand when you no longer need them; nothing
+sweeps them.
+
+Backup is in Plainbook Lite as well, and a backup holds the whole journal
+whichever edition you saved it in. Restoring needs free space on the disk for
+the unpacked file next to the journal; the page says so when there is not
+enough, and nothing is changed. The download is given only to a click on the
+journal's own page, not to a link on another site.
 
 ## Reports
 
@@ -1377,7 +1477,7 @@ under the journal's clock.
 open positions and the CSV (every column, the plan and the playbook included).
 Opening, editing, closing, updating, Breakeven and Duplicate of a trade, with
 the screenshots. Statistics. Accounts, with the money, the corrections, the
-rules of a prop firm, the pairs, the lists of styles, timeframes and execution formats, and the clock. Search, over
+rules of a prop firm, the pairs, the lists of styles, timeframes and execution formats, the clock and the Backup. Search, over
 the trades. Share, for a trade, the journal and Statistics. The Trash holds
 trades, accounts and corrections.
 
@@ -1437,12 +1537,17 @@ The files open in any text editor and read by eye. There is no database and
 no format of its own, so if the program breaks tomorrow, the records are
 still yours in the same shape.
 
-Two service folders sit next to the journal: `.trash` (what was deleted) and
-`.drafts` (screenshots from forms that were never submitted, swept after a day).
+Three service folders sit next to the journal: `.trash` (what was deleted,
+and the journals a restore replaced), `.drafts` (screenshots from forms that
+were never submitted, swept after a day) and `.restore` (a backup file being
+looked at on the restore page, unpacked there until you take it or cancel;
+once a day old it is cleared at the next start or the next restore).
 
-**A backup** is a copy of the `journal/` folder. A git repository of its own
-in the data folder keeps the history as well; the records are never part of
-the program's repository. A copy on an external drive is worth having too.
+**A backup** is the file the Backup card on the Accounts tab downloads, see
+[Backup](#backup); a plain copy of the `journal/` folder is one as well. A
+git repository of its own in the data folder keeps the history as well; the
+records are never part of the program's repository. A copy on an external
+drive is worth having too.
 
 ## When something goes wrong
 
@@ -1479,4 +1584,6 @@ the program's repository. A copy on an external drive is worth having too.
   money in and out, a pair or a list) says it on top of that tab instead, and
   the form below is empty again, so type the line once more.
 - **Deleted the wrong thing.** The Trash card on the Accounts tab, **Restore**.
+- **Restored the wrong backup.** The Backup card on the Accounts tab lists
+  the journal that was replaced; **Put back** returns it.
 - **Port 8778 is taken.** Set another one through `PLAINBOOK_PORT`.

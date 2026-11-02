@@ -501,6 +501,34 @@ async function run(p) {
     "outdated notes sit in a closed fold");
 
 
+  // ---- the catalogue on Accounts: ticked instruments join the list of pairs
+  await p.goto(B + "/accounts?at=pair-catalogue");
+  await p.evaluate(`for (const v of ['SOLUSD', 'USDTRY'])
+    document.querySelector('#pair-catalogue [name=pair][value=' + v + ']').checked = true`);
+  await p.submit("#pair-catalogue form");
+  check(await p.evaluate(`!!document.querySelector('#pair-catalogue [value=SOLUSD][checked][disabled]')`),
+    "a ticked instrument of the catalogue joined the list");
+
+  // ---- the backup: downloaded, chosen in the form as a file, restored. The
+  // browser writes the form itself, which is the part the tests cannot do
+  await p.goto(B + "/accounts");
+  const size = await p.evaluate(`(async () => {
+    const blob = await (await fetch('/backup.plainbook')).blob();
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'Plainbook.plainbook'));
+    document.querySelector('#backup [name=backup]').files = dt.files;
+    return blob.size;
+  })()`);
+  check(size > 1000, "the backup downloads: " + size + " bytes");
+  await p.submit("#backup form[action='/backup/upload']");
+  check((await p.url()).startsWith("/restore/"), "the chosen file leads to its restore page");
+  check(await has(`document.body.innerText`, "Restore this journal"), "the restore page offers to take it");
+  await p.submit("form[action^='/restore/']:not([action$='/cancel'])");
+  check((await p.url()).startsWith("/"), "restored and back on the journal");
+  await p.goto(B + "/accounts");
+  check(await p.evaluate(`!!document.querySelector('#backup form[action="/backup/put-back"]')`),
+    "the journal it replaced can be put back");
+
   // ---- a picture dropped from a folder lands like a pasted one, and the
   // zone offers a button to choose a file
   await p.goto(B + "/new");
@@ -518,7 +546,6 @@ async function run(p) {
     return zone.querySelectorAll('.shot').length;
   })()`);
   check(dropped === 1, "a dropped picture lands in the zone");
-
 }
 
 let failed = false;

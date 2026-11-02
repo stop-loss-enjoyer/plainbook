@@ -789,6 +789,9 @@ class ServerCase(unittest.TestCase):
         self.assertIn('data-value="EURUSD"', html)
         self.assertIn('<use href="#fl-eu"', html)       # the flag itself
         self.assertNotIn('<datalist', html)
+        # the option rule sets display, so the filter needs its own rule to
+        # hide anything: without it typing never narrowed the list
+        self.assertIn(".picker .option[hidden]{display:none}", html)
         # a pair nobody has heard of goes in by hand, as before
         _, html = self.get("/new")
         token = self.form_token(html)

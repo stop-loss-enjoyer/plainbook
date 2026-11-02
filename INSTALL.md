@@ -111,6 +111,23 @@ Load the `omarchy` skill before touching the bar or the hotkeys, if it is availa
 Just the unit plus a browser shortcut to http://localhost:8778 (or a web app
 through `chromium --app=http://localhost:8778`).
 
+### Backup files (both Linux sections)
+
+A `.plainbook` file is a backup of the journal (Accounts tab, Backup). To make
+a double click on one open its restore page in the journal, tie the file type
+to the program:
+
+    xdg-mime install desktop/plainbook-backup.xml
+    cp desktop/plainbook-backup.desktop ~/.local/share/applications/
+    update-desktop-database ~/.local/share/applications
+    xdg-mime default plainbook-backup.desktop application/x-plainbook-backup
+
+The `.desktop` file runs `plainbook %f`, which is right for a pipx install.
+For the downloaded file, put its path in `Exec=` in place of `plainbook`; for
+the source, use the commented line in the file with the real folders. Without
+this step nothing is lost: the **Restore** button of the Backup card does the
+same thing.
+
 ## Windows
 
 By hand: `py -m plainbook.server` from the project folder.
@@ -130,6 +147,13 @@ To keep the records elsewhere, set `PLAINBOOK_ROOT` as a user environment variab
 A shortcut on the desktop or the taskbar: target
 `msedge --app=http://localhost:8778` (or the path to chrome.exe with the same flag).
 
+The same script ties `.plainbook` files, the backups of the journal, to it for
+the current user (no administrator needed), so that a double click opens the
+restore page: with `-File` the association points at that exe, with `-Source`
+at the program folder. `-Remove` takes out the file type as well as the
+shortcut. When the downloaded exe is moved, run the script again with its new
+path.
+
 After a reboot, check that the server came up (open the address).
 
 ## macOS
@@ -148,6 +172,10 @@ seconds. `launchctl bootout gui/$(id -u)/plainbook` stops it.
 
 An application shortcut: Chrome → "Save as application" on the journal page, or
 `open -a "Google Chrome" --args --app=http://localhost:8778`.
+
+A backup file does not open by a double click on macOS, since the release is a
+bare program and the system ties a file type only to an application. A backup is
+restored from the Accounts tab: Backup, choose the file, **Restore**.
 
 ## The ready-made file
 

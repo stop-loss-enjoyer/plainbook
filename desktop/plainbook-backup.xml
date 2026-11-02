@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The file type of a Plainbook backup: a zip under a name of its own, so
+     that a double click opens the journal and not an archiver. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-plainbook-backup">
+    <comment>Plainbook backup</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.plainbook" weight="80"/>
+  </mime-type>
+</mime-info>

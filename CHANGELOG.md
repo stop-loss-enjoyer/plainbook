@@ -2,6 +2,78 @@
 
 What changed and why. Newest first.
 
+## v1.12.0, 02.11.2026
+
+- **Backup** on the Accounts tab. **Download backup** gives one file,
+  `Plainbook-2026-10-31.plainbook`, with the whole journal in it: the
+  trades and their screenshots, the accounts and the money moved, the
+  playbooks, plans, notes, cards and reports, the lists of pairs and words,
+  the settings and the records of the trash. It is a ZIP under a name of its
+  own, so renamed to `.zip` any archiver opens it and the records inside are
+  the same plain files. The pictures are stored as they are and not packed
+  again, so a journal with many screenshots saves in seconds. A file put in
+  by hand under a name another system could not keep (a colon, a
+  backslash, a twin differing only in capitals) is left out and named on
+  the restore page, so every backup made restores.
+- **Restore** takes such a file back. Choose it on the Backup card and press
+  **Restore**: nothing changes yet. A page puts the journal now beside the
+  backup, trades, accounts, money records, playbooks, plans, notes, cards,
+  screenshots and the trash, and says when the file was made and by which
+  Plainbook. It warns when the file comes from a newer Plainbook, when it
+  holds fewer trades than the journal does now, and when some of its files
+  do not read; those are restored as they are and named on every page, the
+  way the journal names such a file. A file that is not a whole backup, or
+  one that was damaged on the way, is refused with the reason, and the
+  journal stays as it was.
+- **Nothing is written over.** The journal you had, and the records of its
+  trash, go to `.trash` whole, as `journal-<date and time>.before-restore`,
+  and the Backup card lists it under **Replaced by a restore** with a **Put
+  back** button, which swaps the two again and keeps the journal it replaces
+  the same way. A restore started and never taken is cleared once it is a
+  day old, at the next start of the journal or the next restore.
+- **A double click on a `.plainbook` file** opens its restore page: the
+  journal that is running is handed the file, and a journal that is not
+  running is started with it. The file stays where it is. On Windows
+  `desktop/plainbook-startup.ps1` ties the file type to the journal for the
+  current user (no administrator, and `-Remove` takes it out with the
+  shortcut); on Linux `desktop/plainbook-backup.xml` and
+  `desktop/plainbook-backup.desktop` do it, the commands are in INSTALL.md.
+  macOS has no double click, since the download there is a bare program and
+  not an application; the **Restore** button works the same.
+- On Windows a second copy of the journal no longer starts on the port the
+  first one holds; it opens the running one, as on the other systems.
+- The Backup card is in Plainbook Lite too. The download is refused when
+  another site asks for it, and the upload goes through the same check of
+  its origin as every form.
+- **Add from the catalogue** under Trading pairs on the Accounts tab: 125
+  instruments in groups (forex majors, minors and exotics, metals, energy,
+  commodities, indices, crypto), each with its icon and a tick box; the
+  ticked ones join the list at one press, and the ones the list holds stand
+  ticked and grey. Typing a pair into the field suggests the same names.
+- **Typing in the pair field narrows its list again.** The filter marked
+  the pairs that did not fit as hidden, but a style rule of the list showed
+  them anyway, so since 1.5.1 the whole list stayed open whatever was typed.
+  Enter with the list open now picks the marked pair, or the only one left,
+  and otherwise closes the list; it no longer saves the trade with half a
+  pair typed.
+- **The pair field of a trade or a plan suggests the catalogue too.** It
+  offered only the pairs of your list and the ones you had traded, so the
+  first trade on a fresh journal got no suggestion at all. From the first
+  letter it now also offers the catalogue instruments whose names start with
+  it, after your own pairs; a click on the empty field still shows only
+  yours.
+- **A grey winrate says why** when you point at it in a table: how many
+  trades it stands on, that fewer than five are too few to read as a rate,
+  and that break-even trades are not counted.
+- **Many more icons.** Flags for 28 more currencies (SAR, AED, QAR, KWD, RON,
+  BGN, UAH, KZT, TWD, IDR, MYR, PHP, CLP, COP, ARS, EGP, NGN, KES, MAD and
+  others) and for Austria, Belgium and Portugal, coins for 27 more crypto
+  coins (SOL, XRP, BNB, DOGE, ADA, TON, LTC and others), natural gas, coffee,
+  cocoa, sugar, wheat, corn, soybeans and cotton, and the index names brokers
+  use for them (VIX, NIFTY50, KOSPI, SA40, IBOV and others). The letters of a
+  coin standing behind another are moved into the half that shows, so `Au`
+  in front of a dollar no longer reads as `A`. `BRENTUSD` gets its oil drop.
+
 ## v1.11.0, 31.10.2026
 
 The report cards at a glance. The Cards tab is a calendar of a quarter on

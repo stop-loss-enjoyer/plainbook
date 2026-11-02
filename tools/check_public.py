@@ -9,7 +9,8 @@ A guard before publishing: does this repository hold anything it should not?
 Four things are checked:
 
 1. **No records are tracked.** The layout under journal/ is held by .gitkeep
-   files and nothing else may live there, nor in .trash/ or .drafts/, because
+   files and nothing else may live there, nor in .trash/, .drafts/ or
+   .restore/ (a backup being restored, unpacked), because
    one careless `git add -A` would be enough to publish somebody's trading
    history. With `--range`, the commits a push would publish are looked
    through as well (`git log --name-only` over the given revisions), so a
@@ -44,7 +45,7 @@ LONG_DASH = re.compile("[\u2014\u2013]")
 CYRILLIC_ALLOWED = {"tools/check_public.py"}
 # A placeholder id in the tests is not a real one.
 FOREIGN_ID_ALLOWED = {"tests/test_store.py", "tools/check_public.py"}
-SKIP_DIRS = {".git", "__pycache__", ".trash", ".drafts", "journal"}
+SKIP_DIRS = {".git", "__pycache__", ".trash", ".drafts", ".restore", "journal"}
 SKIP_SUFFIX = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".zip", ".bundle")
 
 
@@ -55,7 +56,7 @@ def is_layout(path):
 
 def tracked_records():
     try:
-        files = subprocess.run(["git", "ls-files", "journal", ".trash", ".drafts"],
+        files = subprocess.run(["git", "ls-files", "journal", ".trash", ".drafts", ".restore"],
                                text=True, capture_output=True, check=True).stdout.split("\n")
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []
@@ -67,7 +68,7 @@ def history_records(revisions):
     later commit removed them again. Returns (paths, error or None)."""
     try:
         out = subprocess.run(["git", "log", "--name-only", "--format=", *revisions,
-                              "--", "journal", ".trash", ".drafts"],
+                              "--", "journal", ".trash", ".drafts", ".restore"],
                              text=True, capture_output=True, check=True).stdout
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         detail = (getattr(e, "stderr", "") or str(e)).strip()

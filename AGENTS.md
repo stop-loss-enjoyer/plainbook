@@ -85,6 +85,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/html.py` | the palette, the CSS, the page shell, the SVG charts |
 | `plainbook/flags.py` | the round flag icons of a trading symbol, and what a symbol is taken apart into |
 | `plainbook/share.py` | the document a record leaves in: one file, its pictures inside it, no money in it |
+| `plainbook/backup.py` | the whole journal in one `.plainbook` file (a ZIP with a manifest of sizes and hashes) and back: making it, unpacking a file into `.restore/` and checking it, the swap that puts the journal aside into `.trash`, putting it back, the sweep of a restore left untaken |
 | `plainbook/server.py` | routes, pages, forms: everything HTTP; the edition gating goes only through `lite()`, `LITE_HIDDEN_TABS`, `LITE_HIDDEN_ROUTES` and `LITE_TRASH_KINDS` |
 | `plainbook/__main__.py` | `python3 -m plainbook`: the same server |
 | `tools/check_public.py` | the guard that keeps records out of the repository |
@@ -98,7 +99,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `tools/screenshots.py` | retakes the pictures of README.md in `docs/` on the demo journal; run it in the release commit, before the tag; `--edition=lite` takes the Plainbook Lite ones into `docs/lite/` |
 | `tests/` | the suite: `test_server.py` walks the routes on one shared journal, the others take the modules one by one; `formpost.py` reads a form of a page the way a browser sends it |
 | `docs/` | the screenshots of README.md, taken on the demo journal |
-| `desktop/` | the autostart of each system (the user unit for Linux, the LaunchAgent for macOS, the script that makes the startup shortcut on Windows), the window toggle and the bar widget for Omarchy; see its README |
+| `desktop/` | the autostart of each system (the user unit for Linux, the LaunchAgent for macOS, the script that makes the startup shortcut and ties `.plainbook` files on Windows), the file type of a backup for Linux, the window toggle and the bar widget for Omarchy; see its README |
 | `.githooks/pre-push` | runs `check_public.py` before a push; turned on once with `git config core.hooksPath .githooks` |
 | `.github/workflows/tests.yml` | the suite and the guard on every push, on Python 3.10 and 3.14, three systems |
 | `pyproject.toml` | the package on PyPI, `plainbook-journal`: the `plainbook` command of a pipx install; nothing in it is needed to run from source |
@@ -106,7 +107,7 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `.github/workflows/publish.yml` | puts the package of a published release on PyPI, by trusted publishing: no token anywhere |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
-reports, share, balances, store → model → mdfile`, with `reports` and `share`
+reports, share, balances, backup, store → model → mdfile`, with `reports` and `share`
 reading `html` and `stats` sideways for the words and the figures they print,
 and `balances` reading `store`. Nothing points back up. If you find yourself
 importing `server` from anywhere, the design has gone wrong.
@@ -247,6 +248,22 @@ data. Each one is followed by what it prevents.
     in Lite or added to the lists. *Prevents:* Lite turning into a second
     format that the full journal cannot read, and a screen that no longer
     draws a field wiping it from the file (invariant 14).
+16. **A restore never writes over the journal.** A backup file is unpacked into
+    `.restore/<token>/` and checked against its manifest first; taking it moves
+    the journal and the records of the trash whole into
+    `.trash/journal-<stamp>.before-restore/`, and Put back swaps the same way,
+    so every step can be undone and nothing is deleted. Every swap runs under
+    `backup._LOCK`, claims its folder in the trash with `mkdir`, never moves
+    onto a path that exists, and a folder put aside is only ever removed by
+    `rmdir` once empty, never by `rmtree`. A swap reads everything it will
+    move before the first move and takes the moves back on any error. The
+    backup carries every file of `journal/` as it is (a repository inside it,
+    links, and names `unpack` would refuse excepted, each named in
+    `skipped`: whatever `make` writes, `unpack` takes), so
+    a new kind of record needs nothing in `backup.py`; a new service folder
+    next to `journal/` that holds records is the one thing that would. The
+    Backup card is shown in both editions. *Prevents:* a restore of the wrong
+    file destroying the only copy of the owner's trades.
 
 ## 5. Recipes
 
@@ -427,3 +444,9 @@ and none of them was obvious from the code.
   tmpfs, oldest first on btrfs. Green here, red on another computer, three runs
   out of three. *Lesson:* a test finds its own record by id, and a sort on a
   coarse key gets a second key, or the order belongs to the disk.
+- **A filter that hid nothing.** The pair field's script set `hidden` on the
+  options that did not fit, and the rule `.picker .option{display:block}`
+  outweighed the attribute, so from 1.5.1 typing never narrowed the list and
+  no test could see it. *Lesson:* an element the script hides by `hidden`
+  and the stylesheet gives a `display` needs its own `[hidden]{display:none}`;
+  look at the page after the script has run, not only at the markup.

@@ -283,8 +283,15 @@ balance, you type the real number and the journal records the difference as
 a correction with your comment; history is never edited to make a figure
 agree. The tab also holds the lists the trade form offers, the trading
 styles, the entry timeframes, the execution formats and the pairs, all of
-them lists you edit, and the trash, where every deleted record waits with a
-Restore button.
+them lists you edit, the pairs typed in or ticked in a catalogue of 125
+instruments, and the trash, where every deleted record waits with a Restore
+button.
+
+**Backup** on the same tab downloads the whole journal as one `.plainbook`
+file: trades and screenshots, accounts, playbooks, plans, notes, cards,
+reports and settings. **Restore** takes such a file back, on this computer or
+another one, and shows what it holds beside the journal now before anything
+changes; the journal it replaces is kept in the trash and can be put back.
 
 ## Showing a trade to another trader
 
