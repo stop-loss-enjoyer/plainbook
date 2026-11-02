@@ -521,7 +521,7 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(k.quality, "A")
         self.assertEqual(k.focus, "no counter-trend trades")
         self.assertEqual(k.overview, "an even day")
-        _, html = self.get("/card/2026-08-29")
+        _, html = self.get("/card/2026-08-29/edit")
         self.assertIn("waited for the retest", html)   # the form came back filled
         _, html = self.get("/cards?quarter=2026-Q3")
         self.assertIn('href="/card/2026-08-29"', html)
@@ -540,7 +540,7 @@ class ServerCase(unittest.TestCase):
         # the empty rows of the paper table are not records
         self.assertEqual([(r.trade, r.grade) for r in k.assessment],
                          [("EURUSD long", "A"), ("XAU short", "C")])
-        _, html = self.get("/card/2026-08-30")
+        _, html = self.get("/card/2026-08-30/edit")
         self.assertIn('value="XAU short"', html)
 
     def test_22_changing_the_date_moves_the_card(self):
@@ -564,7 +564,7 @@ class ServerCase(unittest.TestCase):
         self.post("/card/save", {
             "date": "2026-08-26", "previous": "2026-08-26", "grade": "A",
             "pnl": "", "quality": "", "focus": "pennies"})
-        code, html = self.get("/card/2026-08-26")
+        code, html = self.get("/card/2026-08-26/edit")
         self.assertEqual(code, 200)
         self.assertIn("pennies", html)
         # empty fields have to stay empty, not become "[]"
@@ -2444,7 +2444,7 @@ class ServerCase(unittest.TestCase):
         # the empty rows of the paper table are not records
         self.assertEqual([(r.trade, r.grade) for r in k.assessment],
                          [("EURUSD long", "A"), ("XAU short", "C")])
-        _, html = self.get("/week/2026-W35")
+        _, html = self.get("/week/2026-W35/edit")
         self.assertIn("waited for the retest", html)   # the form came back filled
         self.assertIn('value="XAU short"', html)
         _, html = self.get("/cards?quarter=2026-Q3")
@@ -2682,7 +2682,7 @@ class ServerCase(unittest.TestCase):
         self.post("/week/save", {"week": "2026-W34", "previous": "2026-W34",
                                  "grade": "A", "pnl": "", "trades": "",
                                  "quality": "", "progress": "", "focus": "pennies"})
-        code, html = self.get("/week/2026-W34")
+        code, html = self.get("/week/2026-W34/edit")
         self.assertEqual(code, 200)
         self.assertIn("pennies", html)
         self.assertRegex(html, r'name="quality"[^>]*value=""')
@@ -2795,7 +2795,7 @@ class ServerCase(unittest.TestCase):
         label = labels[t.id]
         expected = self.S.outcomes(j, closed)[label]
         self.assertTrue(expected.startswith(t.result))
-        _, html = self.get(f"/card/{day}")
+        _, html = self.get(f"/card/{day}/edit")
         self.assertIn(f'<option value="{label}">', html)
         self.assertIn('name="assess_result"', html)
         # the same list is offered to the best trade, which is written by hand
@@ -2818,7 +2818,7 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(html.count('name="assess_trade"'), 7)
         self.assertEqual(self.S.assessment_rows(j, self.S.Card(day=t.closed), many[:2])
                          .count('name="assess_trade"'), 3)
-        _, html = self.get(f"/card/{day}")
+        _, html = self.get(f"/card/{day}/edit")
         # and is not offered on a day the journal held no trade at all: the
         # list behind it would be empty
         self.assertNotIn('class="pick"', self.get("/card/2000-01-01")[1])
@@ -2832,7 +2832,7 @@ class ServerCase(unittest.TestCase):
                          [(label, ""), ("XAU short", "by hand")])
         # the form offers the journal's result for the trade it knows, and
         # leaves the one typed by hand alone
-        _, html = self.get(f"/card/{day}")
+        _, html = self.get(f"/card/{day}/edit")
         self.assertIn(f'name="assess_result" autocomplete="off" '
                       f'style="width:100%" value="{expected}"', html)
         self.assertIn('value="by hand"', html)
@@ -2935,7 +2935,7 @@ class ServerCase(unittest.TestCase):
         # the answer of the journal is not written into the card: the trade is
         self.assertEqual([(r.trade, r.grade, r.result, r.id) for r in k.assessment],
                          [(label, "A", "", tid)])
-        _, html = self.get("/week/2026-W29")
+        _, html = self.get("/week/2026-W29/edit")
         self.assertIn('style="width:100%" value="open"', html)
         # it closes a week later, in week 30
         _, form = self.get(f"/close/{q}")
@@ -2943,8 +2943,10 @@ class ServerCase(unittest.TestCase):
                                   "pnl": "200", "exit": "2026-07-22T12:00"})
         r = self.S.journal(True).r(tid)
         # the card of week 29 now says what the swing made, and when
-        _, html = self.get("/week/2026-W29")
+        _, html = self.get("/week/2026-W29/edit")
         self.assertIn(f'style="width:100%" value="Win {r:+.2f} R, 22.07"', html)
+        _, html = self.get("/week/2026-W29")
+        self.assertIn(f"Win {r:+.2f} R, 22.07</td>", html)
         # and in week 30, where the money is, it is offered as a closed trade
         _, html = self.get("/week/2026-W30")
         self.assertIn('<option value="USDJPY long, 22.07">', html)
@@ -3088,15 +3090,100 @@ class ServerCase(unittest.TestCase):
         back = '<a class="btn" href="/report/2026-08">← August 2026</a>'
         _, html = self.get(f"{card}?report=2026-08")
         self.assertIn(back, html)
+        self.assertIn(f'href="{card}/edit?report=2026-08">Edit</a>', html)
+        _, html = self.get(f"{card}/edit?report=2026-08")
+        self.assertIn(back, html)
         self.assertIn('name="report" value="2026-08"', html)
+        self.assertIn(f'<a class="btn" href="{card}?report=2026-08">Cancel</a>', html)
+        for where in (card, f"{card}/edit"):
+            _, html = self.get(f"{where}?report=/evil")
+            self.assertNotIn("← ", html)
+            self.assertNotIn('name="report"', html)
         _, html = self.get(f"{card}?report=/evil")
-        self.assertNotIn("← ", html)
-        self.assertNotIn('name="report"', html)
+        self.assertIn(f'href="{card}/edit">Edit</a>', html)
         _, where = self.post("/card/save", {"previous": "2026-08-25",
                                             "date": "2026-08-25",
                                             "errors": "moved the stop too early",
                                             "report": "2026-08"})
         self.assertIn("?report=2026-08", where)
+
+    def test_75d_a_written_card_opens_to_be_read_and_edit_leads_to_the_form(self):
+        day = "2026-06-10"
+        self.post("/card/save", {
+            "date": day, "previous": day, "grade": "B", "pnl": "120", "quality": "A",
+            "focus": "**no** second entry\nwait for <the> retest",
+            "overview": "an even day", "assess_trade": ["EURUSD long"],
+            "assess_grade": ["A"], "assess_result": ["by hand"]})
+        self.addCleanup(self.post, f"/card/{day}/delete", {})
+        _, html = self.get(f"/card/{day}")
+        self.assertIn('class="read-text"', html)
+        self.assertIn(f'<a class="btn" href="/card/{day}/edit">Edit</a>', html)
+        self.assertNotIn("<form", html.replace('<form method="post" action="/settings/edition"', ""))
+        self.assertNotIn("<textarea", html)
+        # plain text: markup is shown as typed, escaped, the break is kept
+        self.assertIn("**no** second entry\nwait for &lt;the&gt; retest", html)
+        self.assertNotIn("<strong>", html)
+        self.assertNotIn("<the>", html)
+        # the assessment is a table, an empty section is not drawn
+        self.assertIn('<td>EURUSD long</td><td>A</td><td class="">by hand</td>', html)
+        self.assertNotIn("trading process", html)
+        self.assertIn('<span class="win">+120', html)
+        # the form is at /edit, filled, with Cancel back to the read view
+        _, html = self.get(f"/card/{day}/edit")
+        self.assertIn('<form method="post" action="/card/save">', html)
+        self.assertIn(f'<a class="btn" href="/card/{day}">Cancel</a>', html)
+        self.assertIn("wait for &lt;the&gt; retest", html)
+        # a day with no file opens straight as the form, at either address
+        for where in ("/card/2026-06-11", "/card/2026-06-11/edit"):
+            _, html = self.get(where)
+            self.assertIn('<form method="post" action="/card/save">', html)
+            self.assertIn('<a class="btn" href="/cards">Cancel</a>', html)
+        # a save lands on the read view, and the word is said there
+        _, where = self.post("/card/save", {"date": day, "previous": day,
+                                            "overview": "changed"})
+        self.assertEqual(urllib.parse.urlparse(where).path, f"/card/{day}")
+        self.assertIn("said=Daily%20card%20saved", where)
+        _, html = self.get(f"/card/{day}?said=Daily+card+saved")
+        self.assertIn('<div class="toast" role="status">Daily card saved</div>', html)
+        self.assertIn('class="read-text"', html)
+        self.assertIn("changed", html)
+
+    def test_75e_a_written_weekly_card_opens_to_be_read(self):
+        key = "2026-W24"
+        self.post("/week/save", {
+            "week": key, "previous": key, "grade": "C", "pnl": "-80", "trades": "3",
+            "quality": "B", "progress": "7", "focus": "<b>one</b> setup",
+            "lesson": "line one\nline two", "assess_trade": ["XAU short"],
+            "assess_grade": ["C"], "assess_result": ["Lose"]})
+        self.addCleanup(self.post, f"/week/{key}/delete", {})
+        _, html = self.get(f"/week/{key}?report=2026-06")
+        self.assertIn(f'<a class="btn" href="/week/{key}/edit?report=2026-06">Edit</a>', html)
+        self.assertIn('<a class="btn" href="/report/2026-06">', html)
+        self.assertIn("&lt;b&gt;one&lt;/b&gt; setup", html)
+        self.assertIn("line one\nline two", html)
+        self.assertIn("7/10", html)
+        self.assertIn('<span class="lose">-80', html)
+        self.assertIn('<td class="lose">Lose</td>', html)
+        self.assertNotIn("<textarea", html)
+        _, html = self.get(f"/week/{key}/edit?report=2026-06")
+        self.assertIn('<form method="post" action="/week/save">', html)
+        self.assertIn(f'<a class="btn" href="/week/{key}?report=2026-06">Cancel</a>', html)
+        _, html = self.get("/week/2026-W23")
+        self.assertIn('<form method="post" action="/week/save">', html)
+        _, where = self.post("/week/save", {"week": key, "previous": key,
+                                            "focus": "again", "report": "2026-06"})
+        self.assertEqual(urllib.parse.urlparse(where).path, f"/week/{key}")
+        self.assertIn("report=2026-06", where)
+
+    def test_75f_a_card_that_does_not_read_is_named_in_both_views(self):
+        path = os.path.join(self.root, "journal", "cards", "2026-06-12.md")
+        with open(path, "w") as f:
+            f.write("---\ndate: 12.06.2026 nonsense\n---\n")
+        self.addCleanup(os.remove, path)
+        self.S.drop_cache()
+        for where in ("/card/2026-06-12", "/card/2026-06-12/edit"):
+            _, html = self.get(where)
+            self.assertIn("This record could not be read", html)
 
     def test_76b_a_stray_file_in_the_reports_folder_is_passed_over(self):
         """A note or a copy left in journal/reports, and a header edited by

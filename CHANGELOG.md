@@ -2,6 +2,30 @@
 
 What changed and why. Newest first.
 
+## v1.13.0, 02.11.2026
+
+- **A written card opens to be read.** The daily and the weekly card show
+  their figures at the top, each section as you typed it with its line
+  breaks, empty sections left out and the trades assessment as a table.
+  **Edit** at the top right opens the form, Save and Cancel bring you back
+  to the card. A day or a week with no card yet still opens straight as the
+  form, so one click from the calendar starts a new one.
+- **Screenshots in a form are put in order by dragging.** Drag a thumbnail
+  to another place in its frame and the saved order follows what you see,
+  pictures just pasted among the saved ones too. The pictures of updates and
+  of a playbook review stand under their lines in the text and keep the
+  order of the text.
+- **The cross on a screenshot can be undone.** For eight seconds the frame
+  says `Screenshot removed · Undo`, and Undo puts the picture back where it
+  was. Taking a picture out now counts as a change, so leaving the form asks
+  first, and Undo with nothing else changed takes that back too.
+- **Screenshots on the pages are previews.** On the trade, plan, note and
+  playbook pages a picture is at most half the card and 480 pixels wide, the
+  pictures of one block stand side by side, and a click opens the chart
+  whole, as before. A narrow window still gives them the full width.
+- Fixed: on the edit page of a playbook the screenshots of the review could
+  not be taken out or pasted in. The cross and Ctrl+V work there now.
+
 ## v1.12.0, 02.11.2026
 
 - **Backup** on the Accounts tab. **Download backup** gives one file,

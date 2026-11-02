@@ -230,6 +230,12 @@ class LiteHides(LiteBase):
     def lite_off(self):
         self.post("/settings/edition", {})
 
+    def test_a_card_is_hidden_in_both_views(self):
+        self.lite_on()
+        for path in ("/card/2026-08-30", "/card/2026-08-30/edit",
+                     "/week/2026-W35", "/week/2026-W35/edit"):
+            self.assertIn("Turned off in Plainbook Lite", self.get(path), path)
+
     def form(self, path):
         return form_fields(self.get(path), path)
 

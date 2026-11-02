@@ -84,7 +84,7 @@ playbook, and its rules appear as a checklist with a box each. The entry, the
 stop and the target price can go in too, and the form says the RR of the
 trade while you type. Then the idea: one block per timeframe, a few words and
 the screenshots, pasted with Ctrl+V from TradingView, MetaTrader or a screen
-capture, or dragged in as files.
+capture, or dragged in as files, and put in order by dragging them.
 
 The idea gets written down before the market says who was right. In
 hindsight an idea always looks tidier than it was, which is the reason the
@@ -196,6 +196,7 @@ trading week, with the progress on the focus and the key lesson of the week.
 **+ DRC** and **+ WRC** in the header open them, and the **Cards** tab lays
 them out as a calendar of a quarter on one screen: every day with its card,
 the days you traded without one, and the weekly card at the end of its row.
+A written card opens to be read, and **Edit** turns it back into the form.
 
 ## Statistics
 

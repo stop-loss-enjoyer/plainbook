@@ -400,6 +400,12 @@ In this order, every time:
   work from a Lua config` earns its place; `# loop over trades` does not.
 - Keep functions small enough to read whole. There is no linter here and no
   formatter; match the surrounding style.
+- **Text fields stay plain text.** Bold, italics, bullets, colours, a toolbar
+  or shortcuts that write markup were asked for and declined by the owner: this
+  is a trading journal, not a text editor, and every such step invites the
+  next. A page shows what was typed, with its line breaks; the `**bold**` that
+  `inline()` already shows (updates, notes, plans, playbooks) is where it
+  stops, and the card read views do not show even that.
 
 ## 8. Traps that have already bitten
 

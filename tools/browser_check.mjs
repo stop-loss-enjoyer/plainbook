@@ -267,7 +267,7 @@ async function run(p) {
 
   // ---- 7. the report card: the trades of the day offered to the two fields
   // that name a trade, the best one and the assessment
-  await p.goto(B + "/card/" + DAY);                 // the day the trade above closed
+  await p.goto(B + "/card/" + DAY + "/edit");       // the day the trade above closed
   check(await p.evaluate(`!!document.querySelector('select.pick[data-into=best]')`),
     "the card offers the day's trades to the best trade");
   const label = await p.evaluate(`document.querySelector('select.pick option:nth-child(2)').value`);
@@ -295,6 +295,7 @@ async function run(p) {
   await p.evaluate(`document.querySelector('[name=grade]').value='B'`);
   await p.submit();
   check((await p.url()).startsWith("/card/" + DAY), "the card saved: " + (await p.url()));
+  await p.goto(B + "/card/" + DAY + "/edit");        // a saved card opens to be read, its form is at /edit
   check(await has(`document.querySelector('textarea[name=best]').value`, label),
     "the card came back with the trade in the best trade");
   check(await p.evaluate(`[...document.querySelectorAll('select.pick option[class]')].some(o => o.textContent.includes(' · ') && o.className)`),
@@ -316,6 +317,27 @@ async function run(p) {
   // leaving it would rightly ask first
   await p.submit();
   check((await p.url()).startsWith("/card/" + DAY), "the card saved with its lines");
+
+  // ---- 7b. a written card opens to be read: Edit leads to the form, Save
+  // comes back to the reading
+  await p.goto(B + "/card/" + DAY);
+  check(await p.evaluate(`!!document.querySelector('.read-text') && !document.querySelector('textarea')`),
+    "a written card opens to be read, with no form");
+  check(await p.evaluate(`!!document.querySelector('header .right a.btn[href="/card/${DAY}/edit"]')`),
+    "the read view has Edit at the top right");
+  events.length = 0;
+  await p.evaluate(`document.querySelector('header .right a.btn[href$="/edit"]').click()`);
+  await loaded();
+  check((await p.url()) === "/card/" + DAY + "/edit"
+        && await p.evaluate(`!!document.querySelector('textarea[name=overview]')`),
+    "Edit opens the form of the card");
+  const EDITED = "read mode check " + Date.now();
+  await p.evaluate(`document.querySelector('textarea[name=overview]').value=${JSON.stringify(EDITED)}`);
+  await p.submit();
+  check((await p.url()).split("?")[0] === "/card/" + DAY
+        && await has(`document.querySelector('.wrap').innerText`, EDITED),
+    "Save lands on the read view with the new text");
+  check(await p.evaluate(`!document.querySelector('textarea')`), "and it is still no form");
 
   // ---- the Download button of a preview, the one place a page fetches a
   // file for itself. The anchor click is caught, so a checking run saves
@@ -546,6 +568,145 @@ async function run(p) {
     return zone.querySelectorAll('.shot').length;
   })()`);
   check(dropped === 1, "a dropped picture lands in the zone");
+
+  // ---- screenshots: reordered by dragging, put back after the cross, and
+  // drawn side by side on the trade page. The pictures are told apart by their
+  // width, which is a mark that survives the save.
+  await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+  const WIDTHS = `[...document.querySelectorAll('.dropzone[data-zone="idea-1"] .shot img')].map(i => i.naturalWidth).join()`;
+  const SAVED = `[...document.querySelectorAll('img[alt="idea screenshot"]')].map(i => i.naturalWidth).join()`;
+  const paste = (zone, widths) => p.evaluate(`(async () => {
+    const dt = new DataTransfer();
+    for (const w of ${JSON.stringify(widths)}) {
+      const c = document.createElement('canvas'); c.width = w; c.height = 100;
+      c.getContext('2d').fillRect(0, 0, w, 100);
+      dt.items.add(new File([await new Promise(r => c.toBlob(r, 'image/png'))], w + '.png', {type: 'image/png'}));
+    }
+    const zone = document.querySelector('.dropzone[data-zone="${zone}"]');
+    const had = zone.querySelectorAll('.shot').length;
+    zone.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true}));
+    for (let i = 0; i < 100 && zone.querySelectorAll('.shot').length < had + ${widths.length}; i++)
+      await new Promise(r => setTimeout(r, 50));
+    for (const img of zone.querySelectorAll('.shot img'))
+      if (!img.complete) await new Promise(r => img.addEventListener('load', r));
+    return zone.querySelectorAll('.shot').length;
+  })()`);
+  // a thumbnail dragged onto the left half of another, or past the last one
+  const drag = (from, to) => p.evaluate(`(() => {
+    const zone = document.querySelector('.dropzone[data-zone="idea-1"]');
+    const shots = [...zone.querySelectorAll('.shot')];
+    const at = ${to} < shots.length ? shots[${to}].getBoundingClientRect() : null;
+    const last = shots[shots.length - 1].getBoundingClientRect();
+    const spot = at ? {clientX: at.left + 3, clientY: at.top + at.height / 2}
+                    : {clientX: last.right - 3, clientY: last.top + last.height / 2};
+    const dt = new DataTransfer();
+    const fire = (el, type) => el.dispatchEvent(new DragEvent(type,
+      {bubbles: true, cancelable: true, dataTransfer: dt, ...spot}));
+    fire(shots[${from}].querySelector('img'), 'dragstart');
+    fire(at ? shots[${to}] : zone, 'dragover');
+    const marked = !!zone.querySelector('.drop-before, .drop-after');
+    fire(at ? shots[${to}] : zone, 'drop');
+    fire(shots[${from}].querySelector('img'), 'dragend');
+    return marked && !zone.querySelector('.dragging, .drop-before, .drop-after');
+  })()`);
+  // the form above is left with a picture in it on purpose, and a browser does
+  // not ask about a page nobody clicked in: say it is saved so it leaves quietly
+  await p.evaluate(`unsaved = null`);
+  await p.goto(B + "/new");
+  await p.evaluate(`document.querySelector('[name=pair]').value='NZDUSD';
+    document.querySelector('[name=style]').value='swing';
+    document.querySelector('[name=idea_text_1]').value='three charts';
+    document.querySelector('[name=entry]').value=${JSON.stringify(DAY + "T07:00")}`);
+  check(await paste("idea-1", [1600, 1500, 1400]) === 3, "three pictures pasted into the idea block");
+  check(await p.evaluate(WIDTHS) === "1600,1500,1400", "they stand in the order they were pasted");
+  check(await drag(2, 0), "a drag shows where the picture lands and leaves no mark behind");
+  check(await p.evaluate(WIDTHS) === "1400,1600,1500", "the last picture dragged before the first");
+  check(await p.evaluate(`document.querySelector('.dropzone[data-zone="idea-1"] .shot input[name^=order_]') !== null`),
+    "every picture carries its place in the order");
+  await p.submit();
+  const dragged = (await p.url()).split("?")[0];
+  check(dragged.startsWith("/trade/"), "the trade with the reordered pictures is saved");
+  check(await p.evaluate(SAVED) === "1400,1600,1500", "the page shows the pictures in the dragged order");
+  // two pictures of a block sit side by side, none wider than half the card
+  const row = await p.evaluate(`(() => {
+    const [a, b] = [...document.querySelectorAll('.idea-block .shots img')].map(i => i.getBoundingClientRect());
+    const card = document.querySelector('.idea-block').getBoundingClientRect();
+    return [Math.abs(a.top - b.top) < 2, b.left >= a.right, a.width <= card.width / 2 + 1,
+            a.width > 300 && a.width <= 481].join();
+  })()`);
+  check(row === "true,true,true,true", "two idea screenshots sit side by side, each at most half the card and 480 wide: " + row);
+  // narrower, where half the card is less than the cap and is the limit
+  await send("Emulation.setDeviceMetricsOverride", { width: 860, height: 900, deviceScaleFactor: 1, mobile: false });
+  check(await p.evaluate(`(() => { const i = document.querySelector('.idea-block .shots img').getBoundingClientRect();
+    const card = document.querySelector('.idea-block').getBoundingClientRect();
+    return card.width < 960 && i.width <= card.width / 2 + 1 && i.width > card.width / 2 - 40; })()`),
+    "in a middle window a picture takes half the card");
+  await send("Emulation.setDeviceMetricsOverride", { width: 600, height: 900, deviceScaleFactor: 1, mobile: false });
+  check(await p.evaluate(`(() => { const i = document.querySelector('.idea-block .shots img');
+    return i.getBoundingClientRect().width > document.querySelector('.idea-block').getBoundingClientRect().width * 0.8; })()`),
+    "a narrow window gives a picture the whole width");
+  await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+  await p.evaluate(`document.querySelector('.idea-block .shots img').click()`);
+  check(await p.evaluate(`!!document.querySelector('.viewer img')`), "a click on a half-width picture opens the viewer");
+  await p.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))`);
+
+  // a new picture pasted into a saved block, dragged between two kept ones
+  await p.goto(B + "/edit/" + dragged.split("/")[2]);
+  check(await paste("idea-1", [1300]) === 4, "a fourth picture pasted into the saved block");
+  check(await drag(3, 1), "and dragged between two of the old ones");
+  check(await p.evaluate(WIDTHS) === "1400,1300,1600,1500", "it stands between them in the form");
+  await p.submit();
+  check(await p.evaluate(SAVED) === "1400,1300,1600,1500", "kept and new pictures are saved in the order seen");
+
+  // the cross, then Undo, in the same place and still saved
+  await p.goto(B + "/edit/" + dragged.split("/")[2]);
+  const ZONE = `document.querySelector('.dropzone[data-zone="idea-1"]')`;
+  check(await p.evaluate(`unsaved === null`), "a form just opened is not marked unsaved");
+  await p.evaluate(`${ZONE}.querySelectorAll('.shot .remove')[1].click()`);
+  check(await p.evaluate(`unsaved !== null`), "taking a picture off marks the form unsaved");
+  check(await p.evaluate(`${ZONE}.querySelectorAll('.shot').length`) === 3
+        && await has(`${ZONE}.querySelector('.hint').textContent`, "Screenshot removed")
+        && await p.evaluate(`!!${ZONE}.querySelector('.hint .undo')`),
+    "the cross removes the picture and the hint offers Undo");
+  await p.evaluate(`${ZONE}.querySelector('.hint .undo').click()`);
+  check(await p.evaluate(WIDTHS) === "1400,1300,1600,1500"
+        && !(await has(`${ZONE}.querySelector('.hint').textContent`, "removed")),
+    "Undo puts the same picture back in its place and the hint is plain again");
+  check(await p.evaluate(`unsaved === null`), "Undo with nothing else changed leaves the form unmarked");
+  await p.evaluate(`${ZONE}.querySelectorAll('.shot .remove')[1].click()`);
+  await p.evaluate(`(t => { t.value += ' '; t.dispatchEvent(new Event('input', {bubbles: true})); })(document.querySelector('[name="idea_text_1"]'))`);
+  await p.evaluate(`${ZONE}.querySelector('.hint .undo').click()`);
+  check(await p.evaluate(`unsaved !== null`), "Undo after typing keeps the form marked");
+  await p.evaluate(`unsaved = null`);       // the space typed above is not wanted
+  await p.goto(B + "/edit/" + dragged.split("/")[2]);
+  await p.evaluate(`${ZONE}.querySelectorAll('.shot .remove')[1].click()`);
+  await p.evaluate(`${ZONE}.querySelector('.hint .undo').click()`);
+  await p.submit();
+  check(await p.evaluate(SAVED) === "1400,1300,1600,1500", "a picture removed and put back is still saved");
+  await p.goto(B + "/edit/" + dragged.split("/")[2]);
+  await p.evaluate(`${ZONE}.querySelector('.shot .remove').click()`);
+  check(await paste("idea-1", [1200]) === 4 && !(await has(`${ZONE}.querySelector('.hint').textContent`, "removed")),
+    "a new paste takes the Undo offer away");
+  await p.evaluate(`${ZONE}.querySelectorAll('.shot .remove')[1].click()`);
+  await sleep(8400);
+  check(await p.evaluate(`!${ZONE}.querySelector('.hint .undo')`), "the Undo offer goes after a few seconds");
+
+  // the review of a playbook is edited in its own form, which once had a zone
+  // that drew the pictures and did nothing else
+  await p.evaluate(`unsaved = null`);       // the trade form above is left on purpose
+  await p.goto(B + "/playbook/break-test/edit");
+  check(await paste("review", [900]) === 1, "a picture pasted into the review of a playbook");
+  await p.submit();
+  const REVIEW = `document.querySelectorAll('img[src*="/playbook-shot/"]').length`;
+  check(await p.evaluate(REVIEW) === 1, "the playbook page shows the pasted review picture");
+  await p.goto(B + "/playbook/break-test/edit");
+  await p.evaluate(`document.querySelector('.dropzone[data-zone="review"] .shot .remove').click()`);
+  check(await p.evaluate(`document.querySelectorAll('.dropzone[data-zone="review"] .shot').length`) === 0
+        && await p.evaluate(`!!document.querySelector('.dropzone[data-zone="review"] .hint .undo')`),
+    "the cross takes a review picture off and offers Undo");
+  await p.submit();
+  check(await p.evaluate(REVIEW) === 0, "the review picture taken off is gone from the page");
+  await send("Emulation.clearDeviceMetricsOverride");
 }
 
 let failed = false;

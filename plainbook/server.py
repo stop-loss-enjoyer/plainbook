@@ -999,6 +999,12 @@ def report_field(back, report):
     return f'<input type="hidden" name="report" value="{esc(report)}">' if back else ""
 
 
+def report_query_of(back, report):
+    """`?report=` for a link that leads on from a card opened from a report:
+    only when `way_back` trusted the report, as `report_field` does."""
+    return f"?report={U(report)}" if back else ""
+
+
 def back_to_note(note_id):
     """The button back to the note a trade is an example in."""
     if not note_id or not store.safe_dir_name(note_id):
@@ -1136,7 +1142,7 @@ def trade_page(trade_id, q):
         idea += (f'<div class="idea-block">'
                  f'{f"<h3>{esc(block.tf)}</h3>" if block.tf else ""}'
                  f'<div>{esc(block.text).replace(chr(10), "<br>")}</div>'
-                 f'<div class="shots">{images}</div></div>')
+                 f'<div class="shots row">{images}</div></div>')
     exit_shots = "".join(
         f'<img src="/shot/{U(t.id)}/{U(os.path.basename(s))}" alt="exit screenshot">'
         for s in t.exit_images)
@@ -1185,7 +1191,7 @@ def trade_page(trade_id, q):
             + (f'<div class="card"><h2>Idea</h2>{idea}</div>' if idea else "")
             + updates
             + (f'<div class="card"><h2>Exit moment</h2>'
-               f'<div class="shots">{exit_shots}</div></div>' if exit_shots else "")
+               f'<div class="shots row">{exit_shots}</div></div>' if exit_shots else "")
             + (f'<div class="card"><h2>Conclusions</h2>'
                f'<div class="shots">{conclusions}</div>'
                f'</div>' if t.conclusions.strip() else "")
@@ -2575,20 +2581,100 @@ function refresh_zone(zone){
   const hint = zone.querySelector('.hint');
   if (!hint) return;
   if (hint.dataset.empty === undefined) hint.dataset.empty = hint.textContent;
+  if (zone._undo) {
+    const undo = document.createElement('button');
+    undo.type = 'button'; undo.className = 'undo'; undo.textContent = 'Undo';
+    hint.replaceChildren('Screenshot removed · ', undo);
+    return;
+  }
   const n = zone.querySelectorAll('.shot').length;
   hint.textContent = n ? n + (n === 1 ? ' screenshot' : ' screenshots') +
                          ' · Ctrl+V, drag or choose to add another' : hint.dataset.empty;
 }
+// The second hidden field of a picture names it again in the order of the zone:
+// the browser sends fields in page order, so dragging a thumbnail moves its
+// place in the order along with it, and the server, which reads the kept
+// pictures (have_) before the new ones (file_), puts them back in that order.
 function make_shot(url, field, value){
   const s = document.createElement('span');
   s.className = 'shot';
   s.innerHTML = '<img alt="screenshot"><button type="button" class="remove" ' +
-    'title="remove screenshot">&times;</button><input type="hidden">';
+    'title="remove screenshot">&times;</button><input type="hidden">' +
+    '<input type="hidden">';
   s.querySelector('img').src = url;
-  const input = s.querySelector('input');
+  const [input, order] = s.querySelectorAll('input');
   input.name = field;
   input.value = value;
+  order.name = 'order_' + field.slice(5);
+  order.value = field.slice(0, 4) + ':' + value;
   return s;
+}
+// The cross keeps the picture for a few seconds: the last one taken off a
+// zone goes back to the place it stood in with Undo, hidden field and all.
+function forget_removed(zone){
+  if (zone._undo) clearTimeout(zone._undo.timer);
+  zone._undo = null;
+}
+function remove_shot(zone, shot){
+  forget_removed(zone);
+  const was = typeof unsaved === 'undefined' ? null : unsaved;
+  zone._undo = {shot, next: shot.nextElementSibling, was,
+                timer: setTimeout(() => { zone._undo = null; refresh_zone(zone); }, 8000)};
+  shot.remove();
+  refresh_zone(zone);
+  window.form_changed && window.form_changed(zone);
+  if (typeof form_edits !== 'undefined') zone._undo.edits = form_edits;
+}
+function restore_shot(zone){
+  const undo = zone._undo;
+  if (!undo) return;
+  forget_removed(zone);
+  zone.insertBefore(undo.shot, undo.next && undo.next.parentNode === zone
+                    ? undo.next : zone.querySelector('.pick'));
+  refresh_zone(zone);
+  // nothing else touched since the cross: the form is as it was before it,
+  // and leaving it asks only if it asked before
+  if (undo.edits !== undefined && undo.edits === form_edits) unsaved = undo.was;
+  else window.form_changed && window.form_changed(zone);
+}
+// A thumbnail dragged inside its own zone. Kept here, not read off the drag,
+// because a dragged picture can look like a file to the browser; a drag in
+// from a folder never sets it, so the two paths stay apart.
+let moving = null;
+function drop_spot(zone, e){
+  // the picture the dragged one goes before, none for the end of the zone
+  for (const s of zone.querySelectorAll('.shot')) {
+    if (s === moving) continue;
+    const r = s.getBoundingClientRect();
+    if (e.clientY < r.bottom && (e.clientY < r.top || e.clientX < r.left + r.width / 2))
+      return s;
+  }
+  return null;
+}
+function clear_marks(){
+  document.querySelectorAll('.drop-before, .drop-after')
+    .forEach(s => s.classList.remove('drop-before', 'drop-after'));
+}
+function mark_spot(zone, e){
+  clear_marks();
+  const spot = drop_spot(zone, e);
+  if (spot) return spot.classList.add('drop-before');
+  const rest = [...zone.querySelectorAll('.shot')].filter(s => s !== moving);
+  if (rest.length) rest[rest.length - 1].classList.add('drop-after');
+}
+function move_shot(zone, e){
+  const was = [...zone.children].indexOf(moving);
+  const spot = drop_spot(zone, e);
+  if (spot) zone.insertBefore(moving, spot);
+  else {
+    const rest = [...zone.querySelectorAll('.shot')].filter(s => s !== moving);
+    if (rest.length) rest[rest.length - 1].after(moving);
+  }
+  if ([...zone.children].indexOf(moving) === was) return;
+  // the place a removed picture stood in has moved on with the rest
+  forget_removed(zone);
+  refresh_zone(zone);
+  window.form_changed && window.form_changed(zone);
 }
 function init_zones(){
   document.querySelectorAll('.dropzone').forEach(zone => {
@@ -2597,10 +2683,10 @@ function init_zones(){
     zone.tabIndex = 0;
     refresh_zone(zone);
     zone.addEventListener('click', e => {
+      if (e.target.closest('.undo')) return restore_shot(zone);
       const button = e.target.closest('.remove');
       if (!button) return;
-      button.closest('.shot').remove();
-      refresh_zone(zone);
+      remove_shot(zone, button.closest('.shot'));
     });
     zone.addEventListener('paste', e => {
       // the items go away once the handler yields, so take the files first
@@ -2608,14 +2694,40 @@ function init_zones(){
         .filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()));
     });
     // a picture dragged in from a folder, or picked with the button
+    zone.addEventListener('dragstart', e => {
+      const shot = e.target.closest && e.target.closest('.shot');
+      if (!shot) return;
+      // a zone whose pictures stand in a text has the text for its order, and
+      // its thumbnails are not carried about at all
+      if (zone.dataset.fixed) return e.preventDefault();
+      moving = shot;
+      e.dataTransfer.clearData();
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-plainbook-shot', '1');
+      shot.classList.add('dragging');
+    });
     zone.addEventListener('dragover', e => {
-      if ([...e.dataTransfer.types].includes('Files')) {
+      if (moving) {
+        if (moving.parentNode !== zone) return;
+        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+        mark_spot(zone, e);
+      } else if ([...e.dataTransfer.types].includes('Files')) {
         e.preventDefault(); zone.classList.add('over');
       }
     });
-    zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+    zone.addEventListener('dragleave', () => { zone.classList.remove('over'); clear_marks(); });
+    zone.addEventListener('dragend', () => {
+      if (moving) moving.classList.remove('dragging');
+      moving = null; clear_marks();
+    });
     zone.addEventListener('drop', e => {
       e.preventDefault(); zone.classList.remove('over');
+      if (moving) {
+        if (moving.parentNode === zone) move_shot(zone, e);
+        moving.classList.remove('dragging');
+        moving = null; clear_marks();
+        return;
+      }
       upload_shots(zone, [...e.dataTransfer.files].filter(f => f.type.startsWith('image/')));
     });
     const pick = document.createElement('input');
@@ -2644,6 +2756,7 @@ async function upload_shots(zone, blobs){
                                     headers:{'Content-Type': blob.type}});
         if (!answer.ok) throw new Error(answer.status);
         const data = await answer.json();
+        forget_removed(zone);
         zone.insertBefore(make_shot(data.url, 'file_' + zone.dataset.zone, data.file),
                           zone.querySelector('.pick'));
         refresh_zone(zone);
@@ -2718,12 +2831,15 @@ def shot_in_zone(base, path, field):
     `base` is where the pictures of this record are served from, `/shot/<id>`
     for a trade and `/plan-shot/<id>` for a plan. The cross simply removes the
     node from the form, and together with the hidden field that is what keeps
-    the screenshot in the record."""
+    the screenshot in the record. The second field is the picture's place in
+    the order of its zone (see `zone_sources`)."""
     return (f'<span class="shot">'
             f'<img src="{base}/{U(os.path.basename(path))}" alt="screenshot">'
             f'<button type="button" class="remove" title="remove screenshot">'
             f'&times;</button>'
-            f'<input type="hidden" name="{field}" value="{esc(path)}"></span>')
+            f'<input type="hidden" name="{field}" value="{esc(path)}">'
+            f'<input type="hidden" name="order_{field.split("_", 1)[1]}" '
+            f'value="have:{esc(path)}"></span>')
 
 
 def shots_base(trade_id):
@@ -2742,8 +2858,11 @@ def note_shots_base(note_id):
     return f"/note-shot/{U(note_id)}"
 
 
-def dropzone(name, hint, shots=()):
-    return (f'<div class="dropzone" data-zone="{esc(name)}">{"".join(shots)}'
+def dropzone(name, hint, shots=(), fixed=False):
+    """`fixed` is a zone whose pictures stand in a text: their order is the
+    order of the links there, so the thumbnails are not dragged about."""
+    mark = ' data-fixed="1"' if fixed else ""
+    return (f'<div class="dropzone" data-zone="{esc(name)}"{mark}>{"".join(shots)}'
             f'<div class="hint">{esc(hint)}</div></div>')
 
 
@@ -3166,7 +3285,7 @@ def trade_form(t=None, token="", keep=""):
 <textarea name="updates">{esc(t.updates)}</textarea>
 {dropzone("update", "the screenshots of the updates",
           [shot_in_zone(shots_base(t.id), src, "have_update")
-           for src in conclusion_images(t.updates)])}</div>"""
+           for src in conclusion_images(t.updates)], fixed=True)}</div>"""
     return f"""<form method="post" action="{action}" data-last-risk="{esc(json.dumps(risks))}"
  data-balances="{esc(json.dumps(risk_bases(j, t)))}"
  data-signs="{esc(json.dumps({a: H.SIGNS.get(j.currency(a).upper(), j.currency(a)) for a in accounts}))}">
@@ -3578,7 +3697,12 @@ def save_draft(token, zone, data):
 def zone_sources(data, zone, folder, token):
     """Image paths for a zone: the old ones kept plus the new ones pasted.
 
-    `folder` is the record's own directory, a trade's or a plan's."""
+    `folder` is the record's own directory, a trade's or a plan's. The kept
+    and the new arrive in two lists, so a form that dragged a new picture
+    between two old ones also sends `order_<zone>`, every picture named
+    `have:<path>` or `file:<name>` in the order the owner left them. It only
+    puts the pictures the lists already name in order, and one it does not
+    name stays after the others; a form without it keeps the old order."""
     removed = set(data.get("remove", []))
     paths = []
     inside = os.path.normpath(folder) + os.sep
@@ -3589,11 +3713,15 @@ def zone_sources(data, zone, folder, token):
         # path that leads out of the record's own folder is not a picture
         full = os.path.normpath(os.path.join(folder, s))
         if full.startswith(inside):
-            paths.append(full)
+            paths.append((f"have:{s}", full))
     for name in data.get("file_" + zone, []):
         if _FILE_NAME.match(name):
-            paths.append(os.path.join(draft_dir(token), name))
-    return [p for p in paths if os.path.exists(p)]
+            paths.append((f"file:{name}", os.path.join(draft_dir(token), name)))
+    place = {}
+    for i, key in enumerate(data.get("order_" + zone, [])):
+        place.setdefault(key, i)
+    paths.sort(key=lambda kp: place.get(kp[0], len(place)))
+    return [p for _, p in paths if os.path.exists(p)]
 
 
 # what a zone of a form is called on the disk
@@ -4460,7 +4588,7 @@ def plan_page(plan_id):
         analysis += (f'<div class="idea-block">'
                      f'{f"<h3>{esc(block.tf)}</h3>" if block.tf else ""}'
                      f'<div>{esc(block.text).replace(chr(10), "<br>")}</div>'
-                     f'<div class="shots">{images}</div></div>')
+                     f'<div class="shots row">{images}</div></div>')
     review = with_shots(k.review, base)
     updates = (f'<div class="shots">{with_shots(k.updates, base)}</div>'
                if k.updates.strip() else
@@ -4583,7 +4711,7 @@ def plan_form(k=None, token=""):
 <textarea name="updates">{esc(k.updates)}</textarea>
 {dropzone("update", "screenshots of the updates, Ctrl+V here",
           [shot_in_zone(base, src, "have_update")
-           for src in conclusion_images(k.updates)])}
+           for src in conclusion_images(k.updates)], fixed=True)}
 <p class="caption">Written as the plan runs; the plan page adds a dated line to
 this without opening the form. A screenshot keeps the line it was pasted
 under.</p></div>
@@ -4928,7 +5056,7 @@ def note_page(note_id):
         text += (f'<div class="idea-block" id="block-{i}">'
                  f'{f"<h3>{esc(block.tf)}</h3>" if block.tf else ""}'
                  f'<div>{inline(block.text)}</div>'
-                 f'<div class="shots">{images}</div></div>')
+                 f'<div class="shots row">{images}</div></div>')
     text = text or '<p class="muted">Nothing written yet.</p>'
     # a long note is read in pieces: its headings, each a link to its block
     heads = [(i, b.tf) for i, b in enumerate(n.blocks, 1) if b.tf]
@@ -5660,7 +5788,7 @@ def playbook_form(p=None, token="", notice=""):
 <textarea name="review">{esc(p.review)}</textarea>
 {dropzone("review", "screenshots of the review, Ctrl+V here",
           [shot_in_zone(base, src, "have_review")
-           for src in conclusion_images(p.review)])}
+           for src in conclusion_images(p.review)], fixed=True)}
 <p class="caption">Each entry starts with its date in bold, <code>**dd.mm.yyyy**:</code>,
 and one entry is counted for each block reviewed. A slip is put right here;
 a new entry is added on the playbook page.</p>
@@ -5725,7 +5853,9 @@ section of its own on the page.</p>
 {review_card}<div class="actions"><button class="btn primary">{"Save" if editing else "Write the playbook"}</button>
 <a class="btn" href="{f"/playbook/{U(p.id)}" if editing else "/playbooks"}">Cancel</a></div>
 </form>
-<script>{PLAYBOOK_FORM_SCRIPT}</script>"""
+<script>{PLAYBOOK_FORM_SCRIPT}</script>{(f"<script>{FORM_SCRIPT}</script>"
+f"<script>document.body.dataset.token = {js(token)};init_zones();</script>")
+if review_card else ""}"""
 
 
 # The rule fields: one field per rule that grows with its text, Enter adds
@@ -6528,12 +6658,105 @@ def first_line(text, limit=90):
     return line if len(line) <= limit else line[:limit - 1] + "…"
 
 
-def card_page(day, report=""):
+# --- reading a card --------------------------------------------------------
+# A card that is written opens to be read and Edit leads to the form, as a
+# plan and a note do. The text is shown as it was typed, line breaks kept and
+# nothing made of it: no markup, bold included (see `inline` for what plans
+# do). A section left empty is not drawn.
+
+def read_field(label, value, sub=""):
+    under = f'<p class="caption">{sub}</p>' if sub else ""
+    return (f'<div class="field"><label>{label}</label>'
+            f'<div class="fig">{value}</div>{under}</div>')
+
+
+def read_text(label, text):
+    if not (text or "").strip():
+        return ""
+    return f'<h3>{esc(label)}</h3><div class="read-text">{esc(text.strip())}</div>'
+
+
+def read_pnl(j, pnl):
+    return f'<span class="{sum_class(pnl)}">{amount(j, pnl, signed=True)}</span>'
+
+
+def read_edit(kind, k, report):
+    """The header of a card read: the way back to the report it was opened
+    from, if any, and Edit, which carries that report on to the form."""
+    back = way_back(report)
+    edit = (f'<a class="btn" href="/{kind}/{U(k.id)}/edit'
+            f'{report_query_of(back, report)}">Edit</a>')
+    return back + edit
+
+
+def assessment_read(j, k, closed, running, period):
+    """The trades assessment as a table to read: the same lines the form
+    draws, with the result worked out the way the form fills it in."""
+    rows = [r for r in k.assessment if r.trade.strip() or r.grade.strip()]
+    if not rows:
+        return ""
+    known = outcomes(j, closed, running, period)
+    live = results_by_id(j, rows, period)
+    have = {t.id for t in j.trades}
+
+    def result_of(row):
+        text = row.trade.strip()
+        return (row.result or live.get(row.id) or known.get(text)
+                or known.get(text.upper()) or "")
+    body = ""
+    for n, row in enumerate(rows, 1):
+        name = esc(row.trade)
+        if row.id in have:
+            name = f'<a href="/trade/{U(row.id)}">{name}</a>'
+        result = result_of(row)
+        word = {"Win": "win", "Lose": "lose", "BE": "be"}.get(result.split(" ")[0], "")
+        body += (f'<tr><td class="muted n">{n}.</td><td>{name}</td>'
+                 f'<td>{esc(row.grade)}</td><td class="{word}">{esc(result)}</td></tr>')
+    return (f'<h3>trades assessment</h3><table class="read-assessment">'
+            f'<thead><tr><th style="width:24px"></th><th>trade</th>'
+            f'<th style="width:80px">grade</th><th style="width:150px">result</th>'
+            f'</tr></thead><tbody>{body}</tbody></table>')
+
+
+def card_read(j, k, report=""):
+    closed = day_trades(j, k.day)
+    period = day_period(k.day)
+    running = running_trades(j, period[1])
+    labels = {name: label for name, _, label in CARD_SECTIONS}
+    facts = [read_field("date", f"{k.day:%a %d.%m.%Y}")]
+    if k.grade:
+        facts.append(read_field("process grade", esc(k.grade)))
+    if k.pnl is not None:
+        facts.append(read_field(f"PnL, {H.sign(j.currency())}", read_pnl(j, k.pnl)))
+    if k.quality:
+        facts.append(read_field("opportunity quality", esc(k.quality)))
+    body = (f'<div class="card"><h2>Daily report card</h2>'
+            f'<div class="fields read">{"".join(facts)}</div></div>')
+    upper = "".join(read_text(labels[n], getattr(k, n))
+                    for n in ("focus", "process", "learned", "errors"))
+    if upper:
+        body += f'<div class="card">{upper}</div>'
+    # as the paper has it: the best trade beside the assessment
+    best = read_text(labels["best"], k.best)
+    graded = assessment_read(j, k, closed, running, period)
+    if best and graded:
+        body += f'<div class="card twin"><div>{best}</div><div>{graded}</div></div>'
+    elif best or graded:
+        body += f'<div class="card">{best}{graded}</div>'
+    overview = read_text(labels["overview"], k.overview)
+    if overview:
+        body += f'<div class="card">{overview}</div>'
+    return page(f"Card {k.day:%d.%m.%Y}", body, "cards", read_edit("card", k, report))
+
+
+def card_page(day, report="", edit=False):
     j = journal()
     problems = []
     k = store.load_card(ROOT, day, problems)
     if problems:
         return broken_record(problems, "cards", "/cards")
+    if k is not None and not edit:
+        return card_read(j, k, report)
     closed = day_trades(j, day)
     period = day_period(day)
     running = running_trades(j, period[1])
@@ -6560,6 +6783,7 @@ def card_page(day, report=""):
         f'onclick="return confirm(\'Delete the card for {k.day:%d.%m.%Y}? '
         f'It goes to .trash.\')">Delete</button></span>')
     back = way_back(report)
+    cancel = "/cards" if is_new else f"/card/{k.id}{report_query_of(back, report)}"
     body = f"""<form method="post" action="/card/save">
 <input type="hidden" name="previous" value="{k.day:%Y-%m-%d}">{report_field(back, report)}
 <div class="card"><h2>Daily report card</h2>
@@ -6586,7 +6810,7 @@ def card_page(day, report=""):
 <div>{assessment_rows(j, k, closed, running, period)}</div></div>
 <div class="card">{section("overview")}</div>
 <div class="actions"><button class="btn primary">Save card</button>
-<a class="btn" href="/cards">Cancel</a>{delete}</div>
+<a class="btn" href="{cancel}">Cancel</a>{delete}</div>
 </form>"""
     return page(f"Card {day:%d.%m.%Y}", body, "cards", back)
 
@@ -6652,12 +6876,43 @@ def week_period(key):
     return monday, monday + timedelta(days=7)
 
 
-def week_page(key, report=""):
+def week_read(j, k, report=""):
+    closed = week_trades(j, k.week)
+    period = week_period(k.week)
+    running = running_trades(j, period[1])
+    facts = [read_field("week", f"Week {k.number}", week_dates(k))]
+    if k.grade:
+        facts.append(read_field("process grade", esc(k.grade)))
+    if k.pnl is not None:
+        facts.append(read_field(f"PnL, {H.sign(j.currency())}", read_pnl(j, k.pnl)))
+    if k.trades is not None:
+        facts.append(read_field("trades", str(k.trades),
+                                trades_breakdown(j, closed, running)))
+    if k.quality:
+        facts.append(read_field("opportunity quality", esc(k.quality)))
+    if k.progress is not None:
+        word = dict(PROGRESS).get(k.progress, "")
+        facts.append(read_field("progress", f"{k.progress}/10", esc(word)))
+    body = (f'<div class="card"><h2>Weekly report card</h2>'
+            f'<div class="fields read">{"".join(facts)}</div></div>')
+    texts = "".join(read_text(label, getattr(k, name))
+                    for name, _, label in WEEK_SECTIONS)
+    if texts:
+        body += f'<div class="card">{texts}</div>'
+    graded = assessment_read(j, k, closed, running, period)
+    if graded:
+        body += f'<div class="card">{graded}</div>'
+    return page(f"Week {k.number}", body, "cards", read_edit("week", k, report))
+
+
+def week_page(key, report="", edit=False):
     j = journal()
     problems = []
     k = store.load_week(ROOT, key, problems)
     if problems:
         return broken_record(problems, "cards", "/cards")
+    if k is not None and not edit:
+        return week_read(j, k, report)
     closed = week_trades(j, key)
     period = week_period(key)
     running = running_trades(j, period[1])
@@ -6697,6 +6952,7 @@ def week_page(key, report=""):
         f'onclick="return confirm(\'Delete the card for week {k.number}? '
         f'It goes to .trash.\')">Delete</button></span>')
     back = way_back(report)
+    cancel = "/cards" if is_new else f"/week/{k.id}{report_query_of(back, report)}"
     body = f"""<form method="post" action="/week/save">
 <input type="hidden" name="previous" value="{k.week}">{report_field(back, report)}
 <div class="card"><h2>Weekly report card</h2>
@@ -6726,7 +6982,7 @@ yours to override.</p>
 <div class="card">{sections}</div>
 <div class="card">{assessment_rows(j, k, closed, running, period)}</div>
 <div class="actions"><button class="btn primary">Save card</button>
-<a class="btn" href="/cards">Cancel</a>{delete}</div>
+<a class="btn" href="{cancel}">Cancel</a>{delete}</div>
 </form>"""
     return page(f"Week {k.number}", body, "cards", back)
 
@@ -9131,18 +9387,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(reports_page())
         if path == "/cards":
             return self._send(cards_page(q))
-        if len(parts) == 2 and parts[0] == "card":
+        # a card is read, and /edit is its form; one with no file opens as the form
+        if len(parts) in (2, 3) and parts[0] == "card" and parts[2:] in ([], ["edit"]):
             try:
                 day = day_from_url(parts[1])
             except RecordError as e:
                 return self._gone(str(e), "cards", "/cards")
-            return self._send(card_page(day, (q.get("report") or [""])[0]))
-        if len(parts) == 2 and parts[0] == "week":
+            return self._send(card_page(day, (q.get("report") or [""])[0],
+                                        len(parts) == 3))
+        if len(parts) in (2, 3) and parts[0] == "week" and parts[2:] in ([], ["edit"]):
             try:
                 key = week_from_url(parts[1])
             except RecordError as e:
                 return self._gone(str(e), "cards", "/cards")
-            return self._send(week_page(key, (q.get("report") or [""])[0]))
+            return self._send(week_page(key, (q.get("report") or [""])[0],
+                                        len(parts) == 3))
         if path == "/accounts":
             return self._send(accounts_page((q.get("m") or [""])[0],
                                             (q.get("bad") or [""])[0] == "1",

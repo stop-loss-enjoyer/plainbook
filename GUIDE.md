@@ -85,8 +85,13 @@ another one when the idea rests on several timeframes.
 **Screenshots**: click inside the dashed frame and press **Ctrl+V**. Whatever is
 on the clipboard goes in, a screenshot from TradingView or a cut of the screen.
 A picture file can be dragged in from a folder too, or picked with **Choose a
-file**. To take a screenshot out, press the cross in its top right corner.
-Pressing Save while a picture is still on its way waits for it.
+file**. To take a screenshot out, press the cross in its top right corner;
+for eight seconds the frame says **Screenshot removed · Undo**, and Undo puts
+it back in its place. To change the order, drag a thumbnail to another place
+in its frame: the order you leave is the order saved. The pictures of
+updates and of a playbook review stand under their lines in the text, so they
+keep the order of the text and are not dragged. Pressing Save while a
+picture is still on its way waits for it.
 
 **A form is not lost by accident.** Once you have typed in a form with text or
 screenshots, leaving the page by a tab or a link asks first.
@@ -503,6 +508,8 @@ The fields of the trade stand on the left and its **passport** beside them:
   and the balance under the pointer; the entry and the exit of this trade are
   marked on it, the exit with a dot where the trade moved the balance.
 
+**Screenshots stand as previews**, at most half the card wide, those of one
+idea block side by side, so the text and the charts read together.
 **A screenshot opens over the page** on a click: at the size of the window,
 and at its own size on a second click, to read a level closely. The arrows go
 to the next and the previous picture of the page, Esc or a click beside it
@@ -539,6 +546,13 @@ closes it.
 
 **+ DRC** opens today's card; if there already is one for that day, it opens
 that one. The **Cards** tab shows them on a calendar of the quarter.
+
+**A written card opens to be read**: the date, the grades and the PnL at the
+top, then each section as you typed it, the empty ones left out, and the
+trades assessment as a table. **Edit** at the top right opens the form;
+Save and Cancel bring you back to the card, and **Delete** is in the form. A
+day with no card yet opens straight as the form. A card opened from a report
+keeps its way back to that report in both.
 
 - **date**: you can change it when reviewing yesterday. Changing the date
   moves the card rather than creating a second one; if the new day already
@@ -582,7 +596,8 @@ that one. The **Cards** tab shows them on a calendar of the quarter.
 
 **+ WRC** opens the card of the week that is running; if there already is one,
 it opens that one. On the **Cards** tab it ends the row of its week, and both
-kinds are stored side by side in `journal/cards`.
+kinds are stored side by side in `journal/cards`. A written weekly card opens
+to be read, with **Edit** at the top right, the same way as the daily one.
 
 - **week**: the calendar week, Monday to Sunday, the same week the journal
   groups the trades by. Changing it moves the card, exactly as the date moves a

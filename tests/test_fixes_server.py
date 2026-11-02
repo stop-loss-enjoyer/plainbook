@@ -139,9 +139,9 @@ class FixesCase(unittest.TestCase):
                     if x.startswith("2026-08-25-01-gbpusd")][0]
         self.assertIn(",12345.67,", line)
         store.save_card(self.root, Card(day=date(2026, 8, 20), pnl=123456.78))
-        self.assertEqual(self.value(self.get("/card/2026-08-20")[1], "pnl"), "123456.78")
+        self.assertEqual(self.value(self.get("/card/2026-08-20/edit")[1], "pnl"), "123456.78")
         store.save_week(self.root, Week(week="2026-W33", pnl=1234567.5))
-        self.assertEqual(self.value(self.get("/week/2026-W33")[1], "pnl"), "1234567.5")
+        self.assertEqual(self.value(self.get("/week/2026-W33/edit")[1], "pnl"), "1234567.5")
 
     # --- 2: the daily limit is set where the rules are ---
     def test_the_old_limit_route_is_gone(self):
@@ -194,6 +194,102 @@ class FixesCase(unittest.TestCase):
         after = store.load_plan(self.root, k.id).updates
         self.assertTrue(after.endswith("**26.08** second\n![](shots/update-01.png)"), after)
         self.assertNotIn("first\n![]", after)
+
+    # --- the order of the pictures of a zone, as dragged on the form ---
+    def two_idea_pictures(self, trade_id):
+        t = self.trade(trade_id, pair="NZDUSD")
+        t.idea[0].images = ["shots/idea-01-01.png", "shots/idea-01-02.png"]
+        store.save_trade(self.root, t)
+        shots = os.path.join(store.trade_dir(self.root, t.id), store.SHOTS)
+        os.makedirs(shots)
+        for n in (1, 2):
+            with open(os.path.join(shots, f"idea-01-0{n}.png"), "wb") as f:
+                f.write(PNG + bytes([n]))
+        return t
+
+    def paste(self, token, extra):
+        req = urllib.request.Request(
+            self.url(f"/draft/upload?token={token}&zone=idea-1"),
+            data=PNG + bytes([extra]), headers={"Content-Type": "image/png"})
+        with urllib.request.urlopen(req) as r:
+            return json.load(r)["file"]
+
+    def save_idea_order(self, t, fields):
+        """The marks of the pictures the trade holds after the save, in order:
+        the byte each test appended to its picture."""
+        _, html = self.get(f"/edit/{t.id}")
+        form = {"token": self.token(html), "blocks": "1", "account": "broker",
+                "pair": "NZDUSD", "direction": "long", "style": "swing",
+                "entry_tf": "H4", "risk": "1",
+                "entry": t.opened.strftime("%Y-%m-%dT%H:%M"),
+                "idea_tf_1": "H4", "idea_text_1": "an idea"}
+        form.update(fields(self.token(html)))
+        self.post(f"/edit/{t.id}", form)
+        saved = store.load_trade(self.root, t.id)
+        folder = store.trade_dir(self.root, t.id)
+        marks = []
+        for s in saved.idea[0].images:
+            with open(os.path.join(folder, s), "rb") as f:
+                marks.append(f.read()[len(PNG)])
+        return marks
+
+    def test_a_new_picture_dragged_between_kept_ones_is_saved_there(self):
+        t = self.two_idea_pictures("2026-08-28-01-nzdusd")
+        first, second = "shots/idea-01-01.png", "shots/idea-01-02.png"
+
+        def between(token):
+            new = self.paste(token, 9)
+            return {"have_idea-1": [first, second], "file_idea-1": [new],
+                    "order_idea-1": [f"have:{first}", f"file:{new}", f"have:{second}"]}
+
+        self.assertEqual(self.save_idea_order(t, between), [1, 9, 2])
+
+    def test_kept_pictures_dragged_after_a_new_one_are_saved_after_it(self):
+        t = self.two_idea_pictures("2026-08-28-02-nzdusd")
+        first, second = "shots/idea-01-01.png", "shots/idea-01-02.png"
+
+        def first_of_three(token):
+            new = self.paste(token, 9)
+            return {"have_idea-1": [first, second], "file_idea-1": [new],
+                    "order_idea-1": [f"file:{new}", f"have:{second}", f"have:{first}"]}
+
+        self.assertEqual(self.save_idea_order(t, first_of_three), [9, 2, 1])
+
+    def test_a_form_without_the_order_keeps_the_kept_ones_first(self):
+        t = self.two_idea_pictures("2026-08-28-03-nzdusd")
+
+        def old_form(token):
+            return {"have_idea-1": ["shots/idea-01-02.png", "shots/idea-01-01.png"],
+                    "file_idea-1": [self.paste(token, 9)]}
+
+        self.assertEqual(self.save_idea_order(t, old_form), [2, 1, 9])
+
+    def test_the_order_only_sorts_what_the_form_names_otherwise(self):
+        t = self.two_idea_pictures("2026-08-28-04-nzdusd")
+        first, second = "shots/idea-01-01.png", "shots/idea-01-02.png"
+        outside = "shots/../../../../etc/passwd"
+
+        def forged(token):
+            new = self.paste(token, 9)
+            # a picture the order names but the form did not send is not added,
+            # a path out of the folder stays out, and one the order forgot is
+            # kept after the ones it named
+            return {"have_idea-1": [first, second, outside], "file_idea-1": [new],
+                    "order_idea-1": [f"have:{outside}", "have:shots/idea-01-03.png",
+                                     "file:0123456789abcdef.png", f"file:{new}",
+                                     f"have:{second}"]}
+
+        self.assertEqual(self.save_idea_order(t, forged), [9, 2, 1])
+
+    def test_the_forms_draw_the_order_field_and_fix_the_zones_with_text(self):
+        t = self.two_idea_pictures("2026-08-28-05-nzdusd")
+        _, html = self.get(f"/edit/{t.id}")
+        self.assertIn('name="order_idea-1" value="have:shots/idea-01-02.png"', html)
+        self.assertNotIn(' data-fixed="1"', html)
+        u = self.trade("2026-08-28-06-nzdusd", pair="NZDUSD",
+                       updates="**01.09** moved stop\n![](shots/update-01.png)")
+        _, html = self.get(f"/edit/{u.id}")
+        self.assertRegex(html, r'data-zone="update" data-fixed="1"')
 
     # --- 17: a save waiting for a picture keeps the form guarded ---
     def test_a_waiting_save_marks_the_form_unsaved(self):

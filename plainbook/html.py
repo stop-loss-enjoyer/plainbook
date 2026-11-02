@@ -347,6 +347,14 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .twin textarea{{flex:1}}
 @media (max-width:1000px){{.twin{{grid-template-columns:1fr}}}}
 .field{{min-width:150px}}
+/* a report card opened to be read: the figures of the form as text, and the
+   text sections as typed, line breaks kept, nothing made of them */
+.fields.read{{gap:6px 40px}}
+.fields.read .fig{{font:600 17px/1.2 {MONO};margin-top:4px;
+ font-variant-numeric:tabular-nums}}
+.fields.read .caption{{margin:4px 0 0}}
+.read-text{{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;
+ line-height:1.55;color:{INK2}}}
 .actions{{display:flex;gap:8px;align-items:center;margin:16px 0 0}}
 .actions .right{{margin-left:auto}}
 
@@ -389,6 +397,16 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
  font:14px/1 system-ui,sans-serif;cursor:pointer;padding:0;
  display:flex;align-items:center;justify-content:center}}
 .shot .remove:hover{{background:{BAD};color:#fff}}
+.dropzone:not([data-fixed]) .shot img{{cursor:grab}}
+.shot.dragging{{opacity:.45}}
+/* where a dragged thumbnail would land: a bar beside the one it goes next to,
+   drawn outside the box so nothing in the zone shifts */
+.shot.drop-before::before,.shot.drop-after::after{{content:"";position:absolute;
+ top:0;bottom:0;width:2px;background:{ACCENT}}}
+.shot.drop-before::before{{left:-5px}}
+.shot.drop-after::after{{right:-5px}}
+.dropzone .undo{{background:none;border:none;padding:0;font:inherit;
+ letter-spacing:inherit;color:{ACCENT};text-decoration:underline;cursor:pointer}}
 
 /* trade page: the fields on the left, the passport of the trade beside
    them, one under the other on a narrow screen */
@@ -400,8 +418,14 @@ textarea{{width:100%;min-height:78px;resize:vertical;line-height:1.55}}
 .passport svg{{display:block}}
 .passport .caption{{margin:0 0 8px}}
 /* trade page */
-.shots img{{max-width:100%;border:1px solid {EDGE};border-radius:5px;
+.shots img{{max-width:min(50%,480px);border:1px solid {EDGE};border-radius:5px;
  margin:8px 0;display:block;cursor:zoom-in}}
+/* the pictures of a block (idea, exit, analysis) sit side by side, as many
+   to a row as fit at a preview's width, two at least; a click opens the whole
+   chart. A picture that stands in a text keeps its line to itself */
+.shots.row{{display:flex;flex-wrap:wrap;align-items:flex-start;gap:0 8px}}
+.shots.row img{{max-width:min(calc(50% - 4px),480px)}}
+@media (max-width:700px){{.shots img,.shots.row img{{max-width:100%}}}}
 /* a screenshot over the page: the ground dimmed, no shadow; the picture
    fits the window, and at its own size the box scrolls */
 .viewer{{position:fixed;inset:0;z-index:20;background:rgba(10,10,11,.94);
@@ -1086,7 +1110,11 @@ document.addEventListener('click', e => {
 // A form with words or pictures in it is not left by accident: a click on a
 // tab asks first. Saving, and the forms that hold a line or two, do not ask.
 let unsaved = null;
+// every change counted, so a change taken back (Undo) can tell whether
+// anything else happened since
+let form_edits = 0;
 window.form_changed = el => {
+  form_edits++;
   const form = el.closest && el.closest('form');
   if (form && form.method === 'post' && form.querySelector('textarea, .dropzone'))
     unsaved = form;
