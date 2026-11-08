@@ -490,4 +490,8 @@ and none of them was obvious from the code.
   a PNG and nothing else behind them was kept, and the card came out with a
   broken-image mark. *Lesson:* the server checks the signature and the end of
   the format and cannot decode; the page opens the picture before it makes a
-  file (`card_opens`), and the check says only what it checks.
+  file (`card_opens`), and the check says only what it checks. The end of
+  a format is found by walking it, not read off its last bytes: judged by
+  what a file closes with, the check refused photos from phones, which write
+  a video or a block of their own after the picture, and let through a GIF
+  cut short, whose data holds a ";" now and then.
