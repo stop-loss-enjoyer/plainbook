@@ -64,6 +64,18 @@ JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 40 + b"\xff\xd9"
 GIF = b"GIF89a" + b"\x00" * 40 + b";"
 _webp_body = b"WEBPVP8 " + b"\x00" * 40
 WEBP = b"RIFF" + struct.pack("<I", len(_webp_body)) + _webp_body
+# the picture a phone writes: a main image with a thumbnail of its own inside
+# (a JPEG itself, ending in a marker), and the trailers phones add after it
+_THUMB = b"\xff\xd8\xff\xdb" + b"t" * 20 + b"\xff\xd9"
+_MAIN = b"\xff\xd8\xff\xe1" + _THUMB + b"m" * 200 + b"\xff\xd9"
+PIXEL_MOTION = _MAIN + b"\x00\x00\x00\x18ftypmp42" + b"v" * 60
+SAMSUNG = (_MAIN + b"x" * 30 + b"SEFH" + b"d" * 24 + struct.pack("<I", 28) + b"SEFT")
+SAMSUNG_MOTION = _MAIN + b"\x00\x00\x00\x18ftypmp42" + b"v" * 60 + b"SEFH" + b"d" * 24 + b"SEFT"
+# "my chart" in Russian, written as escapes because the repository keeps
+# Cyrillic out of its files (check_public.py); the name a space turns to a hyphen
+MY_CHART = "\u041c\u043e\u0439 \u0433\u0440\u0430\u0444\u0438\u043a"
+MY_CHART_KEPT = MY_CHART.replace(" ", "-")
+ANOTHER = "\u0415\u0449\u0451 \u043e\u0434\u0438\u043d"       # "one more"
 SVG = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
 HTML_AS_PNG = b"<html><script>alert(1)</script></html>"
 
@@ -91,14 +103,77 @@ class CardPictureStore(unittest.TestCase):
     def test_a_picture_that_stops_short_or_is_cut_is_refused(self):
         for name, raw in (("a.png", png()[:-12]), ("a.png", png()[:-1]),
                           ("a.jpg", JPEG[:-2]), ("a.gif", GIF[:-1]),
-                          ("a.webp", WEBP[:-1]), ("a.webp", WEBP + b"\x00\x00"),
+                          ("a.webp", WEBP[:-1]), ("a.webp", WEBP + b"\x00\x01"),
                           ("a.png", png()[:40])):
             with self.assertRaises(RecordError, msg=(name, len(raw))):
                 store.save_card_picture(self.root, name, raw)
         self.assertEqual(store.card_pictures(self.root), [])
-        # what a JPEG may be padded with after its end is not held against it
+        # what a picture may be padded with after its end is not held against it
         self.assertEqual(store.save_card_picture(self.root, "a.jpg", JPEG + b"\x00\x00"),
                          "a.jpg")
+
+    def test_a_phone_photo_with_data_after_its_end_is_kept(self):
+        for name, raw in (("pixel.jpg", PIXEL_MOTION), ("samsung.jpg", SAMSUNG),
+                          ("motion.jpg", SAMSUNG_MOTION)):
+            self.assertEqual(store.save_card_picture(self.root, name, raw), name, name)
+
+    def test_a_jpeg_cut_short_is_refused_even_with_a_thumbnail_inside(self):
+        # the thumbnail ends in a marker of its own, which must not pass for the end
+        for cut in (60, 90, 120):
+            raw = _MAIN[:len(_MAIN) * cut // 100] if cut < 100 else _MAIN[:-2]
+            self.assertIn(b"\xff\xd9", raw)
+            with self.assertRaises(RecordError, msg=cut) as refused:
+                store.save_card_picture(self.root, "cut.jpg", raw)
+            self.assertIn("That JPEG does not end the way a JPEG does",
+                          str(refused.exception))
+        # a Samsung block with no picture end before it, and a video box with none
+        for raw in (b"\xff\xd8\xff\xe0" + b"m" * 50 + b"SEFH" + b"d" * 24 + b"SEFT",
+                    b"\xff\xd8\xff\xe0" + b"m" * 50 + b"\x00\x00\x00\x18ftypmp42"):
+            with self.assertRaises(RecordError):
+                store.save_card_picture(self.root, "cut.jpg", raw)
+        self.assertEqual(store.card_pictures(self.root), [])
+
+    def test_a_gif_and_a_png_may_end_in_zeros(self):
+        self.assertEqual(store.save_card_picture(self.root, "a.gif", GIF + b"\x00\x00"),
+                         "a.gif")
+        self.assertEqual(store.save_card_picture(self.root, "a.png", png() + b"\x00\x00"),
+                         "a.png")
+
+    def test_a_webp_may_be_padded_with_zeros_and_not_with_anything_else(self):
+        self.assertEqual(store.save_card_picture(self.root, "a.webp", WEBP + b"\x00" * 3),
+                         "a.webp")
+        with self.assertRaises(RecordError) as refused:
+            store.save_card_picture(self.root, "b.webp", WEBP + b"\x00\x01")
+        self.assertIn("That WEBP does not end the way a WEBP does", str(refused.exception))
+
+    def test_a_refusal_says_whether_it_is_the_start_or_the_end(self):
+        for raw in (SVG, HTML_AS_PNG, b"", b"RIFF1234WAVEfmt "):
+            with self.assertRaises(RecordError) as refused:
+                store.save_card_picture(self.root, "a.png", raw)
+            self.assertEqual(str(refused.exception),
+                             "That is not a picture Plainbook can use: "
+                             "PNG, JPEG, GIF or WEBP only.")
+        for raw, named in ((png()[:-12], "PNG"), (JPEG[:-2], "JPEG"),
+                           (GIF[:-1], "GIF"), (WEBP[:-1], "WEBP")):
+            with self.assertRaises(RecordError, msg=named) as refused:
+                store.save_card_picture(self.root, "a.png", raw)
+            self.assertEqual(str(refused.exception),
+                             f"That {named} does not end the way a {named} does, "
+                             "so it may be cut short: save it again or pick another.")
+
+    def test_a_name_of_any_alphabet_is_kept(self):
+        # MY_CHART is Russian for "my chart", written as escapes: the
+        # repository keeps Cyrillic out of its files (check_public.py)
+        self.assertEqual(store.save_card_picture(self.root, MY_CHART + ".png", png()),
+                         MY_CHART_KEPT + ".png")
+        self.assertEqual(store.save_card_picture(self.root, MY_CHART + ".png", png()),
+                         MY_CHART_KEPT + "-2.png")
+        self.assertEqual(store.save_card_picture(self.root, "\u65e5\u672c.png", png()),
+                         "\u65e5\u672c.png")
+        # a Mac may send a letter and its accent apart: the short i of
+        # Russian kept as one letter, not as a letter and a hyphen
+        self.assertEqual(store.save_card_picture(self.root, "\u0438\u0306.png", png()),
+                         "\u0439.png")
 
     def test_a_name_windows_keeps_for_itself_gets_a_suffix(self):
         for name, kept in (("con.png", "con-1.png"), ("NUL.png", "NUL-1.png"),
@@ -150,7 +225,7 @@ class CardPictureStore(unittest.TestCase):
             self.assertEqual(f.read(), png(2, 2))                  # the first one stands
         for odd in ("../../x.png", "..\\..\\x.png", "日本.png", "", ".png", "..png"):
             kept = store.save_card_picture(self.root, odd, png())
-            self.assertRegex(kept, r"^[A-Za-z0-9][A-Za-z0-9._-]*\.png$", odd)
+            self.assertRegex(kept, r"^[^\W_][\w.-]*\.png$", odd)
             self.assertEqual(os.path.dirname(os.path.join(
                 store.card_pictures_dir(self.root), kept)),
                 store.card_pictures_dir(self.root))
@@ -416,6 +491,24 @@ class CardPictureServer(unittest.TestCase):
                 self.get(f"/card-picture/{bad}")
             self.assertEqual(gone.exception.code, 404, bad)
             gone.exception.close()
+
+    def test_a_name_in_russian_is_served_and_shown_in_the_row_of_backgrounds(self):
+        kept = store.save_card_picture(self.root, "\u041c\u043e\u0439 \u0433\u0440\u0430\u0444\u0438\u043a.png", png())
+        self.assertEqual(kept, "\u041c\u043e\u0439-\u0433\u0440\u0430\u0444\u0438\u043a.png")
+        with urllib.request.urlopen(
+                self.url(f"/card-picture/{urllib.parse.quote(kept, safe='')}")) as r:
+            self.assertEqual(r.headers.get("Content-Type"), "image/png")
+            self.assertEqual(r.read(), png())
+        page = self.card()
+        self.assertIn(f'<img src="/card-picture/{urllib.parse.quote(kept, safe="")}"', page)
+        self.assertIn('<span class="cap">\u041c\u043e\u0439-\u0433\u0440\u0430\u0444\u0438\u043a.png</span>', page)
+        # and the card stands on it
+        self.assertIn('<image href="data:image/png;base64,',
+                      self.drawn(f"?bg={urllib.parse.quote(kept, safe='')}"))
+        # the form takes such a name too and lands on the card with it chosen
+        code, where, _ = self.add("\u0415\u0449\u0451 \u043e\u0434\u0438\u043d.png", png(3, 3))
+        self.assertEqual(code, 303)
+        self.assertIn("bg=" + urllib.parse.quote("\u0415\u0449\u0451-\u043e\u0434\u0438\u043d.png", safe=""), where)
 
     # --- adding ---
     def test_adding_keeps_the_picture_and_shows_the_card_on_it(self):

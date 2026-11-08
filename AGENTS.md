@@ -400,6 +400,10 @@ In this order, every time:
   README, which `tools/screenshots.py` retakes. Publishing the release puts
   that version on PyPI within minutes, and PyPI never takes a version twice:
   a fix after the release is the next version, not the same one again.
+  So the release commit is pushed first and the tag waits until
+  `tests.yml` is green on all six of its runs: a test that fails only on
+  Windows or macOS, found after the tag, leaves a version on PyPI with no
+  files for those systems, which is what happened to 1.12.0.
 - **The page of a release on GitHub is written for the people who update**,
   short and in one shape, titled `vX.Y.Z`: a sentence on what the version
   gives them; one picture or animation of the main change, cropped to it,

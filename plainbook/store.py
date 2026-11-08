@@ -31,6 +31,7 @@ import pickle
 import re
 import shutil
 import threading
+import unicodedata
 from datetime import datetime, timedelta
 
 from . import mdfile
@@ -1437,24 +1438,72 @@ def delete_trade(root, trade_id):
 # A card can stand on a picture of the owner's. They are theirs and live in
 # their data, never in the repository, and they go out with every card made on
 # them, which is why only what has the signature and the end of a picture is
-# kept.
+# kept. The end is the one the format gives, or a trailer a phone writes after
+# it: the video of a motion photo, a Samsung block of its own.
+
+CARD_PICTURE_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".gif": "GIF", ".webp": "WEBP"}
+
+
+def card_picture_signature(raw):
+    """The extension the first bytes of a picture say it has, or "" when they
+    are the start of none of a PNG, a JPEG, a GIF or a WEBP. Nothing is said
+    here about the rest of the file."""
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if raw.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return ".webp"
+    return ""
+
+
+def _jpeg_ends(raw):
+    """Whether a JPEG ends where a picture does. Phone photos carry data after
+    the end marker, so three ends are known: the marker itself (padding of
+    zeros allowed), the Samsung block that closes a file (SEFT, with the
+    marker before its SEFH), and the video of a Google motion photo, an MP4
+    box that begins right after a marker.
+
+    A marker anywhere is not enough: the EXIF thumbnail is a JPEG and ends
+    in one, so a photo cut at half would pass, and a browser shows a cut JPEG
+    in part instead of failing, so the page would not catch it either."""
+    if raw.rstrip(b"\x00").endswith(b"\xff\xd9"):
+        return True
+    if raw.endswith(b"SEFT"):
+        block = raw.rfind(b"SEFH")       # a motion photo's video sits before it
+        return block > 0 and raw.rfind(b"\xff\xd9", 0, block) != -1
+    at = raw.find(b"ftyp")
+    while at != -1:
+        # the box size is the four bytes before its name, the marker the two before
+        if at >= 6 and raw[at - 6:at - 4] == b"\xff\xd9":
+            return True
+        at = raw.find(b"ftyp", at + 1)
+    return False
+
 
 def card_picture_kind(raw):
     """The extension a picture's bytes say it has, or "" when they do not look
     like a PNG, a JPEG, a GIF or a WEBP: the signature at the start and the
-    end the format ends with (the IEND chunk, the end marker, the trailer, the
-    size the RIFF header gives). That keeps out SVG and a page called .png, and
-    a file that stopped half way; it does not decode the picture, which the
-    page does before it makes a file of the card."""
-    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
-        return ".png" if raw.endswith(b"\x00\x00\x00\x00IEND\xaeB`\x82") else ""
-    if raw.startswith(b"\xff\xd8\xff"):
-        return ".jpg" if raw.rstrip(b"\x00").endswith(b"\xff\xd9") else ""
-    if raw[:6] in (b"GIF87a", b"GIF89a"):
-        return ".gif" if raw.endswith(b";") else ""
-    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
-        return ".webp" if int.from_bytes(raw[4:8], "little") + 8 == len(raw) else ""
-    return ""
+    end the format ends with (the IEND chunk, the end marker or a trailer a
+    phone writes after it, the GIF trailer, the size the RIFF header gives),
+    where zeros after it are no matter. That keeps out SVG and a page called .png,
+    and a file that stopped half way; it does not decode the picture, which
+    the page does before it makes a file of the card."""
+    kind = card_picture_signature(raw)
+    if kind == ".png":
+        ends = raw.rstrip(b"\x00").endswith(b"\x00\x00\x00\x00IEND\xaeB`\x82")
+    elif kind == ".jpg":
+        ends = _jpeg_ends(raw)
+    elif kind == ".gif":
+        ends = raw.rstrip(b"\x00").endswith(b";")
+    elif kind == ".webp":
+        size = int.from_bytes(raw[4:8], "little") + 8
+        ends = size <= len(raw) and not raw[size:].strip(b"\x00")
+    else:
+        ends = False
+    return kind if ends else ""
 
 
 def card_pictures_dir(root):
@@ -1489,19 +1538,28 @@ def card_picture_path(root, name):
 def save_card_picture(root, name, raw):
     """Keeps a picture and returns the name it was kept under.
 
-    The kind is read from the bytes, the size is capped, the name is cleaned
-    to letters, digits and . _ - (a name Windows keeps for itself gets a
-    suffix) and takes a free one when it is taken: a picture is never written
-    over another."""
+    The kind is read from the bytes and so is the end of the file (a picture
+    cut short is refused, and says so, apart from a file that is none), the
+    size is capped, the name is cleaned to letters of any alphabet, digits
+    and . _ - (a name Windows keeps for itself gets a suffix) and takes a
+    free one when it is taken: a picture is never written over another."""
     kind = card_picture_kind(raw)
     if not kind:
+        shape = card_picture_signature(raw)
+        if shape:
+            # the start is right, so the end is what was checked
+            named = CARD_PICTURE_FORMATS[shape]
+            raise RecordError(f"That {named} does not end the way a {named} does, "
+                              "so it may be cut short: save it again or pick another.")
         raise RecordError("That is not a picture Plainbook can use: "
                           "PNG, JPEG, GIF or WEBP only.")
     if len(raw) > CARD_PICTURE_MAX:
         raise RecordError(f"That picture is {len(raw) / 1048576:.1f} MB, "
                           f"and {CARD_PICTURE_MAX >> 20} MB is the most a card takes.")
     stem = os.path.splitext(os.path.basename((name or "").replace("\\", "/")))[0]
-    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-.")[:60] or "picture"
+    # a Mac may send a name with its accents apart (NFD), which \w would cut
+    stem = unicodedata.normalize("NFC", stem)
+    stem = re.sub(r"[^\w.-]+", "-", stem).strip("-.")[:60] or "picture"
     if stem.split(".")[0].lower() in WINDOWS_RESERVED:
         stem += "-1"
     base = card_pictures_dir(root)

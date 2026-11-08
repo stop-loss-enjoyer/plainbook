@@ -11,11 +11,10 @@ What changed and why. Newest first.
   A refused form now closes the connection, and so does a form with a body
   that is not read.
 - **A trade can be shared as a picture.** **Card** on the page of a closed
-  trade, next to Share, draws it the way an exchange draws a position, on
-  ruled lines with one big candle in the colour of the result: the pair with
-  its coins, Long or Short, the R in big figures, the day of the entry, an
-  Entry row when you wrote the price, and in the candle a QR code to the
-  project. **Copy image**
+  trade, next to Share, draws it the way an exchange draws a position, with
+  one big candle in the colour of the result: the pair with its coins, Long
+  or Short, the R in big figures, the day of the entry, an Entry row when you
+  wrote the price, and in the candle a QR code to the project. **Copy image**
   and **Download** (a PNG) sit above it. There is no money on it and no
   account name, losses get a card too, and an open trade has none. Share, the
   one file, stays as it was.

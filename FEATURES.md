@@ -89,7 +89,8 @@ position: account, pair, direction, style, timeframes, risk as a percent or as
 money, the plan and the playbook it is taken under, the checklist, the idea
 with screenshots by timeframe. A click on a row opens the trade: every field,
 the idea, the updates, the exit, the conclusions, the rules with a tick or a
-cross, and the buttons Close trade, Breakeven, Update, Share, Edit, Delete.
+cross, and the buttons: on an open trade Close trade, Breakeven, Update,
+Share, Edit, Delete; on a closed trade Reopen, Share, Card, Edit, Delete.
 The same trade goes onto other accounts from its form, through Duplicate on
 other accounts, each copy with a risk of its own.
 
@@ -162,11 +163,12 @@ is a backup, and so is the file of **Accounts, Backup**; any editor reads it.
       plans/<id>/     plan.md and shots/
       notes/<id>/     note.md and shots/
       cards/          the daily and weekly cards
+      card-pictures/  your own backgrounds of the trade card (PNG, JPEG, GIF or WEBP), a file each
       reports/        the built reports
       vocabulary.md   the styles, timeframes and execution formats the form offers
       pairs.md        the pairs the form offers
       settings.md     the stop edge, the journal's clock, the edition (lite)
-    .trash/           next to journal/: what was deleted and the journals a restore replaced, restorable from Accounts
+    .trash/           next to journal/: what was deleted and the journals a restore replaced, restorable from Accounts (a removed card picture is not listed there: move the file back into card-pictures)
     .drafts/          next to journal/: pictures pasted into forms not yet submitted
     .restore/         next to journal/: a backup file being looked at before it is restored
 

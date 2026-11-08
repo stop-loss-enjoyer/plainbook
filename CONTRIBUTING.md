@@ -68,7 +68,8 @@ A fork is welcome for any of them.
     plainbook/reports.py      monthly and quarterly reports
     plainbook/html.py         the palette, the CSS, the page shell and the SVG charts
     plainbook/flags.py        the round flag icons of a trading symbol
-    plainbook/share.py        the document a record leaves in, with no money in it
+    plainbook/share.py        what a record leaves in: the one-file document and the card of a closed trade, no money in either
+    plainbook/backup.py       the whole journal in one .plainbook file and back
     plainbook/server.py       the routes, the pages and the forms
     plainbook/__main__.py     python3 -m plainbook
     tools/check_public.py     the guard that keeps records out of the repository

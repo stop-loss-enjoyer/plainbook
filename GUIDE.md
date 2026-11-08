@@ -1399,7 +1399,7 @@ to drift.
 ## Showing your journal to somebody
 
 Sooner or later a trade has to be shown to another trader. **Share** makes
-the one way out of this machine: a single file that holds the record and its
+one way out of this machine: a single file that holds the record and its
 screenshots inside itself. It opens in any browser on
 any computer, with no journal running and no network, and it can be sent the
 way any file is sent.
@@ -1481,10 +1481,12 @@ the choices as small pictures: **Standard** (the rocket of the trade's side,
 what a card has until you choose), **Plain** (the ruled page, with no rocket),
 and every picture of your own. Press one and the card changes; the chosen one
 has a blue frame. **Add picture** takes a PNG, JPEG, GIF or WEBP of up to 8 MB
-(the file has to begin and end the way such a picture does, whatever its name
-says, so an SVG or a page called `.png` is refused; one that begins and ends
-right but does not open is kept, and the buttons then say *This picture does not
-open* and make no file) and shows the card on it at once; the small cross on a
+(the file has to begin the way such a picture does, whatever its name says,
+so an SVG or a page called `.png` is refused; it has to end the way one does
+too, or with what a phone writes after a photo, and one that ends wrong is
+refused as perhaps cut short; one that begins and ends right but does not
+open is kept, and the buttons then say *This picture does not open* and make
+no file) and shows the card on it at once; the small cross on a
 picture removes it. Add as many as you like: the row scrolls sideways and opens
 on the chosen one. A picture is shown whole against the right edge of the card,
 with the text on the left over a dark fade, and the
@@ -1493,9 +1495,10 @@ code shrinks into a small candle in the corner so the picture keeps the room.
 alone.** They are kept in the `journal/card-pictures` folder of your own data,
 never in the program or its repository, so every user has their own, a backup
 carries them, and Lite keeps them. A removed picture is moved to the `.trash`
-folder (it is not listed in the Trash tab, which restores records: to get one
-back, move the file back into `card-pictures`). A picture goes out with every
-card made on it, as part of the picture you post, so post only what you may.
+folder (it is not listed in the Trash card on the Accounts tab, which
+restores records: to get one back, move the file back into `card-pictures`).
+A picture goes out with every card made on it, as part of the picture you
+post, so post only what you may.
 
 **A PDF, when that is what is wanted.** Open the downloaded file and print
 it, `Ctrl+P`, then save as PDF. The document has a print layout of its own:
@@ -1570,7 +1573,7 @@ line, so a journal that was never in Lite looks as it always did.
 
 ## Where the data lives
 
-Everything is in the `journal/` folder: ordinary text files and PNG images. Run
+Everything is in the `journal/` folder: ordinary text files and pictures. Run
 from the source, that folder sits next to the code; the downloaded file and
 the `plainbook` command of a pipx install keep it in `Plainbook` in your home
 folder (`C:\Users\<you>\Plainbook`, `/Users/<you>/Plainbook`, `~/Plainbook`);
@@ -1591,6 +1594,7 @@ folder (`C:\Users\<you>\Plainbook`, `/Users/<you>/Plainbook`, `~/Plainbook`);
     journal/adjustments/*.md
     journal/reports/2026-08.md
     journal/reports/2026-Q3.md
+    journal/card-pictures/*    your own backgrounds of the trade card (PNG, JPEG, GIF or WEBP), a file each
     journal/vocabulary.md      the styles, timeframes and execution formats the form offers
     journal/pairs.md           the pairs the form offers
     journal/settings.md        the stop edge, the journal's clock, the edition
@@ -1600,7 +1604,9 @@ no format of its own, so if the program breaks tomorrow, the records are
 still yours in the same shape.
 
 Three service folders sit next to the journal: `.trash` (what was deleted,
-and the journals a restore replaced), `.drafts` (screenshots from forms that
+and the journals a restore replaced; a removed card picture is not listed on
+the Trash card of Accounts, and is put back by moving the file into
+`card-pictures`), `.drafts` (screenshots from forms that
 were never submitted, swept after a day) and `.restore` (a backup file being
 looked at on the restore page, unpacked there until you take it or cancel;
 once a day old it is cleared at the next start or the next restore).

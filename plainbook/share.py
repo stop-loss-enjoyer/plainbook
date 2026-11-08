@@ -824,10 +824,11 @@ QR_PX = 7             # pixels a module takes on the card: a whole number, so
 CARD_W, CARD_H = 1200, 675
 CARD_SANS = ("Inter,'Inter Variable',system-ui,-apple-system,'Segoe UI',Roboto,"
              "'Helvetica Neue',Arial,sans-serif")
-# The card is the sign of the journal grown to a page: ruled lines of plain
-# text and one candle, with the code standing in the candle. These tones are
-# lighter than GOOD and BAD because the code is read off them: a phone needs
-# the dark modules to stand well apart from the candle they are printed on.
+# The card is the sign of the journal grown to a page: one candle with the
+# code standing in it, on a rocket by default (the ruled lines of plain text
+# are the Plain background). These tones are lighter than GOOD and BAD because
+# the code is read off them: a phone needs the dark modules to stand well
+# apart from the candle they are printed on.
 CARD_UP, CARD_DOWN, CARD_FLAT = "#5ccb94", "#ea7a72", "#c9c9cf"
 CARD_RULE, CARD_GHOST = "#191a1f", "#1d1f24"
 CARD_LINE = 75        # the distance of the ruled lines; the text sits on them

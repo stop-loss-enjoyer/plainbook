@@ -290,9 +290,10 @@ button.
 
 **Backup** on the same tab downloads the whole journal as one `.plainbook`
 file: trades and screenshots, accounts, playbooks, plans, notes, cards,
-reports and settings. **Restore** takes such a file back, on this computer or
-another one, and shows what it holds beside the journal now before anything
-changes; the journal it replaces is kept in the trash and can be put back.
+reports, the pictures of the trade card and settings. **Restore** takes such
+a file back, on this computer or another one, and shows what it holds beside
+the journal now before anything changes; the journal it replaces is kept in
+the trash and can be put back.
 
 ## Showing a trade to another trader
 
@@ -308,6 +309,14 @@ reads like the journal. No money travels in it: the PnL, the risk in money,
 the balances, the size and even the name of the account stay home. What
 travels is R, the percent the risk was written as, and the words you wrote.
 You see the document, and what it will weigh, before you send it.
+
+**Card**, next to Share on a closed trade, is the other way to show it: one
+PNG picture to post, drawn the way an exchange draws a position, with the
+pair and its coins, long or short, the R in big figures, the day of the entry
+and a QR code to this repository. It carries no money and no account name; a
+loss gets a card too, an open trade has none. **Copy image** and **Download**
+sit above it, and its background is a rocket, the ruled page or a picture of
+your own.
 
 ## Search
 
@@ -491,7 +500,8 @@ journal/
   reports/2026-08.md        a monthly report, 2026-Q3.md a quarterly one
   vocabulary.md             the styles, timeframes and execution formats the form offers
   pairs.md                  the pairs the form offers
-  settings.md               the stop edge, the journal's clock
+  settings.md               the stop edge, the journal's clock, the edition
+  card-pictures/            your own backgrounds of the trade card: PNG, JPEG, GIF or WEBP
 .trash/                     next to journal/: deleted records, until you restore or remove them
 .drafts/                    next to journal/: screenshots of unsubmitted forms, swept daily
 ```
