@@ -23,8 +23,11 @@ What changed and why. Newest first.
   the card page picks **Plain** (the ruled page) or a picture of your own,
   added with **Add picture** (PNG, JPEG, GIF or WEBP up to 8 MB) and taken off
   with its cross. Add as many as you like, the row scrolls. A picture is shown
-  whole, with the text on the left over a dark fade. Your pictures live in `journal/card-pictures` in your own data, never
-  in the program, and a backup carries them.
+  whole, with the text on the left over a dark fade. A photo straight from a
+  phone is taken as it is, whatever the phone wrote after the picture, and a
+  file cut short is refused with a word on why. Your pictures live in
+  `journal/card-pictures` in your own data, never in the program, and a
+  backup carries them.
 
 ## v1.13.0, 02.11.2026
 

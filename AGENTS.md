@@ -323,8 +323,9 @@ the top, then one `CSS` string. The one exception is `flags.py`, which draws the
 coins of a trading symbol; `html.pair()` is what a page calls, and anything that
 prints a pair should call it instead of `esc()`. Class names are English and
 short (`card`, `tile`, `dropzone`, `shot`, `num`). The theme is deliberately
-flat: no gradients; drop shadows only on what floats over the page (the filter
-popover, the pair list, the toast); motion only in the toast that answers a
+flat: no gradients, bar the two washes under the equity curve; drop shadows
+only on what floats over the page (the filter popover, the pair list, the
+toast); motion only in the toast that answers a
 form, the short (.12s) colour change on hover and focus, and the fade of an
 opened popover or fold, and all of it is off under prefers-reduced-motion.
 One named exception: the two edition switches, `.toggle` on Accounts and the
@@ -338,8 +339,9 @@ is two sides and a roof in three steps of one colour (`_block`). A figure a pict
 at once; a `<title>` waits a second and a half and is not seen.
 The card of a trade (`share.py`) is its own small drawing and keeps these rules
 with one named exception: the fade of a card that stands on a picture of the
-owner's, the one gradient of the journal, which sits on a picture and never on
-a page. The rocket and the ruled page of the other two backgrounds are flat.
+owner's, a gradient like the wash under the equity curve (the earlier
+exception), which sits on a picture and never on a page. The rocket and the
+ruled page of the other two backgrounds are flat.
 
 **Hide something in Plainbook Lite.** A new tab or page that belongs to the
 full Plainbook only: add its tab to `LITE_HIDDEN_TABS` and every address

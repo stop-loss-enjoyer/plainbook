@@ -8,6 +8,7 @@ checked by its bytes, and a name that arrives in an address or a form is only
 ever looked for in the listing, never made into a path."""
 import importlib
 import os
+import random
 import re
 import shutil
 import struct
@@ -16,6 +17,7 @@ import sys
 import socket
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.parse
@@ -61,16 +63,43 @@ def broken_png():
 
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 40 + b"\xff\xd9"
-GIF = b"GIF89a" + b"\x00" * 40 + b";"
 _webp_body = b"WEBPVP8 " + b"\x00" * 40
 WEBP = b"RIFF" + struct.pack("<I", len(_webp_body)) + _webp_body
 # the picture a phone writes: a main image with a thumbnail of its own inside
-# (a JPEG itself, ending in a marker), and the trailers phones add after it
+# (a JPEG itself, ending in a marker), and the trailers phones add after it.
+# Only the structure of a JPEG is built, which is what the check walks.
+def segment(marker, payload):
+    return b"\xff" + bytes([marker]) + struct.pack(">H", len(payload) + 2) + payload
+
+
+def jpeg_of(app1=b"", scan=b"m" * 200, end=b"\xff\xd9"):
+    """SOI, a JFIF segment, the tables and the frame, the scan header and
+    `scan` as its entropy-coded data (with a zero-stuffed 0xFF and a restart
+    marker inside, as real data has), then `end`."""
+    return (b"\xff\xd8" + segment(0xE0, b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
+            + (segment(0xE1, b"Exif\x00\x00" + app1) if app1 else b"")
+            + segment(0xDB, b"\x00" + b"\x10" * 64)
+            + segment(0xC0, b"\x08\x00\x10\x00\x10\x01\x01\x11\x00")
+            + segment(0xC4, b"\x00" + b"\x01" * 16 + b"\x00")
+            + segment(0xDA, b"\x01\x01\x00\x00\x3f\x00")
+            + scan[:60] + b"\xff\x00" + scan[60:120] + b"\xff\xd0" + scan[120:] + end)
+
+
 _THUMB = b"\xff\xd8\xff\xdb" + b"t" * 20 + b"\xff\xd9"
-_MAIN = b"\xff\xd8\xff\xe1" + _THUMB + b"m" * 200 + b"\xff\xd9"
+_MAIN = jpeg_of(app1=_THUMB)
 PIXEL_MOTION = _MAIN + b"\x00\x00\x00\x18ftypmp42" + b"v" * 60
 SAMSUNG = (_MAIN + b"x" * 30 + b"SEFH" + b"d" * 24 + struct.pack("<I", 28) + b"SEFT")
 SAMSUNG_MOTION = _MAIN + b"\x00\x00\x00\x18ftypmp42" + b"v" * 60 + b"SEFH" + b"d" * 24 + b"SEFT"
+# a GIF written by hand: the header, a screen of 1 by 1 with two colours, one
+# image of one pixel in a single block of data, the zero that closes the
+# block, and the trailer
+_GIF_HEAD = (b"GIF89a" + struct.pack("<HHBBB", 1, 1, 0x80, 0, 0) + b"\x00\x00\x00\xff\xff\xff"
+             + b"\x2c" + struct.pack("<HHHHB", 0, 0, 1, 1, 0) + b"\x02")
+REAL_GIF = _GIF_HEAD + b"\x02\x44\x01\x00;"
+GIF = REAL_GIF
+# some programs write the trailer twice
+GIF_TWO_TRAILERS = REAL_GIF + b";"
+GIF_CUT_ON_A_SEMICOLON = _GIF_HEAD + b"\x02\x44;" + b";"      # data byte 0x3B, no end of block
 # "my chart" in Russian, written as escapes because the repository keeps
 # Cyrillic out of its files (check_public.py); the name a space turns to a hyphen
 MY_CHART = "\u041c\u043e\u0439 \u0433\u0440\u0430\u0444\u0438\u043a"
@@ -117,6 +146,56 @@ class CardPictureStore(unittest.TestCase):
                           ("motion.jpg", SAMSUNG_MOTION)):
             self.assertEqual(store.save_card_picture(self.root, name, raw), name, name)
 
+    def test_whatever_a_phone_writes_after_the_end_marker_is_kept(self):
+        noise = bytes(random.Random(7).randrange(256) for _ in range(16))
+        for name, raw in (("fill.jpg", _MAIN + b"\xff" * 20),
+                          ("jxrs.jpg", _MAIN + b"jxrs" + b"junk" * 9),
+                          ("noise.jpg", _MAIN + noise),
+                          ("live.jpg", _MAIN + b"LIVE_" + b"\x01" * 30),
+                          ("png.jpg", _MAIN + png() + b"\x00\x00\x00\x18ftypmp42" + b"v" * 40)):
+            self.assertEqual(store.card_picture_kind(raw), ".jpg", name)
+            self.assertEqual(store.save_card_picture(self.root, name, raw), name)
+
+    def test_a_progressive_jpeg_with_several_scans_is_walked_to_its_end(self):
+        scan = lambda data: segment(0xDA, b"\x01\x01\x00\x00\x3f\x00") + data
+        raw = (b"\xff\xd8" + segment(0xC2, b"\x08\x00\x10\x00\x10\x01\x01\x11\x00")
+               + scan(b"a\xff\x00b\xff\xff\xd1c") + segment(0xC4, b"\x00" + b"\x01" * 16 + b"\x00")
+               + scan(b"dd") + b"\xff\xd9" + b"after the end")
+        self.assertEqual(store.card_picture_kind(raw), ".jpg")
+        # the same cut in its second scan, or inside a header
+        self.assertEqual(store.card_picture_kind(raw[:raw.index(b"dd") + 1]), "")
+        self.assertEqual(store.card_picture_kind(raw[:raw.index(b"\xff\xc4") + 5]), "")
+
+    def test_a_jpeg_cut_inside_its_scan_or_a_header_is_refused_after_a_fake_thumbnail(self):
+        # the thumbnail in the APP1 ends in a marker, and the scan after it is cut
+        whole = jpeg_of(app1=_THUMB, scan=b"m" * 300)
+        self.assertEqual(store.card_picture_kind(whole), ".jpg")
+        cut_in_scan = whole[:whole.index(b"mmmm") + 100]
+        self.assertEqual(store.card_picture_kind(cut_in_scan), "")
+        # a cut right after a scan's stuffed 0xFF, and one that ends on a lone 0xFF
+        self.assertEqual(store.card_picture_kind(whole[:whole.index(b"\xff\x00") + 2]), "")
+        self.assertEqual(store.card_picture_kind(whole[:whole.index(b"\xff\x00") + 1]), "")
+        # a cut inside a segment header: the length is there and the body is not
+        at = whole.index(b"\xff\xdb")
+        for cut in (at + 1, at + 3, at + 10):
+            self.assertEqual(store.card_picture_kind(whole[:cut]), "", cut)
+        with self.assertRaises(RecordError) as refused:
+            store.save_card_picture(self.root, "cut.jpg", cut_in_scan)
+        self.assertIn("That JPEG does not end the way a JPEG does", str(refused.exception))
+
+    def test_a_big_jpeg_is_walked_in_well_under_a_second(self):
+        data = bytearray(b"d" * (8 * 1048576))
+        for at in range(1000, len(data) - 4, 50000):          # data with stuffed bytes
+            data[at:at + 2] = b"\xff\x00"
+            data[at + 10:at + 12] = b"\xff\xd3"
+        big = jpeg_of(scan=bytes(data))
+        began = time.monotonic()
+        self.assertEqual(store.card_picture_kind(big), ".jpg")
+        # and when the end marker is not the last thing, so that only the walk can say
+        self.assertEqual(store.card_picture_kind(big + b"x" * 100), ".jpg")
+        self.assertEqual(store.card_picture_kind(big[:-1000]), "")
+        self.assertLess(time.monotonic() - began, 1.0)
+
     def test_a_jpeg_cut_short_is_refused_even_with_a_thumbnail_inside(self):
         # the thumbnail ends in a marker of its own, which must not pass for the end
         for cut in (60, 90, 120):
@@ -131,6 +210,21 @@ class CardPictureStore(unittest.TestCase):
                     b"\xff\xd8\xff\xe0" + b"m" * 50 + b"\x00\x00\x00\x18ftypmp42"):
             with self.assertRaises(RecordError):
                 store.save_card_picture(self.root, "cut.jpg", raw)
+        self.assertEqual(store.card_pictures(self.root), [])
+
+    def test_a_gif_is_walked_to_its_trailer(self):
+        self.assertEqual(store.card_picture_kind(REAL_GIF), ".gif")
+        self.assertEqual(store.card_picture_kind(REAL_GIF + b"\x00\x00"), ".gif")
+        self.assertEqual(store.card_picture_kind(GIF_TWO_TRAILERS), ".gif")
+        # a zero and a ";" are both bytes of picture data now and then: cut
+        # right after them inside a block, the file still does not end
+        inside = _GIF_HEAD + b"\x05\x44\x00;"
+        self.assertEqual(store.card_picture_kind(inside), "")
+        # a data byte of 0x3B at the cut is no trailer: no zero closes the block
+        with self.assertRaises(RecordError) as refused:
+            store.save_card_picture(self.root, "cut.gif", GIF_CUT_ON_A_SEMICOLON)
+        self.assertIn("That GIF does not end the way a GIF does", str(refused.exception))
+        self.assertEqual(store.card_picture_kind(REAL_GIF[:-1]), "")
         self.assertEqual(store.card_pictures(self.root), [])
 
     def test_a_gif_and_a_png_may_end_in_zeros(self):
@@ -175,10 +269,32 @@ class CardPictureStore(unittest.TestCase):
         self.assertEqual(store.save_card_picture(self.root, "\u0438\u0306.png", png()),
                          "\u0439.png")
 
+    def test_a_word_with_combining_marks_is_kept_whole(self):
+        hindi = "\u0939\u093f\u0928\u094d\u0926\u0940"           # carries marks of category Mn and Mc
+        arabic = "\u0643\u064e\u062a\u064e\u0628\u064e"            # with its vowel signs
+        hebrew = "\u05e9\u05b8\u05c1\u05dc\u05d5\u05b9\u05dd"     # with its points
+        for word in (hindi, arabic, hebrew):
+            self.assertEqual(store.save_card_picture(self.root, word + ".png", png()),
+                             word + ".png", word)
+        # other runs still become one hyphen, and "_" stays
+        self.assertEqual(store.save_card_picture(self.root, "a  (b)__c.png", png()),
+                         "a-b-__c.png")
+
+    def test_two_names_that_differ_only_in_case_are_one_name(self):
+        self.assertEqual(store.save_card_picture(self.root, "IMG_0001.png", png()),
+                         "IMG_0001.png")
+        self.assertEqual(store.save_card_picture(self.root, "img_0001.png", png()),
+                         "img_0001-2.png")
+        self.assertEqual(store.save_card_picture(self.root, "Img_0001.png", png()),
+                         "Img_0001-3.png")
+
     def test_a_name_windows_keeps_for_itself_gets_a_suffix(self):
         for name, kept in (("con.png", "con-1.png"), ("NUL.png", "NUL-1.png"),
                            ("com1.png", "com1-1.png"), ("lpt9.jpg", "lpt9-1.png"),
-                           ("aux.tar.png", "aux.tar-1.png"), ("console.png", "console.png")):
+                           ("aux.tar.png", "aux.tar-1.png"), ("console.png", "console.png"),
+                           ("COM\u00b9.png", "COM\u00b9-1.png"),
+                           ("lpt\u00b3.png", "lpt\u00b3-1.png"),
+                           ("com\u00b2.tar.png", "com\u00b2.tar-1.png")):
             self.assertEqual(store.save_card_picture(self.root, name, png()), kept, name)
 
     def test_a_link_is_not_a_picture(self):
@@ -239,6 +355,16 @@ class CardPictureStore(unittest.TestCase):
         os.mkdir(os.path.join(base, "folder.png"))
         self.assertEqual(store.card_pictures(self.root), ["a.png", "b.png"])
         self.assertEqual(store.card_pictures(os.path.join(self.root, "nowhere")), [])
+
+    def test_a_name_that_is_not_text_is_left_out_of_the_listing(self):
+        base = store.card_pictures_dir(self.root)
+        store.save_card_picture(self.root, "fine.png", png())
+        try:
+            with open(os.path.join(os.fsencode(base), b"\xcf\xf0.png"), "wb") as f:
+                f.write(png())
+        except (OSError, UnicodeError):
+            self.skipTest("this file system takes no names that are not text")
+        self.assertEqual(store.card_pictures(self.root), ["fine.png"])
 
     def test_a_name_is_looked_for_never_built_into_a_path(self):
         store.save_card_picture(self.root, "a.png", png())
@@ -491,6 +617,20 @@ class CardPictureServer(unittest.TestCase):
                 self.get(f"/card-picture/{bad}")
             self.assertEqual(gone.exception.code, 404, bad)
             gone.exception.close()
+
+    def test_a_name_that_is_not_text_does_not_break_the_card_page(self):
+        base = store.card_pictures_dir(self.root)
+        os.makedirs(base, exist_ok=True)
+        try:
+            with open(os.path.join(os.fsencode(base), b"\xcf\xf0.png"), "wb") as f:
+                f.write(png())
+        except (OSError, UnicodeError):
+            self.skipTest("this file system takes no names that are not text")
+        kept = store.save_card_picture(self.root, "ok.png", png())
+        self.assertEqual(self.folder(), [kept])
+        code, page, _ = self.get(f"/share/card/{self.ID}")
+        self.assertEqual(code, 200)
+        self.assertIn("/card-picture/ok.png", page)
 
     def test_a_name_in_russian_is_served_and_shown_in_the_row_of_backgrounds(self):
         kept = store.save_card_picture(self.root, "\u041c\u043e\u0439 \u0433\u0440\u0430\u0444\u0438\u043a.png", png())

@@ -972,10 +972,13 @@ def make_layout(root):
     return created
 
 
-# Names Windows will not make a file or a folder of, with any extension
+# Names Windows will not make a file or a folder of, with any extension. It
+# reserves COM and LPT with the superscript digits too (U+00B9, U+00B2, U+00B3),
+# which are not the digits 1 to 3 and so need their own entries.
 WINDOWS_RESERVED = frozenset(
     ["con", "prn", "aux", "nul"]
-    + [f"com{i}" for i in range(1, 10)] + [f"lpt{i}" for i in range(1, 10)])
+    + [f"com{i}" for i in range(1, 10)] + [f"lpt{i}" for i in range(1, 10)]
+    + [f"{d}{sup}" for d in ("com", "lpt") for sup in "\u00b9\u00b2\u00b3"])
 
 
 def safe_dir_name(name):
@@ -1438,8 +1441,10 @@ def delete_trade(root, trade_id):
 # A card can stand on a picture of the owner's. They are theirs and live in
 # their data, never in the repository, and they go out with every card made on
 # them, which is why only what has the signature and the end of a picture is
-# kept. The end is the one the format gives, or a trailer a phone writes after
-# it: the video of a motion photo, a Samsung block of its own.
+# kept. The end is the one the format gives. A JPEG may have anything after its
+# own end marker, because every phone writes something there (the video of a
+# motion photo, a block of the maker's own), so it is found by walking the
+# JPEG's own markers to its end and not by what the file closes with.
 
 CARD_PICTURE_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".gif": "GIF", ".webp": "WEBP"}
 
@@ -1460,35 +1465,113 @@ def card_picture_signature(raw):
 
 
 def _jpeg_ends(raw):
-    """Whether a JPEG ends where a picture does. Phone photos carry data after
-    the end marker, so three ends are known: the marker itself (padding of
-    zeros allowed), the Samsung block that closes a file (SEFT, with the
-    marker before its SEFH), and the video of a Google motion photo, an MP4
-    box that begins right after a marker.
+    """Whether a JPEG ends where a picture does: the walk of its markers
+    reaches the end marker of the first image, and whatever follows that is no
+    matter, or the file simply closes with the marker (zeros after it allowed).
 
-    A marker anywhere is not enough: the EXIF thumbnail is a JPEG and ends
-    in one, so a photo cut at half would pass, and a browser shows a cut JPEG
-    in part instead of failing, so the page would not catch it either."""
+    Phones write all sorts of things after the end marker (a video, a Samsung
+    block, a watermark, fill), so what a file closes with says little. A marker
+    anywhere is not enough either: the EXIF thumbnail is a JPEG and ends in
+    one, so a photo cut at half would pass, and a browser shows a cut JPEG in
+    part instead of failing, so the page would not catch it either. The walk
+    steps over the thumbnail with the APP1 segment it sits in, and a photo cut
+    inside its scan or between its segments runs off the end and is refused.
+    The plain closing marker stays as a second way in so that nothing a
+    simpler rule kept is refused now."""
     if raw.rstrip(b"\x00").endswith(b"\xff\xd9"):
         return True
-    if raw.endswith(b"SEFT"):
-        block = raw.rfind(b"SEFH")       # a motion photo's video sits before it
-        return block > 0 and raw.rfind(b"\xff\xd9", 0, block) != -1
-    at = raw.find(b"ftyp")
-    while at != -1:
-        # the box size is the four bytes before its name, the marker the two before
-        if at >= 6 and raw[at - 6:at - 4] == b"\xff\xd9":
+    size = len(raw)
+    pos = 2                                   # after the start marker
+    while True:
+        if pos >= size or raw[pos] != 0xFF:
+            return False
+        while pos < size and raw[pos] == 0xFF:        # fill before a marker
+            pos += 1
+        if pos >= size:
+            return False
+        marker = raw[pos]
+        pos += 1
+        if marker == 0xD9:
             return True
-        at = raw.find(b"ftyp", at + 1)
+        if marker == 0x00:
+            return False
+        if marker == 0x01 or 0xD0 <= marker <= 0xD7:  # no length follows
+            continue
+        if pos + 2 > size:
+            return False
+        length = int.from_bytes(raw[pos:pos + 2], "big")
+        if length < 2 or pos + length > size:
+            return False
+        pos += length
+        if marker != 0xDA:
+            continue
+        # the scan: an 0xFF is data before a zero or a restart marker, fill
+        # before another 0xFF, and the next marker before anything else (a
+        # progressive JPEG has several scans). find() keeps 8 MB quick.
+        while True:
+            at = raw.find(b"\xff", pos)
+            if at == -1 or at + 1 >= size:
+                return False
+            after = raw[at + 1]
+            if after == 0x00 or 0xD0 <= after <= 0xD7:
+                pos = at + 2
+            elif after == 0xFF:
+                pos = at + 1
+            else:
+                pos = at
+                break
+
+
+def _gif_ends(raw):
+    """Whether a GIF ends where a picture does: the walk of its blocks reaches
+    the trailer, and whatever follows it is no matter (some programs write the
+    trailer twice). What the file closes with is not enough: a ";" and a zero
+    before it are bytes of the picture's data now and then, so a GIF cut short
+    would pass."""
+    size = len(raw)
+    if size < 13:
+        return False
+    pos = 13
+    if raw[10] & 0x80:                        # a colour table for the whole file
+        pos += 3 << ((raw[10] & 7) + 1)
+
+    def blocks(at):
+        # data sub-blocks, each with its length first, closed by a zero
+        while at < size:
+            length = raw[at]
+            if length == 0:
+                return at + 1
+            at += 1 + length
+        return -1
+
+    while pos < size:
+        kind = raw[pos]
+        if kind == 0x3B:
+            return True
+        if kind == 0x21:                      # an extension: its label, then blocks
+            pos = blocks(pos + 2)
+        elif kind == 0x2C:                    # an image
+            if pos + 10 > size:
+                return False
+            flags = raw[pos + 9]
+            pos += 10
+            if flags & 0x80:
+                pos += 3 << ((flags & 7) + 1)
+            pos = blocks(pos + 1)             # after the LZW code size
+        else:
+            return False
+        if pos < 0:
+            return False
     return False
 
 
 def card_picture_kind(raw):
     """The extension a picture's bytes say it has, or "" when they do not look
     like a PNG, a JPEG, a GIF or a WEBP: the signature at the start and the
-    end the format ends with (the IEND chunk, the end marker or a trailer a
-    phone writes after it, the GIF trailer, the size the RIFF header gives),
-    where zeros after it are no matter. That keeps out SVG and a page called .png,
+    end the format ends with (the IEND chunk, the end marker of the first
+    image of a JPEG with anything after it, the trailer the blocks of a GIF
+    lead to, the size the RIFF header gives), where zeros
+    after it are no matter. That keeps out SVG and a page called .png,
     and a file that stopped half way; it does not decode the picture, which
     the page does before it makes a file of the card."""
     kind = card_picture_signature(raw)
@@ -1497,7 +1580,7 @@ def card_picture_kind(raw):
     elif kind == ".jpg":
         ends = _jpeg_ends(raw)
     elif kind == ".gif":
-        ends = raw.rstrip(b"\x00").endswith(b";")
+        ends = _gif_ends(raw)
     elif kind == ".webp":
         size = int.from_bytes(raw[4:8], "little") + 8
         ends = size <= len(raw) and not raw[size:].strip(b"\x00")
@@ -1510,16 +1593,27 @@ def card_pictures_dir(root):
     return os.path.join(root, JOURNAL, CARD_PICTURES)
 
 
+def _is_text(name):
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def card_pictures(root):
     """The names of the pictures, sorted. Only plain files with the name of a
-    picture are listed, so that a name found here is one to be served."""
+    picture are listed, so that a name found here is one to be served. A name
+    that is not text (bytes of an old code page put there by hand) is left
+    out, as the backup leaves it: a page could not write it into an address."""
     base = card_pictures_dir(root)
     try:
         names = os.listdir(base)
     except OSError:
         return []
     return sorted(n for n in names
-                  if os.path.splitext(n)[1].lower() in (".png", ".jpg", ".gif", ".webp")
+                  if _is_text(n)
+                  and os.path.splitext(n)[1].lower() in (".png", ".jpg", ".gif", ".webp")
                   and not n.startswith(".") and os.path.isfile(os.path.join(base, n))
                   and not os.path.islink(os.path.join(base, n)))
 
@@ -1533,6 +1627,23 @@ def card_picture_path(root, name):
         if listed == name:
             return os.path.join(card_pictures_dir(root), listed)
     return None
+
+
+def _clean_name(stem):
+    """Letters of any alphabet, digits, . _ - and the combining marks that
+    belong to letters (Hindi, Arabic with its vowel signs, Hebrew with its
+    points) stay; a run of anything else becomes one hyphen. A regex \\w would
+    cut the marks, and a word would come out in pieces."""
+    out = []
+    cut = False
+    for ch in stem:
+        if ch.isalnum() or ch in "._-" or unicodedata.category(ch).startswith("M"):
+            out.append(ch)
+            cut = False
+        elif not cut:
+            out.append("-")
+            cut = True
+    return "".join(out)
 
 
 def save_card_picture(root, name, raw):
@@ -1557,16 +1668,22 @@ def save_card_picture(root, name, raw):
         raise RecordError(f"That picture is {len(raw) / 1048576:.1f} MB, "
                           f"and {CARD_PICTURE_MAX >> 20} MB is the most a card takes.")
     stem = os.path.splitext(os.path.basename((name or "").replace("\\", "/")))[0]
-    # a Mac may send a name with its accents apart (NFD), which \w would cut
+    # a Mac may send a name with its accents apart (NFD), which would be cut
     stem = unicodedata.normalize("NFC", stem)
-    stem = re.sub(r"[^\w.-]+", "-", stem).strip("-.")[:60] or "picture"
+    stem = _clean_name(stem).strip("-.")[:60] or "picture"
     if stem.split(".")[0].lower() in WINDOWS_RESERVED:
         stem += "-1"
     base = card_pictures_dir(root)
     os.makedirs(base, exist_ok=True)
+    # a name that differs only in case is taken too: the backup keeps one of
+    # two such names, and a Mac or a Windows disk makes them one file anyway
+    taken = {n.casefold() for n in os.listdir(base)}
     n = 1
     while True:
         kept = f"{stem}{kind}" if n == 1 else f"{stem}-{n}{kind}"
+        if kept.casefold() in taken:
+            n += 1
+            continue
         try:
             with open(os.path.join(base, kept), "xb") as f:     # never over another
                 f.write(raw)
