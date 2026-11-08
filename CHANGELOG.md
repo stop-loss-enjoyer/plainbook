@@ -2,7 +2,7 @@
 
 What changed and why. Newest first.
 
-## Unreleased
+## v1.14.0, 08.11.2026
 
 - **A page on another site can no longer slip a request past the journal's
   check.** The journal already refused a form sent from another site, but it
