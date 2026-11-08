@@ -18,10 +18,18 @@ screenshots, the rules that were ticked, the result in R, the conclusions.
 The file is read in a browser and prints from one: the styles carry a print
 block that turns the dark journal into ink on paper, so `Ctrl+P` is the way to
 a PDF and no library is needed to make one.
+
+The same rules hold for the other thing that leaves, the card of a closed trade
+(the section near the end): one picture, the pair, the side, the R, the day
+of the entry and the entry price when it was written, built here from the
+fields it names and from nothing else, the title of its page and the name of
+its file included.
 """
 import base64
 import os
 import re
+import unicodedata
+from decimal import Decimal
 from datetime import datetime, timedelta
 
 from . import flags, stats, store
@@ -719,6 +727,518 @@ def report_document(root, j, r, text="", book_of=None, shots=False,
     return document(r.name, esc(lead), body, note)
 
 
+BAR_CSS = f"""/* The bar the journal shows above a preview. It is not part of the file that
+   is sent: it is added by the server for the page you look at first. */
+.bar{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:9px;
+ align-items:center;background:{RAISED};border:1px solid {AXIS};
+ border-radius:6px;padding:11px 14px;margin-bottom:22px}}
+.bar .word{{color:{INK2};font-size:12px;margin-right:auto}}
+.bar a{{display:inline-block;border:1px solid {AXIS};border-radius:4px;
+ padding:5px 11px;color:{INK2};font-size:12px;text-decoration:none;
+ white-space:nowrap}}
+.bar a:hover{{border-color:{DIM};color:{INK}}}
+.bar a.primary{{background:{ACCENT};border-color:{ACCENT};color:#07080c;
+ font-weight:600}}
+.bar a.on{{border-color:{ACCENT};color:{INK}}}
+/* the stretch of a selection: a row of its own under the rest of the bar */
+.bar .stretch{{flex-basis:100%;display:flex;flex-wrap:wrap;gap:9px;
+ align-items:center;padding-top:9px;border-top:1px solid {AXIS}}}
+.bar .stretch .word{{margin-right:2px}}
+.bar form{{display:flex;flex-wrap:wrap;gap:7px;align-items:center;
+ margin:0 0 0 auto}}
+.bar input[type=date]{{background:{SURFACE};color:{INK};border:1px solid {AXIS};
+ border-radius:4px;padding:4px 7px;font:12px {MONO};color-scheme:dark;
+ box-sizing:border-box;height:28px}}
+.bar input[type=date]:focus{{outline:none;border-color:{ACCENT}}}
+.bar a:focus-visible,.bar button:focus-visible{{outline:2px solid {ACCENT};
+ outline-offset:2px}}
+.bar button{{background:transparent;border:1px solid {AXIS};border-radius:4px;
+ padding:5px 11px;color:{INK2};font-size:12px;cursor:pointer;
+ box-sizing:border-box;height:28px}}
+.bar button:hover{{border-color:{DIM};color:{INK}}}
+/* the button while the file is being built: still the button, visibly not
+   waiting for another press */
+.bar a.busy,.bar a.busy:hover{{background:{RAISED};border-color:{ACCENT};
+ color:{INK2};cursor:progress;font-weight:400}}
+"""
+
+
+# --- the card: a trade as one picture ---------------------------------------
+#
+# A second way to share a trade, for a post or a message: one picture, the way
+# a position card looks on an exchange. It is an SVG here and the page that
+# shows it turns it into a PNG in the browser, because nothing here may need a
+# library (invariant 6). Like the document above it, it asks the trade for
+# each field it shows by name and holds no money: the pair, the side, the R,
+# the day of the entry and, when the owner wrote it, the entry price. Nothing
+# else is drawn, so a field added to a trade never reaches a card by itself.
+
+REPO = "github.com/stop-loss-enjoyer/plainbook"
+
+# The QR code of https://github.com/stop-loss-enjoyer/plainbook, 33 modules
+# square, "#" dark and "." light, made once with
+#   qrencode -l M -m 0 -t ASCII https://github.com/stop-loss-enjoyer/plainbook
+# and kept as it came out. It is a constant because the address never changes
+# and a QR encoder is a library, which invariant 6 does not allow; a test
+# reads this very table back with zbarimg.
+QR_ROWS = (
+    "#######.##.#.#..#####..#..#######",
+    "#.....#.#.##.#..#.#.#####.#.....#",
+    "#.###.#.....#....#.##...#.#.###.#",
+    "#.###.#.#####.#.#...#.#.#.#.###.#",
+    "#.###.#....#..#.....#...#.#.###.#",
+    "#.....#...##.##..######.#.#.....#",
+    "#######.#.#.#.#.#.#.#.#.#.#######",
+    "........##.......##.#...#........",
+    "#.##.###..#.#.#.#########.#..#.##",
+    "..#.##.#..#........##..#..##.####",
+    "##.#.##.#.....#.##...#.#.#.###.##",
+    "#......##..######.#......#.#.#..#",
+    ".####.####.#...#..#..#.###.###.##",
+    "...#...#..###...###..#..#..#.###.",
+    "##...####.#.#####....#....#.##...",
+    "....##..##.#....#.####.#####.##..",
+    "..###.#...#..####..#.###.##.###..",
+    "##......#.##...#.#..#######.##.##",
+    "#######.#####.####..#.#.#..##.##.",
+    "##.#.#..###.#..#...#.#.####.#....",
+    ".##...##.###..#...#.#......#.####",
+    "###.#..#..###..#.##..#.#..#..##.#",
+    "..###.##.##.###.###..#.#.####..##",
+    ".#####.#.###.##.#.##...##.##.#.##",
+    "#..#.##.##.##..###....########.##",
+    "........#####.####.##...#...##...",
+    "#######.#####.#....##.###.#.#....",
+    "#.....#.##....#.#...#####...###.#",
+    "#.###.#..#.##.##.#.##..######.##.",
+    "#.###.#.#.#.##...#####.#...#...##",
+    "#.###.#.####..#....#..#...##.....",
+    "#.....#..####..###.#..###..###..#",
+    "#######.##..#######..#.#....#.#..",
+)
+QR_SIZE = len(QR_ROWS)
+QR_QUIET = 4          # modules of white round it, the least a scanner wants
+QR_PX = 7             # pixels a module takes on the card: a whole number, so
+                      # that no module is cut by the rasteriser
+
+CARD_W, CARD_H = 1200, 675
+CARD_SANS = ("Inter,'Inter Variable',system-ui,-apple-system,'Segoe UI',Roboto,"
+             "'Helvetica Neue',Arial,sans-serif")
+# The card is the sign of the journal grown to a page: ruled lines of plain
+# text and one candle, with the code standing in the candle. These tones are
+# lighter than GOOD and BAD because the code is read off them: a phone needs
+# the dark modules to stand well apart from the candle they are printed on.
+CARD_UP, CARD_DOWN, CARD_FLAT = "#5ccb94", "#ea7a72", "#c9c9cf"
+CARD_RULE, CARD_GHOST = "#191a1f", "#1d1f24"
+CARD_LINE = 75        # the distance of the ruled lines; the text sits on them
+CARD_LEFT = 72        # the left margin of the text
+CARD_CANDLE_X = 950   # the middle of the candle
+CARD_CANDLE_TOP = 118
+CARD_LABEL = 78       # the part of the candle under the code, for the name
+
+
+def qr_path():
+    """The dark modules of the code as one path in module units: each run of
+    dark modules in a row is a single bar, so a card carries a few hundred
+    short strokes and not a thousand squares."""
+    out = []
+    for y, row in enumerate(QR_ROWS):
+        x = 0
+        while x < len(row):
+            if row[x] != "#":
+                x += 1
+                continue
+            start = x
+            while x < len(row) and row[x] == "#":
+                x += 1
+            out.append(f"M{start} {y}h{x - start}v1h-{x - start}z")
+    return "".join(out)
+
+
+def card_qr(x, y, ink=GROUND):
+    """The code alone, its first module at (x, y). What stands behind it is
+    the candle's, which leaves the quiet zone round it."""
+    return (f'<path transform="translate({x} {y}) scale({QR_PX})" '
+            f'd="{qr_path()}" fill="{ink}" shape-rendering="crispEdges"/>')
+
+
+def card_candle(tone):
+    """The candle with the code in it and the name of the journal under the
+    code. The body is as wide as the code and its quiet zone, so the quiet
+    zone is the candle itself. The wicks end short of the edges: running off
+    them, the thing reads as a sign on a pole."""
+    side = (QR_SIZE + 2 * QR_QUIET) * QR_PX
+    height = side + CARD_LABEL
+    x, y = CARD_CANDLE_X - side // 2, CARD_CANDLE_TOP
+    quiet = QR_QUIET * QR_PX
+    word = y + side + 38
+    return (f'<rect x="{CARD_CANDLE_X - 4}" y="38" width="8" height="{640 - 38}" '
+            f'rx="4" fill="{tone}"/>'
+            f'<rect x="{x}" y="{y}" width="{side}" height="{height}" rx="22" '
+            f'fill="{tone}"/>'
+            + card_qr(x + quiet, y + quiet)
+            + f'<g transform="translate({CARD_CANDLE_X - 106} {y + side + 6})">'
+              f'{mark(40, ink=GROUND, accent=GROUND)}</g>'
+              f'<text x="{CARD_CANDLE_X - 56}" y="{word}" font-size="32" '
+              f'font-weight="800" letter-spacing="-.4" fill="{GROUND}">Plainbook</text>')
+
+
+def card_tint(tone, share_of):
+    """The tone let down into the ground of the card by a share of 0 to 1."""
+    ours = [int(tone[i:i + 2], 16) for i in (1, 3, 5)]
+    ground = [int(GROUND[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(g + (o - g) * share_of):02x}"
+                         for o, g in zip(ours, ground))
+
+
+# the sky of the standard card, the same on every card so that it is one sign
+CARD_STARS = ((90, 40), (250, 300), (480, 60), (610, 250), (700, 600), (1150, 60),
+              (1160, 250), (380, 640), (560, 470), (30, 250), (1120, 630), (760, 110))
+
+
+def card_rocket(direction, tone):
+    """The standard background: a rocket going up for a long and coming down
+    for a short, drawn here so that it is the journal's own. It takes the side
+    from the trade and the colour from the result, and stays dark enough for
+    the text to stand on it."""
+    low, mid, deep = card_tint(tone, .17), card_tint(tone, .27), card_tint(tone, .09)
+    place = ("translate(470 320) rotate(138) scale(1.18)" if direction == "short"
+             else "translate(560 340) rotate(42) scale(1.18)")
+    stars = "".join(f'<circle cx="{x}" cy="{y}" r="{2 + i % 3}" '
+                    f'fill="{card_tint(tone, .35)}"/>'
+                    for i, (x, y) in enumerate(CARD_STARS))
+    return (f'{stars}<g transform="{place}">'
+            f'<path d="M-56 158C-48 250 -20 330 0 420C20 330 48 250 56 158Z" fill="{low}"/>'
+            f'<path d="M-28 158C-24 220 -10 270 0 320C10 270 24 220 28 158Z" fill="{mid}"/>'
+            f'<path d="M-100 10L-196 176L-100 128ZM100 10L196 176L100 128Z" fill="{mid}"/>'
+            f'<rect x="-60" y="120" width="120" height="34" rx="6" fill="{mid}"/>'
+            f'<path d="M0 -320C92 -222 112 -80 100 120H-100C-112 -80 -92 -222 0 -320Z" '
+            f'fill="{low}"/>'
+            f'<path d="M0 -320C52 -265 80 -200 92 -130H-92C-80 -200 -52 -265 0 -320Z" '
+            f'fill="{mid}"/>'
+            f'<circle cy="-40" r="46" fill="{deep}"/>'
+            f'<circle cy="-40" r="46" fill="none" stroke="{mid}" stroke-width="12"/></g>')
+
+
+def card_small_candle(tone):
+    """The code in the corner of a card with a picture: the same candle, cut
+    down to what a scanner needs, so that the picture keeps the room."""
+    px = 5
+    side = (QR_SIZE + 2 * QR_QUIET) * px
+    x, y = CARD_W - 28 - side, CARD_H - 28 - side
+    middle = x + side // 2
+    quiet = QR_QUIET * px
+    return (f'<rect x="{middle - 3}" y="{y - 34}" width="6" height="{side + 60}" '
+            f'rx="3" fill="{tone}"/>'
+            f'<rect x="{x}" y="{y}" width="{side}" height="{side}" rx="16" fill="{tone}" '
+            f'stroke="{GROUND}" stroke-width="10" paint-order="stroke"/>'
+            f'<path transform="translate({x + quiet} {y + quiet}) scale({px})" '
+            f'd="{qr_path()}" fill="{GROUND}" shape-rendering="crispEdges"/>')
+
+
+def card_ghost(x, top, height, above, below):
+    """A candle of the chart behind the card, there to be hardly seen."""
+    return (f'<rect x="{x - 2}" y="{top - above}" width="4" '
+            f'height="{height + above + below}" rx="2" fill="{CARD_GHOST}"/>'
+            f'<rect x="{x - 28}" y="{top}" width="56" height="{height}" rx="6" '
+            f'fill="{CARD_GHOST}"/>')
+
+
+# what XML 1.0 will not carry in text: controls other than tab and line
+# breaks, the surrogates, U+FFFE and U+FFFF. The pair is free text, and one
+# of these in it makes the whole SVG unreadable to the browser that turns it
+# into a PNG, so the card would come out as a broken picture
+XML_REFUSED = re.compile("[^\x09\x0a\x0d\x20-\ud7ff\ue000-\ufffd"
+                         "\U00010000-\U0010ffff]")
+
+CARD_ROOM = 730       # the width the text may take, up to the candle
+# the same beside a picture: the text ends at x = 512, where the fade (solid to
+# x = 384, gone at x = 624) has about a third of its ground left under the text
+CARD_PICTURE_ROOM = 440
+CARD_PAIR_MAX, CARD_PAIR_MIN = 62, 22
+
+
+def xml_clean(text):
+    return XML_REFUSED.sub("", text or "")
+
+
+def card_pair_name(t):
+    """The pair as the card says it: the words the owner wrote, the way a
+    trade with none is shown elsewhere, and nothing the picture cannot hold."""
+    return xml_clean(t.pair).strip() or PAIR_NOT_SET
+
+
+def card_width(text):
+    """How many em a text takes, estimated on the wide side, since a name that
+    comes out too small costs less than one that runs into the candle. The
+    widths are of a bold sans: a pictograph 1.35 of an em, W and M 1.15, a wide
+    or full width character (Chinese, Japanese, Korean, full width Latin) 1,
+    m and w 0.95, any letter outside Latin 1.05 as a capital and 0.8 otherwise,
+    another capital 0.72, everything else 0.62. It is a guess about fonts the
+    page does not choose: `card_fit` in the page measures and has the last word."""
+    em = 0.0
+    for ch in text:
+        if ord(ch) >= 0x1F000 or unicodedata.category(ch) == "So":
+            em += 1.35
+        elif ch in "WM":
+            em += 1.15
+        elif unicodedata.east_asian_width(ch) in ("W", "F"):
+            em += 1.0
+        elif ch in "mw":
+            em += 0.95
+        elif ord(ch) > 0x24F and ch.isalpha():
+            em += 1.05 if ch.isupper() else 0.8
+        elif ch.isupper():
+            em += 0.72
+        else:
+            em += 0.62
+    return em
+
+
+def card_pair_size(name, room=CARD_ROOM):
+    """The font size at which the estimated width of the pair (`card_width`)
+    stands inside `room`, between a smallest and a largest size.
+
+    A name that still does not fit at the smallest size is pressed by
+    `card_pair_fence`, and `card_fit` in the page catches what the estimate
+    missed."""
+    em = max(card_width(name), 0.62)
+    return max(CARD_PAIR_MIN, min(CARD_PAIR_MAX, int(room / em)))
+
+
+def card_pair_fence(name, size, room=CARD_ROOM):
+    """The textLength that pins a name to `room` when the estimate says it
+    would pass it, and nothing when it fits."""
+    if card_width(name) * size <= room:
+        return ""
+    return f' textLength="{room}" lengthAdjust="spacingAndGlyphs"'
+
+
+def card_price(value):
+    """The entry price as it was written, never in the form of an exponent:
+    1e-05 would be read as a different kind of number on a picture. The
+    shortest text that gives the same float back, then spelled out."""
+    text = format(Decimal(repr(float(value))), "f")
+    return text[:-2] if text.endswith(".0") else text
+
+
+def card_r_size(figure, room=620, most=186):
+    """The size of the figure, the R after it counted at about half its size."""
+    return max(48, min(most, int(room / (len(figure) * 0.6 + 0.45))))
+
+
+def card_r_text(r):
+    """+2.40R, -1.00R; a break-even has no sign, as it has no side."""
+    if abs(r) < 0.005:
+        return "0.00R"
+    return f"{r:+.2f}R"
+
+
+def card_r_colour(r):
+    """By the figure the card prints: +0.07R is a win, 0.00R is neither."""
+    return {"good": CARD_UP, "bad": CARD_DOWN}.get(r_class(r), CARD_FLAT)
+
+
+def card_title(t):
+    """The title of the page of the card, which is also the tab's name."""
+    return f"{card_pair_name(t)} {t.direction} card"
+
+
+def card_label(t, r):
+    """What a screen reader says of the picture: what it shows, in words."""
+    return f"{card_pair_name(t)} {t.direction}, {card_r_text(r)}"
+
+
+def card_file_name(t):
+    """The name of the PNG when it is saved: the pair, the side and the day of
+    the entry. The id of the trade is not in it, since the file goes where
+    the owner sends it and the id is the journal's own."""
+    pair = re.sub(r"[^A-Za-z0-9._-]+", "-", xml_clean(t.pair))[:40].strip("-")
+    day = f"{t.opened:%Y-%m-%d}" if t.opened else ""
+    return "plainbook-" + "-".join(x for x in (pair, t.direction, day) if x) + ".png"
+
+
+def card_head(t, r):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" id="card-svg" role="img" '
+            f'aria-label="{esc(card_label(t, r))}" width="{CARD_W}" '
+            f'height="{CARD_H}" viewBox="0 0 {CARD_W} {CARD_H}" '
+            f'font-family="{CARD_SANS}">'
+            f'<rect width="{CARD_W}" height="{CARD_H}" fill="{GROUND}"/>')
+
+
+def card_pair_text(name, room):
+    """The coins and the name on the second line. Returns the markup."""
+    coins, coins_w = flags.standalone(name, CARD_LEFT, 92, 60)
+    x = CARD_LEFT + coins_w + (18 if coins_w else 0)
+    left = room - (x - CARD_LEFT)
+    size = card_pair_size(name, left)
+    return (f'{coins}<text id="card-pair" data-room="{left}" x="{x}" y="148" '
+            f'font-size="{size}" font-weight="700" '
+            f'letter-spacing="-1" fill="{INK}"{card_pair_fence(name, size, left)}>'
+            f'{esc(name)}</text>')
+
+
+def card_side_text(t):
+    return (f'<text x="{CARD_LEFT + 2}" y="223" font-size="28" font-weight="700" '
+            f'letter-spacing="6" fill="{INK2}">{esc((t.direction or "").upper())}</text>')
+
+
+def card_figure(r, tone, y, room, most):
+    figure = card_r_text(r)[:-1].replace("-", "\u2212")
+    size = card_r_size(figure, room, most)
+    return (f'<text x="{CARD_LEFT - 6}" y="{y}" font-size="{size}" font-weight="800" '
+            f'letter-spacing="{-5 if size > 120 else -3}" fill="{tone}">{esc(figure)}'
+            f'<tspan dx="10" font-size="{int(size * .56)}" font-weight="700" '
+            f'letter-spacing="0">R</tspan></text>')
+
+
+def card_fact(k, v, x, y, width):
+    """A label and its value; the value is the one thing here of any length,
+    so past `width` it is pressed, like the pair."""
+    fence = (f' textLength="{width}" lengthAdjust="spacingAndGlyphs"'
+             if card_width(v) * 30 > width else "")
+    return (f'<text x="{x}" y="{y}" font-size="24" fill="{DIM}">{esc(k)}</text>'
+            f'<text x="{x + (104 if k == "Opened" else 74)}" y="{y}" font-size="30" '
+            f'font-weight="600" fill="{INK}"{fence}>{esc(v)}</text>')
+
+
+def card_rows(t):
+    rows = [("Opened", day_text(t.opened, False))]
+    if t.entry_price is not None:
+        rows.append(("Entry", card_price(t.entry_price)))
+    return rows
+
+
+def trade_card_svg(t, r, picture="", plain=False):
+    """The card of a closed trade as one SVG, 1200 by 675 pixels.
+
+    It is rasterised on its own from a data URL, so it may hold nothing that
+    points outside itself: the coins bring their own drawings along
+    (`flags.standalone`), a picture comes as a data URL, and there is no
+    foreignObject and no font to fetch.
+
+    `picture` is a data URL of the owner's and takes its own layout; `plain`
+    is the ruled page with no rocket. Without either, the rocket of the side."""
+    if picture:
+        return card_with_picture(t, r, picture)
+    name = card_pair_name(t)
+    tone = card_r_colour(r)
+    if plain:
+        rules = "".join(f'<path d="M0 {y}H{CARD_W}" stroke="{CARD_RULE}" stroke-width="2"/>'
+                        for y in range(CARD_LINE, CARD_H, CARD_LINE))
+        back = rules + card_ghost(1146, 330, 170, 50, 44) + card_ghost(754, 380, 120, 46, 40)
+    else:
+        back = card_rocket(t.direction, tone)
+    facts = "".join(card_fact(k, v, CARD_LEFT + 310 * i, 523, 330)
+                    for i, (k, v) in enumerate(card_rows(t)))
+    return (card_head(t, r) + back + card_candle(tone)
+            + card_pair_text(name, CARD_ROOM) + card_side_text(t)
+            + card_figure(r, tone, 448, 620, 186) + facts
+            + f'<text x="{CARD_LEFT + 2}" y="598" font-size="23" fill="{INK2}">'
+              f'{esc(REPO)}</text></svg>')
+
+
+def card_with_picture(t, r, picture):
+    """The card with a picture of the owner's. A picture usually says something
+    across its whole width, a caption above all, so it is shown whole, against
+    the right edge, and the text keeps to the left over a fade: the one
+    gradient of the journal, which a picture cannot do without. The candle
+    shrinks into the corner for the same reason."""
+    name = card_pair_name(t)
+    tone = card_r_colour(r)
+    facts = "".join(card_fact(k, v, CARD_LEFT, 448 + 56 * i, 300)
+                    for i, (k, v) in enumerate(card_rows(t)))
+    fade = (f'<defs><linearGradient id="card-fade" x1="0" x2="1" y1="0" y2="0">'
+            f'<stop offset=".32" stop-color="{GROUND}"/>'
+            f'<stop offset=".52" stop-color="{GROUND}" stop-opacity="0"/>'
+            f'</linearGradient></defs>'
+            f'<rect width="{CARD_W}" height="{CARD_H}" fill="url(#card-fade)"/>')
+    return (card_head(t, r)
+            + f'<image href="{esc(picture)}" width="{CARD_W}" height="{CARD_H}" '
+              f'preserveAspectRatio="xMaxYMid meet"/>' + fade
+            + card_small_candle(tone)
+            + card_pair_text(name, CARD_PICTURE_ROOM) + card_side_text(t)
+            + card_figure(r, tone, 368, CARD_PICTURE_ROOM, 124) + facts
+            + f'<g transform="translate({CARD_LEFT} 588)">{mark(32)}</g>'
+              f'<text x="{CARD_LEFT + 42}" y="614" font-size="26" font-weight="700" '
+              f'fill="{INK}">Plainbook</text>'
+              f'<text x="{CARD_LEFT + 2}" y="646" font-size="17" fill="{INK2}">'
+              f'{esc(REPO)}</text></svg>')
+
+
+def card_thumb(kind, t=None, r=0.0):
+    """The small picture of a background on the strip over the card: the
+    rocket of this trade, or the ruled page, drawn from the card's own pieces
+    so that what is pressed is what is got."""
+    if kind == "plain":
+        back = "".join(f'<path d="M0 {y}H{CARD_W}" stroke="{CARD_RULE}" stroke-width="4"/>'
+                       for y in range(CARD_LINE, CARD_H, CARD_LINE))
+    else:
+        back = card_rocket(t.direction, card_r_colour(r))
+    return (f'<svg viewBox="0 0 {CARD_W} {CARD_H}" width="96" height="54" '
+            f'aria-hidden="true"><rect width="{CARD_W}" height="{CARD_H}" '
+            f'fill="{GROUND}"/>{back}</svg>')
+
+
+def card_ready(j, t):
+    """A closed trade whose R could be worked out has a card; an open one does
+    not, and neither does a close the journal cannot measure."""
+    return not t.is_open and j.r(t.id) is not None
+
+
+def card_preview(title, note, svg):
+    """The page the card is looked at on: the strip of buttons above, the
+    picture under it. The strip and its script are the server's; this only
+    gives the picture room to be shown full width and to shrink on a phone."""
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{esc(title)}</title>
+<link rel="icon" href="{FAVICON}"><style>{BAR_CSS}
+body{{margin:0;background:{GROUND};color:{INK};
+ font:13.5px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;
+ -webkit-font-smoothing:antialiased}}
+*{{box-sizing:border-box}}
+:root{{color-scheme:dark}}
+.sheet{{max-width:1200px;margin:0 auto;padding:22px 16px 40px}}
+.bar a,.bar button{{line-height:18px;height:30px}}
+.bar button.primary{{background:{ACCENT};border-color:{ACCENT};color:#07080c;
+ font-weight:600}}
+.cardpic > svg{{display:block;width:100%;height:auto}}
+/* the row of backgrounds: part of the strip, never of the picture. It scrolls
+   sideways, because the strip stays on screen and a row that wrapped would
+   take the card from under it, however many pictures there are */
+.bar .bgs{{gap:12px;min-width:0}}
+.bar .rail{{flex:1 1 240px;min-width:0;display:flex;gap:12px;overflow-x:auto;
+ padding:7px 8px 4px 0;scrollbar-width:thin;scrollbar-color:{AXIS} transparent}}
+.bar .rail .pic{{flex:none}}
+.bar .pic{{position:relative;display:inline-block}}
+.bar a.thumb{{display:block;width:100px;height:auto;padding:2px;line-height:0;
+ border:2px solid {AXIS};border-radius:5px;overflow:hidden}}
+.bar a.thumb.on{{border-color:{ACCENT}}}
+.bar a.thumb svg,.bar a.thumb img{{display:block;width:92px;height:52px;
+ object-fit:cover;border-radius:3px}}
+.bar .pic .cap{{display:block;color:{DIM};font-size:11px;line-height:1.4;
+ margin-top:3px;text-align:center}}
+.bar .pic form{{position:absolute;top:-6px;right:-6px;margin:0;display:block}}
+.bar .pic button.x{{width:20px;height:20px;padding:0;line-height:16px;
+ border-radius:50%;background:{RAISED};color:{INK2};font-size:14px}}
+.bar .add{{display:inline-block;border:1px dashed {AXIS};border-radius:4px;
+ padding:5px 11px;color:{INK2};font-size:12px;line-height:18px;cursor:pointer}}
+.bar .add:hover{{border-color:{DIM};color:{INK}}}
+.bar .add input{{position:absolute;width:1px;height:1px;opacity:0;
+ overflow:hidden;pointer-events:none}}
+.bar .add:focus-within{{outline:2px solid {ACCENT};outline-offset:2px}}
+.bar .bgs form.up{{margin:0}}
+.bar .said{{color:{ACCENT}}}
+@media (max-width:760px){{.sheet{{padding:14px 12px 28px}}}}
+</style></head><body>
+<div class="sheet">
+{note}
+<div class="cardpic">{svg}</div>
+</div>
+</body></html>"""
+
+
 CSS = f"""
 *{{box-sizing:border-box}}
 :root{{color-scheme:dark}}
@@ -832,40 +1352,7 @@ ul{{margin:0 0 10px;padding-left:18px}}
 .foot{{color:{DIM};font-size:11.5px;line-height:1.6;margin-top:26px;
  padding-top:14px;border-top:1px solid {AXIS}}}
 
-/* The bar the journal shows above a preview. It is not part of the file that
-   is sent: it is added by the server for the page you look at first. */
-.bar{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:9px;
- align-items:center;background:{RAISED};border:1px solid {AXIS};
- border-radius:6px;padding:11px 14px;margin-bottom:22px}}
-.bar .word{{color:{INK2};font-size:12px;margin-right:auto}}
-.bar a{{display:inline-block;border:1px solid {AXIS};border-radius:4px;
- padding:5px 11px;color:{INK2};font-size:12px;text-decoration:none;
- white-space:nowrap}}
-.bar a:hover{{border-color:{DIM};color:{INK}}}
-.bar a.primary{{background:{ACCENT};border-color:{ACCENT};color:#07080c;
- font-weight:600}}
-.bar a.on{{border-color:{ACCENT};color:{INK}}}
-/* the stretch of a selection: a row of its own under the rest of the bar */
-.bar .stretch{{flex-basis:100%;display:flex;flex-wrap:wrap;gap:9px;
- align-items:center;padding-top:9px;border-top:1px solid {AXIS}}}
-.bar .stretch .word{{margin-right:2px}}
-.bar form{{display:flex;flex-wrap:wrap;gap:7px;align-items:center;
- margin:0 0 0 auto}}
-.bar input[type=date]{{background:{SURFACE};color:{INK};border:1px solid {AXIS};
- border-radius:4px;padding:4px 7px;font:12px {MONO};color-scheme:dark;
- box-sizing:border-box;height:28px}}
-.bar input[type=date]:focus{{outline:none;border-color:{ACCENT}}}
-.bar a:focus-visible,.bar button:focus-visible{{outline:2px solid {ACCENT};
- outline-offset:2px}}
-.bar button{{background:transparent;border:1px solid {AXIS};border-radius:4px;
- padding:5px 11px;color:{INK2};font-size:12px;cursor:pointer;
- box-sizing:border-box;height:28px}}
-.bar button:hover{{border-color:{DIM};color:{INK}}}
-/* the button while the file is being built: still the button, visibly not
-   waiting for another press */
-.bar a.busy,.bar a.busy:hover{{background:{RAISED};border-color:{ACCENT};
- color:{INK2};cursor:progress;font-weight:400}}
-
+{BAR_CSS}
 @media (max-width:760px){{
  .twin{{grid-template-columns:1fr}}
  .sheet{{padding:20px 14px 40px}}

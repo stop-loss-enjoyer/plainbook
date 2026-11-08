@@ -369,6 +369,74 @@ class LiteHides(LiteBase):
                 self.assertNotIn(marker, lite, path)
             self.assertIn("EURUSD", lite)
 
+    def test_the_card_stays_in_lite_and_holds_nothing_lite_hides(self):
+        """The page of the card of a closed trade is the same page in Lite and
+        in the full journal, and the Card button is on the trade in both,
+        because a card carries no plan and no playbook. A trade still open has
+        no button and no card in either edition (it is made here, since the
+        tests of this class close the shared open one)."""
+        for path in (f"/share/card/{self.TRADE}",):
+            full, lite = self.both(path)
+            self.assertEqual(full, lite, path)
+            self.assertIn('id="card-svg"', lite)
+            self.assertIn("EURUSD", lite)
+            self.assertNotIn("Turned off", lite)
+            for word in ("Range break", "Pullback", "seen on the weekly first",
+                         "the pullback", "-250", "10000"):
+                self.assertNotIn(word, lite, word)
+        full, lite = self.both(f"/trade/{self.TRADE}")
+        self.assertIn(f'href="/share/card/{self.TRADE}"', full)
+        self.assertIn(f'href="/share/card/{self.TRADE}"', lite)
+        # a trade of its own: the tests here close the shared open one
+        running = "2026-08-29-09-eurusd"
+        store.save_trade(self.root, Trade(
+            id=running, account="broker", pair="EURUSD", direction="long",
+            style="swing", entry_tf="H4", risk=1.0,
+            opened=datetime(2026, 8, 29, 15, 0), opened_time=True))
+        self.S.drop_cache()
+        try:
+            self.assertNotIn("/share/card/", self.get(f"/trade/{running}"))
+            with self.assertRaises(urllib.error.HTTPError) as gone:
+                self.get(f"/share/card/{running}")
+            self.assertEqual(gone.exception.code, 404)
+            gone.exception.close()
+        finally:
+            # not into the trash: another test counts what is there
+            shutil.rmtree(store.trade_dir(self.root, running))
+            self.S.drop_cache()
+
+    def test_the_backgrounds_of_a_card_work_in_lite(self):
+        """Lite keeps the pictures of the card: they are added, chosen and
+        removed on the card page as in the full journal, and the folder they
+        live in is the journal's own, so a backup of either carries it."""
+        from test_card_pictures import multipart, png
+        self.lite_on()
+        shown = f"/share/card/{self.TRADE}"
+        body, headers = multipart("picture", "mine.png", png())
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/card-picture/add?card={self.TRADE}",
+            data=body, headers=headers)
+        try:
+            with urllib.request.urlopen(req) as r:
+                self.assertEqual(urllib.parse.urlparse(r.geturl()).path, shown)
+                self.assertIn("bg=mine.png", r.geturl())
+                page = r.read().decode("utf-8")
+            self.assertIn("<title>Plainbook Lite", self.get("/"))
+            self.assertIn('<image href="data:image/png;base64,', page)
+            self.assertIn("Add picture", page)
+            self.assertIn("mine.png", self.get(shown + "?bg=plain"))
+            self.assertEqual(store.card_pictures(self.root), ["mine.png"])
+            url, _ = self.post(f"/card-picture/remove?card={self.TRADE}",
+                               {"name": "mine.png", "bg": "mine.png"})
+            self.assertEqual(urllib.parse.urlparse(url).path, shown)
+            self.assertEqual(store.card_pictures(self.root), [])
+        finally:
+            for folder in (store.card_pictures_dir(self.root),
+                           os.path.join(self.root, store.TRASH)):
+                for name in (os.listdir(folder) if os.path.isdir(folder) else []):
+                    if "mine" in name:
+                        os.remove(os.path.join(folder, name))
+
     def test_the_csv_keeps_every_column(self):
         full, lite = self.both("/export.csv")
         self.assertEqual(full, lite)

@@ -78,13 +78,13 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 |---|---|
 | `plainbook/model.py` | the records: `Trade`, `Account`, `Adjustment`, `Card`, `Week`, `Plan`, `Playbook`, `Note`; the vocabularies a journal starts with; the checks |
 | `plainbook/mdfile.py` | the markdown header format, and only that |
-| `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash, the owner's lists of pairs and words |
+| `plainbook/store.py` | files ↔ objects, the folder layout, ids, the trash, the owner's lists of pairs and words, and the pictures of a card (`journal/card-pictures/`, kept by the signature and the end of their bytes, never in the repository) |
 | `plainbook/balances.py` | balances and R, computed by replaying history |
 | `plainbook/stats.py` | summaries, the equity curve, the R distribution |
 | `plainbook/reports.py` | monthly and quarterly reports: `compose` reads the figures off the journal on every look, `build` writes them into the file that is the archive and holds the conclusions |
 | `plainbook/html.py` | the palette, the CSS, the page shell, the SVG charts |
 | `plainbook/flags.py` | the round flag icons of a trading symbol, and what a symbol is taken apart into |
-| `plainbook/share.py` | the document a record leaves in: one file, its pictures inside it, no money in it |
+| `plainbook/share.py` | what a record leaves in: a document of one file with its pictures inside it, or the card of a closed trade as one SVG that the page turns into a PNG (its QR code is a constant, its rocket and candles are drawn here; a picture of the owner's comes in as a data URL); no money in either |
 | `plainbook/backup.py` | the whole journal in one `.plainbook` file (a ZIP with a manifest of sizes and hashes) and back: making it, unpacking a file into `.restore/` and checking it, the swap that puts the journal aside into `.trash`, putting it back, the sweep of a restore left untaken |
 | `plainbook/server.py` | routes, pages, forms: everything HTTP; the edition gating goes only through `lite()`, `LITE_HIDDEN_TABS`, `LITE_HIDDEN_ROUTES` and `LITE_TRASH_KINDS` |
 | `plainbook/__main__.py` | `python3 -m plainbook`: the same server |
@@ -155,7 +155,11 @@ data. Each one is followed by what it prevents.
    and keep the `Origin` check in `_same_origin` and the `Host` check in
    `_own_host`. *Prevents:* a journal with no login ending up reachable from
    a network, and a web page reading it by pointing a name of its own at
-   127.0.0.1 (DNS rebinding), which the `Host` header gives away.
+   127.0.0.1 (DNS rebinding), which the `Host` header gives away. A refusal
+   given before the body is read must close the connection
+   (`Handler._refuse`): a page on another site can put whole requests into
+   the body of a form, and a connection left open reads them as requests of
+   its own, past both checks.
 6. **No dependencies.** The standard library is the whole toolbox. A package
    that looks harmless today is an install failure in five years. PyInstaller
    and setuptools are tools of the release workflow, used on GitHub's
@@ -163,7 +167,9 @@ data. Each one is followed by what it prevents.
 7. **Everything is offline.** No CDN, no web fonts, no analytics, no update
    check. Styles and scripts are inlined into the page.
 8. **Ids are file names.** Anything arriving from a URL and used as a path goes
-   through `store.safe_dir_name` first.
+   through `store.safe_dir_name` first. The one stricter rule is the name of a
+   card picture: it is never turned into a path, only compared exactly with
+   the listing of `journal/card-pictures/` (`store.card_picture_path`).
 9. **The lists in `journal/vocabulary.md` are what the form offers, not what a
    trade is allowed to hold.** Styles, timeframes and execution formats are the
    owner's, so a word taken out of a list must still load, still show in the
@@ -330,6 +336,10 @@ surfaces and a lit top edge a pixel thick, and a column of the day by day
 is two sides and a roof in three steps of one colour (`_block`). A figure a picture shows under the pointer rides in a
 `data-tip` attribute (`H.tip`), which the page script puts in the tip box
 at once; a `<title>` waits a second and a half and is not seen.
+The card of a trade (`share.py`) is its own small drawing and keeps these rules
+with one named exception: the fade of a card that stands on a picture of the
+owner's, the one gradient of the journal, which sits on a picture and never on
+a page. The rocket and the ruled page of the other two backgrounds are flat.
 
 **Hide something in Plainbook Lite.** A new tab or page that belongs to the
 full Plainbook only: add its tab to `LITE_HIDDEN_TABS` and every address
@@ -461,3 +471,17 @@ and none of them was obvious from the code.
   no test could see it. *Lesson:* an element the script hides by `hidden`
   and the stylesheet gives a `display` needs its own `[hidden]{display:none}`;
   look at the page after the script has run, not only at the markup.
+- **A refusal that left the body on the connection.** The check of `Origin`
+  and `Host` answered 403 without reading the body of the POST, and HTTP/1.1
+  keeps the connection open, so the body was read as the next request: with
+  no `Origin` and a `Host` the sender chose, it passed. A page on another site
+  could send `fetch(url, {mode: "no-cors", body: "POST /trade/<id>/delete
+  HTTP/1.1..."})` and delete a trade. *Lesson:* any reply sent before the body
+  is read, a bad length and a body over the limit included, goes through
+  `_refuse`, which closes the connection; `tests/test_card_pictures.py` sends
+  such bodies down a raw socket.
+- **A picture checked by its signature only.** A file with the first bytes of
+  a PNG and nothing else behind them was kept, and the card came out with a
+  broken-image mark. *Lesson:* the server checks the signature and the end of
+  the format and cannot decode; the page opens the picture before it makes a
+  file (`card_opens`), and the check says only what it checks.

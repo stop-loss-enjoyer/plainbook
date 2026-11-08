@@ -14,6 +14,7 @@ server was given (PLAINBOOK_ROOT, or the project folder):
     journal/notes/<id>/note.md, shots/*.png
     journal/cards/YYYY-MM-DD.md, YYYY-Www.md
     journal/reports/<period>.md
+    journal/card-pictures/<name>.png|jpg|gif|webp   the owner's backgrounds for a trade card
     journal/vocabulary.md, pairs.md, settings.md
     .trash/                deleted records, restorable from the Accounts tab
     .drafts/               pictures pasted into forms not yet submitted
@@ -51,6 +52,8 @@ PLAN_FILE = "plan.md"
 PLAYBOOK_FILE = "playbook.md"
 NOTE_FILE = "note.md"
 SHOTS = "shots"
+CARD_PICTURES = "card-pictures"   # the owner's own backgrounds of a trade card, a file each
+CARD_PICTURE_MAX = 8 * 1024 * 1024
 
 
 def record_path(name):
@@ -1427,6 +1430,107 @@ def delete_trade(root, trade_id):
     target = _trash_target(root, trade_id)
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.move(path, target)
+    return target
+
+
+# --- the pictures of a card -------------------------------------------------
+# A card can stand on a picture of the owner's. They are theirs and live in
+# their data, never in the repository, and they go out with every card made on
+# them, which is why only what has the signature and the end of a picture is
+# kept.
+
+def card_picture_kind(raw):
+    """The extension a picture's bytes say it has, or "" when they do not look
+    like a PNG, a JPEG, a GIF or a WEBP: the signature at the start and the
+    end the format ends with (the IEND chunk, the end marker, the trailer, the
+    size the RIFF header gives). That keeps out SVG and a page called .png, and
+    a file that stopped half way; it does not decode the picture, which the
+    page does before it makes a file of the card."""
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png" if raw.endswith(b"\x00\x00\x00\x00IEND\xaeB`\x82") else ""
+    if raw.startswith(b"\xff\xd8\xff"):
+        return ".jpg" if raw.rstrip(b"\x00").endswith(b"\xff\xd9") else ""
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif" if raw.endswith(b";") else ""
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return ".webp" if int.from_bytes(raw[4:8], "little") + 8 == len(raw) else ""
+    return ""
+
+
+def card_pictures_dir(root):
+    return os.path.join(root, JOURNAL, CARD_PICTURES)
+
+
+def card_pictures(root):
+    """The names of the pictures, sorted. Only plain files with the name of a
+    picture are listed, so that a name found here is one to be served."""
+    base = card_pictures_dir(root)
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return []
+    return sorted(n for n in names
+                  if os.path.splitext(n)[1].lower() in (".png", ".jpg", ".gif", ".webp")
+                  and not n.startswith(".") and os.path.isfile(os.path.join(base, n))
+                  and not os.path.islink(os.path.join(base, n)))
+
+
+def card_picture_path(root, name):
+    """The file of a picture by its name, or None. The name must be one the
+    listing holds, compared exactly: it is looked for, never built into a
+    path. That is stricter than `safe_dir_name`, which only refuses what could
+    climb out of a folder (invariant 8)."""
+    for listed in card_pictures(root):
+        if listed == name:
+            return os.path.join(card_pictures_dir(root), listed)
+    return None
+
+
+def save_card_picture(root, name, raw):
+    """Keeps a picture and returns the name it was kept under.
+
+    The kind is read from the bytes, the size is capped, the name is cleaned
+    to letters, digits and . _ - (a name Windows keeps for itself gets a
+    suffix) and takes a free one when it is taken: a picture is never written
+    over another."""
+    kind = card_picture_kind(raw)
+    if not kind:
+        raise RecordError("That is not a picture Plainbook can use: "
+                          "PNG, JPEG, GIF or WEBP only.")
+    if len(raw) > CARD_PICTURE_MAX:
+        raise RecordError(f"That picture is {len(raw) / 1048576:.1f} MB, "
+                          f"and {CARD_PICTURE_MAX >> 20} MB is the most a card takes.")
+    stem = os.path.splitext(os.path.basename((name or "").replace("\\", "/")))[0]
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-.")[:60] or "picture"
+    if stem.split(".")[0].lower() in WINDOWS_RESERVED:
+        stem += "-1"
+    base = card_pictures_dir(root)
+    os.makedirs(base, exist_ok=True)
+    n = 1
+    while True:
+        kept = f"{stem}{kind}" if n == 1 else f"{stem}-{n}{kind}"
+        try:
+            with open(os.path.join(base, kept), "xb") as f:     # never over another
+                f.write(raw)
+            return kept
+        except FileExistsError:
+            n += 1
+
+
+def trash_card_picture(root, name):
+    """Moves a picture to the trash, where it stays. Its place in the trash is
+    named so that the Trash tab, which restores records, does not list it:
+    a picture is put back by moving the file."""
+    path = card_picture_path(root, name)
+    if path is None:
+        return None
+    stem, ext = os.path.splitext(name)
+    target = _trash_target(root, f"card-picture-{stem}", ext)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    try:
+        shutil.move(path, target)
+    except FileNotFoundError:
+        return None          # taken off by another press a moment ago
     return target
 
 

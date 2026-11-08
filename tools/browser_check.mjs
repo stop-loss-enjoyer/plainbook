@@ -7,11 +7,18 @@
 //   PLAINBOOK_ROOT=/tmp/pb-demo PLAINBOOK_PORT=8899 python3 -m plainbook.server &
 //   node tools/browser_check.mjs http://127.0.0.1:8899
 //
+// A second argument names the browser profile folder, a third a folder to keep
+// the PNG of the card in (it is deleted otherwise).
+//
 // Every line printed "ok:" is a step that behaved; the run stops at the first
 // that did not, and any error the page logged is printed at the end. The one
 // 400 it logs on purpose is the playbook form refusing rules changed under a
 // held version.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { crc32, deflateSync } from "node:zlib";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 const PORT = 9333;
@@ -457,9 +464,17 @@ async function run(p) {
   const menu = () => p.evaluate(`[...document.querySelector('select[name=plan]').options].map(o => o.value + '|' + o.textContent)`);
   const enter = day => p.evaluate(`(() => { const e = document.querySelector('[name=entry]');
     e.value = ${JSON.stringify(day + "T10:00")}; e.dispatchEvent(new Event('change', {bubbles: true})); })()`);
-  const offeredNow = (await menu()).map(o => o.split("|")[0]).filter(Boolean);
+  let offeredNow = (await menu()).map(o => o.split("|")[0]).filter(Boolean);
   const plans = JSON.parse(await p.evaluate(`document.querySelector('select[name=plan]').dataset.plans`));
-  const older = plans.find(k => k.to < DAY && !offeredNow.includes(k.id));
+  // the demo plans run Monday to Friday, so on a weekend no plan covers today
+  // and the run starts from the last day of the newest plan instead
+  let from = DAY;
+  if (!offeredNow.length && plans.length) {
+    from = plans.reduce((a, b) => (a.to > b.to ? a : b)).to;
+    await enter(from);
+    offeredNow = (await menu()).map(o => o.split("|")[0]).filter(Boolean);
+  }
+  const older = plans.find(k => k.to < from && !offeredNow.includes(k.id));
   check(offeredNow.length > 0 && older, "the menu offers today's plans and the page knows an older one");
   await enter(older.to);
   const back = (await menu()).map(o => o.split("|")[0]).filter(Boolean);
@@ -707,6 +722,162 @@ async function run(p) {
   await p.submit();
   check(await p.evaluate(REVIEW) === 0, "the review picture taken off is gone from the page");
   await send("Emulation.clearDeviceMetricsOverride");
+
+  // ---- the card of a closed trade, made into a PNG by the page itself. This is
+  // the proof the tests cannot give: that the canvas is not tainted, that the
+  // picture is the size it is said to be, and that a phone scans the QR code
+  await p.goto(B + "/");
+  const closed = await p.evaluate(`(async () => {
+    const links = [...new Set([...document.querySelectorAll('a[href^="/trade/"]')]
+      .map(a => a.getAttribute("href").split("?")[0].slice(7)))];
+    // the trade page names the card only when there is one, so no 404 is
+    // provoked here that the run would count as an error
+    for (const id of links) {
+      const text = await (await fetch("/trade/" + id)).text();
+      const at = text.indexOf('href="/share/card/');
+      if (at >= 0) return text.slice(at + 18).split(/["?]/)[0];
+    }
+    return "";
+  })()`);
+  check(closed !== "", "the demo journal has a closed trade with a card");
+  await p.goto(B + "/share/card/" + closed);
+  const made = JSON.parse(await p.evaluate(`(async () => {
+    const blob = await card_png();
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let text = "";
+    for (let i = 0; i < bytes.length; i += 8192)
+      text += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    return JSON.stringify({type: blob.type, b64: btoa(text)});
+  })()`));
+  const png = Buffer.from(made.b64, "base64");
+  check(made.type === "image/png" && png.subarray(1, 4).toString() === "PNG"
+        && png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 675,
+    "card_png makes a PNG of 1200 by 675 from the card");
+  const keep = process.argv[4];
+  if (keep) mkdirSync(keep, { recursive: true });
+  const folder = keep || mkdtempSync(join(tmpdir(), "plainbook-card-"));
+  const file = join(folder, "card-" + closed + ".png");
+  writeFileSync(file, png);
+  const scan = spawnSync("zbarimg", ["--quiet", "--raw", file], { encoding: "utf8" });
+  if (scan.error) console.log("skipped: zbarimg is not installed, the QR code of the card was not scanned");
+  else check(scan.stdout.trim() === "https://github.com/stop-loss-enjoyer/plainbook",
+    "zbarimg reads the address off the PNG of the card: " + scan.stdout.trim());
+  if (!keep) rmSync(folder, { recursive: true, force: true });
+  check(await p.evaluate(`document.querySelectorAll('.bar button').length === 2
+    && /Back/.test(document.querySelector('.bar a').textContent)`),
+    "the strip over the card has Copy image, Download and Back");
+  // the fonts of a machine are not known to the server: a name that draws wider
+  // than its estimate is pressed back by the page, short of the candle
+  check(await p.evaluate(`(() => {
+    const n = document.getElementById("card-pair");
+    n.textContent = "m".repeat(40);
+    n.removeAttribute("textLength");
+    n.setAttribute("font-size", "62");
+    card_fit();
+    return n.getBBox().x + n.getBBox().width <= 806;
+  })()`), "a name wider than its estimate stops short of the candle");
+  await send("Emulation.setDeviceMetricsOverride",
+    { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
+  await p.goto(B + "/share/card/" + closed);
+  check(await p.evaluate(`document.documentElement.scrollWidth <= innerWidth
+    && document.querySelector('#card-svg').getBoundingClientRect().width <= innerWidth`),
+    "the card shrinks to a phone and the page does not scroll sideways");
+  await send("Emulation.clearDeviceMetricsOverride");
+
+  // ---- a picture of your own as the background: added through the real form
+  // (the file input of the strip, which sends it the moment it is picked),
+  // chosen, made into a PNG by the page, and the code read off that PNG. The
+  // code stands on a picture in its small candle, 5 px a module, so it is read
+  // again from a copy at 600 px wide, the size it gets in a feed
+  const bits = (kind, data) => {
+    const body = Buffer.concat([Buffer.from(kind), data]);
+    const head = Buffer.alloc(4); head.writeUInt32BE(data.length);
+    const tail = Buffer.alloc(4); tail.writeUInt32BE(crc32(body));
+    return Buffer.concat([head, body, tail]);
+  };
+  const w = 320, h = 180, rows = [];
+  for (let y = 0; y < h; y++) {
+    const row = Buffer.alloc(1 + w * 3);
+    for (let x = 0; x < w; x++) { row[1 + x * 3] = x * 255 / w; row[2 + x * 3] = y * 255 / h; row[3 + x * 3] = 150; }
+    rows.push(row);
+  }
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const small = Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "latin1"), bits("IHDR", ihdr),
+    bits("IDAT", deflateSync(Buffer.concat(rows))), bits("IEND", Buffer.alloc(0))]);
+  const pictures = mkdtempSync(join(tmpdir(), "plainbook-bg-"));
+  const mine = join(pictures, "background.png");
+  writeFileSync(mine, small);
+  await p.goto(B + "/share/card/" + closed);
+  await send("DOM.enable");
+  const root = await send("DOM.getDocument", { depth: 0 });
+  const field = await send("DOM.querySelector",
+    { nodeId: root.result.root.nodeId, selector: "input[type=file]" });
+  events.length = 0;
+  await send("DOM.setFileInputFiles", { nodeId: field.result.nodeId, files: [mine] });
+  await loaded();
+  check((await p.url()).includes("bg=background") && await p.evaluate(
+      `!!document.querySelector('#card-svg image') && !!document.querySelector('a.thumb.on img')`),
+    "a picture added through the form is kept, chosen and drawn on the card");
+  const onPicture = JSON.parse(await p.evaluate(`(async () => {
+    const blob = await card_png();
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let text = "";
+    for (let i = 0; i < bytes.length; i += 8192)
+      text += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    return JSON.stringify({b64: btoa(text)});
+  })()`));
+  const withPicture = Buffer.from(onPicture.b64, "base64");
+  check(withPicture.readUInt32BE(16) === 1200 && withPicture.readUInt32BE(20) === 675,
+    "card_png makes 1200 by 675 from a card with a picture, the canvas not tainted");
+  const picturePng = join(pictures, "card-on-picture.png");
+  writeFileSync(picturePng, withPicture);
+  if (keep) writeFileSync(join(keep, "card-on-picture.png"), withPicture);
+  const wanted = "https://github.com/stop-loss-enjoyer/plainbook";
+  const first = spawnSync("zbarimg", ["--quiet", "--raw", picturePng], { encoding: "utf8" });
+  if (first.error) console.log("skipped: zbarimg is not installed, the code on the picture was not scanned");
+  else {
+    check(first.stdout.trim() === wanted, "zbarimg reads the address off the card on a picture");
+    const small600 = join(pictures, "card-600.png");
+    // a posted picture is shown about this wide; the dark edge of the small
+    // candle is what lets a scanner find the code on a bright picture at this size
+    const shrink = [picturePng, "-filter", "Triangle", "-resize", "600x", small600];
+    let made = spawnSync("magick", shrink);
+    if (made.error) made = spawnSync("convert", shrink);
+    if (made.error) console.log("skipped: ImageMagick is not installed, the 600 px copy was not scanned");
+    else check(spawnSync("zbarimg", ["--quiet", "--raw", small600], { encoding: "utf8" }).stdout.trim() === wanted,
+      "zbarimg reads the address off a copy of the card 600 px wide");
+  }
+  // taking it off again: the cross of the strip, the browser asked to confirm
+  await p.evaluate(`window.confirm = () => true`);
+  events.length = 0;
+  await send("Runtime.evaluate", { expression: `document.querySelector('.pic form').requestSubmit()` });
+  await loaded();
+  check(!(await p.evaluate(`!!document.querySelector('a.thumb img')`))
+        && !(await p.url()).includes("bg="),
+    "the cross takes the picture off and the card is standard again");
+  // a picture with the signature and the end of a PNG and nothing between them
+  // that opens: the server cannot tell, the page can, and it makes no file of it
+  const hollow = join(pictures, "hollow.png");
+  writeFileSync(hollow, Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "latin1"),
+    Buffer.from("this is no picture, only the shape of one"), bits("IEND", Buffer.alloc(0))]));
+  await p.goto(B + "/share/card/" + closed);
+  const again = await send("DOM.getDocument", { depth: 0 });
+  const hole = await send("DOM.querySelector",
+    { nodeId: again.result.root.nodeId, selector: "input[type=file]" });
+  events.length = 0;
+  await send("DOM.setFileInputFiles", { nodeId: hole.result.nodeId, files: [hollow] });
+  await loaded();
+  await sleep(300);
+  check(await p.evaluate(`[...document.querySelectorAll('.bar > button')].every(
+      b => b.textContent === 'This picture does not open' && b.disabled)`)
+        && await p.evaluate(`card_png().then(() => "made", e => e.message)`)
+           === "This picture does not open",
+    "a picture that does not decode says so on the buttons and makes no file");
+  await p.evaluate(`window.confirm = () => true`);
+  events.length = 0;
+  await send("Runtime.evaluate", { expression: `document.querySelector('.pic form').requestSubmit()` });
+  await loaded();
+  rmSync(pictures, { recursive: true, force: true });
 }
 
 let failed = false;

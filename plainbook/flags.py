@@ -706,7 +706,7 @@ def _face(face, x, behind=False):
     hue = sum(ord(c) for c in face) * 47 % 360
     return (f'<circle cx="{x + R}" cy="{R}" r="{R}" fill="hsl({hue},38%,36%)"/>'
             f'<text x="{x + (R - 3.6 if behind else R)}" y="{R + .4}" fill="#fff" '
-            f'font-size="{5.4 if behind else 7.4}" '
+            f'font-size="{5.4 if behind else 5.8 if set(face) & set("WM") else 7.4}" '
             f'font-weight="700" text-anchor="middle" dominant-baseline="middle" '
             f'font-family="system-ui,-apple-system,sans-serif">{face[:3]}</text>')
 
@@ -726,3 +726,24 @@ def icon(symbol):
         body += f'<g mask="url(#bite)">{piece}</g>' if behind else piece
     return (f'<svg class="pi" viewBox="0 0 {width} {2*R}" width="{width}" '
             f'height="{2*R}" aria-hidden="true" focusable="false">{body}</svg>')
+
+
+def standalone(symbol, x, y, height):
+    """The coins of a symbol for a picture that stands alone, at (x, y) and
+    `height` tall, and how wide they came out: ("", 0) with nothing to draw.
+
+    `icon` points at the sprite of the page, which a picture rasterised on its
+    own does not have, so the drawings it uses are brought along with it."""
+    coins = icon(symbol)
+    if not coins:
+        return "", 0
+    used = set(re.findall(r'#fl-([\w-]+)', coins))
+    defs = re.search(r"<defs>.*?</defs>", SPRITE, re.S).group(0)
+    kept = "".join(m.group(0) for m in
+                   re.finditer(r'<symbol id="fl-([\w-]+)".*?</symbol>', SPRITE, re.S)
+                   if m.group(1) in used)
+    across = int(re.search(r'viewBox="0 0 (\d+) ', coins).group(1))
+    width = round(height * across / (2*R))
+    head = (f'<svg x="{x}" y="{y}" width="{width}" height="{height}" '
+            f'viewBox="0 0 {across} {2*R}">')
+    return defs + kept + head + coins[coins.index(">") + 1:], width

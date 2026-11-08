@@ -17,6 +17,8 @@ import copy
 import csv
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
+import email.parser
+import email.policy
 import http.server
 import io
 import json
@@ -1157,7 +1159,10 @@ def trade_page(trade_id, q):
     updates, scripts = updates_card(t, keep)
     buttons = (f'<a class="btn" href="/share/trade/{U(t.id)}{keep}" '
                f'title="the trade as one file, to show another trader">Share</a>'
-               f'<a class="btn" href="/edit/{U(t.id)}{keep}">Edit</a>'
+               + (f'<a class="btn" href="/share/card/{U(t.id)}{keep}" '
+                  f'title="the trade as one picture, to post: the pair, the '
+                  f'side and the R">Card</a>' if share.card_ready(j, t) else "")
+               + f'<a class="btn" href="/edit/{U(t.id)}{keep}">Edit</a>'
                f'<form method="post" action="/trade/{U(t.id)}/delete{keep}" '
                f'style="display:inline" onsubmit="return confirm('
                f'\'Delete trade {esc(t.id)}? The folder moves to .trash.'
@@ -9044,6 +9049,227 @@ def share_trade(trade_id, q):
                                       rules=not lite())
 
 
+# The card is one picture, made in the browser: the SVG of the page is drawn
+# on a canvas and the canvas written out as a PNG. card_png is a function of
+# its own so that tools/browser_check.mjs can call it and read what comes
+# out. Nothing here reaches the network, and a canvas that has only ever
+# held an SVG without foreignObject is not tainted, so toBlob works.
+CARD_SCRIPT = """
+// the server can only guess how wide the fonts of this machine draw the pair:
+// here it is measured, and a name past its room is pressed back into it, so
+// that it never reaches the candle and the code in it
+function card_fit(){
+  const name = document.getElementById("card-pair");
+  const room = Number(name.dataset.room);
+  if (name.getComputedTextLength() > room){
+    name.setAttribute("textLength", room);
+    name.setAttribute("lengthAdjust", "spacingAndGlyphs");
+  }
+}
+document.addEventListener("DOMContentLoaded", card_fit);
+// the chosen background may be far along its row: the row opens on it
+document.addEventListener("DOMContentLoaded", function(){
+  const on = document.querySelector(".rail .thumb.on");
+  if (!on) return;
+  const rail = on.closest(".rail");
+  rail.scrollLeft = on.getBoundingClientRect().left - rail.getBoundingClientRect().left
+    - (rail.clientWidth - on.offsetWidth) / 2;
+});
+// A picture of the owner's is only known to be one by its signature and its
+// end, so before a file is made of the card it is opened here: a picture that
+// does not decode would come out as a broken-image mark on the card.
+const CARD_BROKEN = "This picture does not open";
+function card_opens(){
+  return new Promise(function(resolve, reject){
+    const placed = document.querySelector("#card-svg image");
+    if (!placed) { resolve(); return; }
+    // decode(), not onload: a browser fires load as soon as the header of a
+    // picture reads, and finds the rest wanting only when it draws it
+    const probe = new Image();
+    probe.src = placed.getAttribute("href");
+    probe.decode().then(resolve, function(){ reject(new Error(CARD_BROKEN)); });
+  });
+}
+document.addEventListener("DOMContentLoaded", function(){
+  card_opens().catch(function(){
+    document.querySelectorAll(".bar > button").forEach(function(b){
+      b.textContent = CARD_BROKEN;
+      b.disabled = true;
+    });
+  });
+});
+function card_png(){
+  return card_opens().then(card_draw);
+}
+function card_draw(){
+  return new Promise(function(resolve, reject){
+    card_fit();
+    const svg = document.getElementById("card-svg");
+    const text = new XMLSerializer().serializeToString(svg);
+    const img = new Image();
+    img.onload = function(){
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200;
+      canvas.height = 675;
+      canvas.getContext("2d").drawImage(img, 0, 0, 1200, 675);
+      canvas.toBlob(function(blob){
+        if (blob) resolve(blob); else reject(new Error("no picture"));
+      }, "image/png");
+    };
+    img.onerror = function(){ reject(new Error("the card did not load")); };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(text);
+  });
+}
+function card_say(button, words){
+  const said = button.dataset.said || button.textContent;
+  button.dataset.said = said;
+  button.textContent = words;
+  clearTimeout(button.timer);
+  button.timer = setTimeout(function(){ button.textContent = said; }, 2800);
+}
+async function card_copy(button){
+  if (!navigator.clipboard || !window.ClipboardItem){
+    card_say(button, "No copy here, use Download");
+    return;
+  }
+  try {
+    // the promise goes in unresolved: a browser keeps the click that asked
+    // for the copy only until it has the picture
+    await navigator.clipboard.write(
+      [new ClipboardItem({"image/png": card_png()})]);
+    card_say(button, "Copied");
+  } catch (e) {
+    card_say(button, e.message === CARD_BROKEN ? CARD_BROKEN
+                                               : "Copy refused, use Download");
+  }
+}
+async function card_save(button){
+  try {
+    const blob = await card_png();
+    const url = URL.createObjectURL(blob);
+    const save = document.createElement("a");
+    save.href = url;
+    save.download = button.dataset.name || "plainbook-card.png";
+    save.click();
+    // the browser needs the address until it has written the file out
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 20000);
+    card_say(button, "Saved");
+  } catch (e) {
+    card_say(button, e.message === CARD_BROKEN ? CARD_BROKEN
+                                               : "Could not make the picture");
+  }
+}
+"""
+
+
+def card_choice(q):
+    """The background asked for in the address: "" for the standard one (the
+    rocket), "plain", or the name of a picture of the owner's. A name that is
+    not in the listing, a path included, is not read as one and gives the
+    standard background."""
+    asked = (q.get("bg") or [""])[0]
+    if asked == "plain":
+        return asked
+    return asked if asked in store.card_pictures(ROOT) else ""
+
+
+def card_href(trade_id, q, bg=""):
+    """The address of the card of a trade, with the way back it was opened
+    from kept and the background chosen."""
+    keep = way_keep(q)
+    more = f"bg={U(bg)}" if bg else ""
+    return (f"/share/card/{U(trade_id)}{keep}"
+            + (("&" if keep else "?") + more if more else ""))
+
+
+def card_land(q, bg=""):
+    """Where a form of the background row lands: the card it came from,
+    on the background it names."""
+    trade_id = (q.get("card") or [""])[0]
+    if not store.safe_dir_name(trade_id):
+        return "/"
+    return card_href(trade_id, q, bg)
+
+
+def card_form_action(what, trade_id, q):
+    """Where a form of the background row posts to: the card it came from
+    rides in the address, with its way back, as every form of a trade does."""
+    keep = way_keep(q)
+    return f"/card-picture/{what}?card={U(trade_id)}" + ("&" + keep[1:] if keep else "")
+
+
+def card_backgrounds(t, r, q, chosen):
+    """The row of backgrounds in the strip over the card: the standard one,
+    the plain one and the owner's pictures, each a small link; the chosen one
+    is marked. Adding and removing a picture are forms, so the row works
+    with no script but the one that sends the file the moment it is picked."""
+    def thumb(href, inner, word, on):
+        current = ' aria-current="true"' if on else ""
+        return (f'<a class="thumb{" on" if on else ""}" href="{esc(href)}" '
+                f'title="{esc(word)}"{current}>{inner}</a>')
+
+    def pic(href, inner, word, on, form=""):
+        shown = word if len(word) <= 14 else word[:11] + "..."
+        return (f'<span class="pic">{thumb(href, inner, word, on)}'
+                f'<span class="cap">{esc(shown)}</span>{form}</span>')
+    cells = [pic(card_href(t.id, q), share.card_thumb("rocket", t, r),
+                 "Standard", not chosen),
+             pic(card_href(t.id, q, "plain"), share.card_thumb("plain"),
+                 "Plain", chosen == "plain")]
+    for name in store.card_pictures(ROOT):
+        image = f'<img src="/card-picture/{U(name)}" alt="" loading="lazy">'
+        remove = (f'<form method="post" action="{esc(card_form_action("remove", t.id, q))}" '
+                  f'onsubmit="return confirm(\'Remove this picture? The file moves to '
+                  f'the .trash folder.\')">'
+                  f'<input type="hidden" name="name" value="{esc(name)}">'
+                  f'<input type="hidden" name="bg" value="{esc(chosen)}">'
+                  f'<button class="x" title="Remove this picture" '
+                  f'aria-label="Remove {esc(name)}">&times;</button></form>')
+        cells.append(pic(card_href(t.id, q, name), image, name, chosen == name, remove))
+    add = (f'<form class="up" method="post" action="{esc(card_form_action("add", t.id, q))}" '
+           f'enctype="multipart/form-data"><label class="add">Add picture'
+           f'<input type="file" name="picture" '
+           f'accept="image/png,image/jpeg,image/gif,image/webp" '
+           f'onchange="this.form.submit()"></label></form>')
+    said = getattr(SAID, "text", "")
+    if said:
+        add += (f'<span class="word said" role="status">{esc(said)}</span>'
+                f'<script>history.replaceState({{}}, "", '
+                f'{js(getattr(SAID, "url", "/"))})</script>')
+    return ('<div class="stretch bgs"><span class="word">Background</span>'
+            f'<div class="rail">{"".join(cells)}</div>{add}</div>')
+
+
+def share_card(trade_id, q):
+    """The card of a closed trade, the page it is looked at on. None for a
+    trade that is not there, one still open and one with no R, so that all
+    three are answered alike."""
+    j = journal()
+    t = next((x for x in j.trades if x.id == trade_id), None)
+    if t is None or not share.card_ready(j, t):
+        return None
+    r = j.r(t.id)
+    chosen = card_choice(q)
+    picture = ""
+    if chosen not in ("", "plain"):
+        picture = share.data_url(store.card_picture_path(ROOT, chosen))
+        if not picture:
+            chosen = ""
+    # the title, the label and the name of the file are the card's own, made
+    # in share.py: nothing about the trade is written here
+    bar = (f'<script>{CARD_SCRIPT}</script>'
+           f'<div class="bar"><span class="word">This is the picture that '
+           f'leaves the journal: no money, no account.</span>'
+           f'<button type="button" onclick="card_copy(this)">Copy image</button>'
+           f'<button type="button" class="primary" '
+           f'data-name="{esc(share.card_file_name(t))}" '
+           f'onclick="card_save(this)">Download</button>'
+           f'<a href="/trade/{U(t.id)}{esc(way_keep(q))}">Back</a>'
+           f'{card_backgrounds(t, r, q, chosen)}</div>')
+    return share.card_preview(share.card_title(t), bar,
+                              share.trade_card_svg(t, r, picture, chosen == "plain"))
+
+
 def share_plan(plan_id, q):
     """One plan whole: what was expected, what was done, and the trades
     taken under it, the way it is read back with another trader."""
@@ -9218,6 +9444,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def _refuse(self, text, code, kind="text/plain; charset=utf-8"):
+        """A refusal that was given before the body was read. The body is
+        still on the connection, and a connection kept open would read it as
+        the next request: with no Origin and a Host of the sender's choosing
+        it would pass the checks above, so the connection is closed (a page
+        of another site can put a whole request into the body of a form)."""
+        self.close_connection = True
+        return self._send(text, code, kind)
+
     def _go(self, where, said=""):
         """A redirect, and the word the next page says in the middle of itself."""
         if getattr(LITE_OFF, "hit", False):
@@ -9267,6 +9502,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         tab, back = "journal", "/"
         if len(parts) == 3 and parts[1] == "trade" and store.safe_dir_name(parts[2]):
             made = share_trade(parts[2], q)
+        elif len(parts) == 3 and parts[1] == "card" and store.safe_dir_name(parts[2]):
+            # the card has no file form: its PNG is made in the browser, so
+            # the page is the answer and `?file=1` changes nothing
+            made = share_card(parts[2], q)
         elif len(parts) == 3 and parts[1] == "report" and store.safe_dir_name(parts[2]):
             made = share_report(parts[2], q)
             tab, back = "reports", "/reports"
@@ -9325,7 +9564,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             length = 0
         if length <= 0:
-            return self._send("bad length", 400, "text/plain; charset=utf-8")
+            return self._refuse("bad length", 400)
         token, base = backup.new_stage(ROOT)
         upload, source = os.path.join(base, "upload"), os.path.join(base, "file")
         try:
@@ -9349,14 +9588,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 os.rename(upload, source)
             backup.unpack(ROOT, token, source)
         except backup.BackupError as e:
+            self.close_connection = True       # the body may be left unread
             backup.refuse(ROOT, token, str(e))
         except OSError as e:
+            self.close_connection = True
             backup.refuse(ROOT, token, f"the file could not be saved ({e.strerror or e})")
         finally:
             for path in (upload, source):
                 if os.path.exists(path):
                     os.remove(path)
         return self._go(f"/restore/{U(token)}")
+
+    def _add_card_picture(self, raw, kind, q):
+        """A picture picked on the card page: the one file a multipart form
+        sends, kept if its bytes are a picture, and the card shown on it."""
+        try:
+            if len(raw) > store.CARD_PICTURE_MAX + (64 << 10):
+                # the most a picture can be, and what a form wraps round it:
+                # said before anything is parsed
+                raise RecordError(f"That picture is {len(raw) / 1048576:.1f} MB, and "
+                                  f"{store.CARD_PICTURE_MAX >> 20} MB is the most a card takes.")
+            head = b"Content-Type: " + kind.encode("latin-1") + b"\r\n\r\n"
+            message = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
+                head + raw)
+            part = next((p for p in message.iter_parts()
+                         if p.get_param("name", header="content-disposition") == "picture"),
+                        None) if message.is_multipart() else None
+            if part is None:
+                raise RecordError("The form did not send a picture.")
+            name = part.get_filename() or "picture"
+            kept = store.save_card_picture(ROOT, name, part.get_payload(decode=True) or b"")
+        except (RecordError, ValueError) as e:
+            return self._send(page("Error", refused_page(e, {})), 400)
+        return self._go(card_land(q, kept), "Picture added")
 
     def _same_origin(self):
         """A simple guard against another page in the same browser."""
@@ -9411,7 +9675,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def _do_GET(self):
         if not self._own_host():
-            return self._send("foreign host", 403, "text/plain; charset=utf-8")
+            return self._refuse("foreign host", 403)
         parsed = urllib.parse.urlparse(self.path)
         path = urllib.parse.unquote(parsed.path)
         q = urllib.parse.parse_qs(parsed.query)
@@ -9444,6 +9708,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(search_page(q))
         if parts and parts[0] == "share":
             return self._share(parts, q)
+        if len(parts) == 2 and parts[0] == "card-picture":
+            # served only under a name the listing holds, as the thumbnails
+            # of the background row ask for it
+            shown = store.card_picture_path(ROOT, parts[1])
+            return self._file(shown) if shown else self._gone("no such picture")
         if path == "/backup" + backup.SUFFIX:
             # a page of another site may not start a download of the journal
             if self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
@@ -9603,7 +9872,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         SAID.text = SAID.url = ""
         LITE_OFF.hit = False
         if not self._own_host() or not self._same_origin():
-            return self._send("foreign origin", 403)
+            return self._refuse("foreign origin", 403)
+        if self.headers.get("Transfer-Encoding"):
+            # a body of chunks is not read here, and would be read as requests
+            return self._refuse("chunked bodies are not taken", 411)
         parsed = urllib.parse.urlparse(self.path)
         path = urllib.parse.unquote(parsed.path)
         # a stale tab may still post a hidden form: the save is the owner's
@@ -9619,12 +9891,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
-            return self._send("bad length", 400, "text/plain; charset=utf-8")
+            return self._refuse("bad length", 400)
         if length < 0:
-            return self._send("bad length", 400, "text/plain; charset=utf-8")
+            return self._refuse("bad length", 400)
         if length > SHOT_LIMIT:
-            return self._send("body too large", 413, "text/plain; charset=utf-8")
+            if path == "/card-picture/add":
+                return self._refuse(page("Error", refused_page(RecordError(
+                    "That picture is bigger than a card takes: "
+                    f"{store.CARD_PICTURE_MAX >> 20} MB is the most."), {})), 413,
+                    "text/html; charset=utf-8")
+            return self._refuse("body too large", 413)
         raw = self.rfile.read(length) if length else b""
+
+        if path == "/card-picture/add":
+            return self._add_card_picture(raw, self.headers.get("Content-Type") or "", q)
 
         if path == "/draft/upload":
             token = (q.get("token") or [""])[0]
@@ -9648,6 +9928,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path == "/new":
                 t = create_trade(data)
                 return self._go(f"/trade/{U(t.id)}", "Trade opened")
+            if path == "/card-picture/remove":
+                name = one(data, "name")
+                if store.trash_card_picture(ROOT, name) is None:
+                    raise RecordError("There is no such picture to remove.")
+                shown = one(data, "bg")
+                return self._go(card_land(q, "" if shown == name else shown),
+                                "Picture removed")
             if len(parts) == 2 and parts[0] == "edit":
                 j = journal(True)
                 t = next((x for x in j.trades if x.id == parts[1]), None)

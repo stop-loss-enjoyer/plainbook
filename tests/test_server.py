@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import stats, store
-from plainbook.model import Account, Playbook, Setup, Rule, Trade, Week
+from plainbook.model import Account, IdeaBlock, Playbook, Setup, Rule, Trade, Week
 
 # a one-pixel PNG, enough to exercise the whole screenshot path
 PNG = bytes.fromhex(
@@ -3935,6 +3935,134 @@ class ServerCase(unittest.TestCase):
         self.assertIn(f'href="/share/trade/{trade}"', html)
         _, html = self.get("/")
         self.assertIn('href="/share/journal"', html)
+
+    def close_trade(self, tid, **over):
+        q = urllib.parse.quote(tid)
+        _, form = self.get(f"/close/{q}")
+        fields = {"token": self.form_token(form), "result": "Win", "pnl": "120",
+                  "exit": "2026-08-30T10:00", "conclusions": "held"}
+        fields.update(over)
+        self.post(f"/close/{q}", fields)
+
+    def forget(self, trade_id=None, account_id=None):
+        """A record a test made, taken off the disk and not put in the trash:
+        the trash of these tests is shared, and another test counts what is
+        in it."""
+        if trade_id:
+            shutil.rmtree(store.trade_dir(self.root, trade_id), ignore_errors=True)
+        if account_id:
+            path = os.path.join(self.root, "journal", "accounts", account_id + ".md")
+            if os.path.exists(path):
+                os.remove(path)
+        self.S.drop_cache()
+
+    def test_94c_a_closed_trade_has_a_card_and_an_open_one_has_none(self):
+        """The picture is for a trade that closed with an R: the button on its
+        page and the address answer for it, and the same address answers an
+        open trade and one that is not there with the same page."""
+        open_id = self.open_trade(pair="CADCHF", entry="2026-08-27T09:00")
+        self.addCleanup(self.forget, open_id)
+        closed_id = self.open_trade(pair="NZDCAD", entry="2026-08-27T09:30")
+        self.addCleanup(self.forget, closed_id)
+        self.close_trade(closed_id, result="Lose", pnl="-100")
+        q = urllib.parse.quote(closed_id)
+        _, html = self.get(f"/trade/{q}")
+        self.assertIn(f'href="/share/card/{closed_id}"', html)
+        self.assertIn(f'href="/share/trade/{closed_id}"', html)   # Share is still there
+        code, card = self.get(f"/share/card/{q}")
+        self.assertEqual(code, 200)
+        self.assertIn('class="bar"', card)
+        self.assertIn('id="card-svg"', card)
+        self.assertIn("NZDCAD", card)
+        self.assertIn("Copy image", card)
+        self.assertIn('data-name="plainbook-NZDCAD-long-2026-08-27.png"', card)
+        self.assertNotIn(f'plainbook-{closed_id}', card)      # the id stays home
+        self.assertIn(f'<a href="/trade/{q}">Back</a>', card)
+        self.assertNotIn("<foreignObject", card)
+        _, html = self.get(f"/trade/{urllib.parse.quote(open_id)}")
+        self.assertNotIn("/share/card/", html)
+        self.assertIn(f'href="/share/trade/{open_id}"', html)
+        answers = []
+        for gone in (open_id, "no-such-trade"):
+            try:
+                self.get(f"/share/card/{urllib.parse.quote(gone)}")
+                self.fail(f"{gone} has a card")
+            except urllib.error.HTTPError as e:
+                answers.append((e.code, e.read()))
+        self.assertEqual(answers[0][0], 404)
+        self.assertEqual(answers[0], answers[1])
+
+    def test_94d_the_card_keeps_the_way_back_of_the_trade(self):
+        tid = self.open_trade(pair="CHFJPY", entry="2026-08-27T10:00")
+        self.addCleanup(self.forget, tid)
+        self.close_trade(tid)
+        q = urllib.parse.quote(tid)
+        _, html = self.get(f"/trade/{q}?report=2026-08")
+        self.assertIn(f'href="/share/card/{q}?report=2026-08"', html)
+        _, card = self.get(f"/share/card/{q}?report=2026-08")
+        self.assertIn(f'<a href="/trade/{q}?report=2026-08">Back</a>', card)
+
+    def test_94e_nothing_but_the_card_fields_is_on_the_page_of_a_card(self):
+        """A trade with a distinctive sum, risk, account name, note,
+        conclusions and idea: not one of them is anywhere in the page of its
+        card, nor in its title or its label."""
+        store.save_account(self.root, Account(
+            id="zq-fund", name="Zebra Quartz Fund", start_balance=87654.0))
+        self.addCleanup(self.forget, None, "zq-fund")
+        tid = "2026-08-20-01-card"
+        self.addCleanup(self.forget, tid)
+        store.save_trade(self.root, Trade(
+            id=tid, account="zq-fund", pair="EURUSD", direction="long",
+            style="swing", entry_tf="H4", risk=0.77,
+            opened=datetime(2026, 8, 20, 9, 0), opened_time=True,
+            result="Win", pnl=13579.0, closed=datetime(2026, 8, 21),
+            entry_price=1.0853, note="notewordzx", conclusions="conclusionzx held",
+            updates="**21.08.2026**: updatezx", idea=[IdeaBlock(
+                tf="H4", text="ideazx sweep")]))
+        self.S.drop_cache()
+        _, page = self.get(f"/share/card/{tid}")
+        j = self.S.journal()
+        money = (f"{j.computed[tid].risk_money:.2f}",
+                 f"{j.computed[tid].balance_at_entry:.0f}")
+        # the page, the title and the label are all in this text
+        for word in ("13579", "87654", "Zebra", "Quartz", "zq-fund", "notewordzx",
+                     "conclusionzx", "updatezx", "ideazx", "0.77", "swing", "H4",
+                     *money):
+            self.assertNotIn(word, page, word)
+        self.assertIn("<title>EURUSD long card</title>", page)
+        self.assertIn('aria-label="EURUSD long, +', page)
+        self.assertIn(">1.0853<", page)
+        self.assertIn('data-name="plainbook-EURUSD-long-2026-08-20.png"', page)
+
+    def test_94f_the_pair_of_a_card_is_escaped_in_the_title_and_the_label(self):
+        tid = self.open_trade(pair="<b>&", entry="2026-08-27T11:00")
+        self.addCleanup(self.forget, tid)
+        self.close_trade(tid)
+        _, page = self.get(f"/share/card/{urllib.parse.quote(tid)}")
+        self.assertIn("<title>&lt;B&gt;&amp; long card</title>", page)
+        self.assertIn('aria-label="&lt;B&gt;&amp; long, ', page)
+        self.assertNotIn("<B>", page)
+        self.assertIn('data-name="plainbook-B-long-2026-08-27.png"', page)
+
+    def test_94g_the_card_has_no_file_form(self):
+        tid = self.open_trade(pair="AUDCAD", entry="2026-08-27T12:00")
+        self.addCleanup(self.forget, tid)
+        self.close_trade(tid)
+        q = urllib.parse.quote(tid)
+        with urllib.request.urlopen(self.url(f"/share/card/{q}?file=1")) as r:
+            self.assertIsNone(r.headers.get("Content-Disposition"))
+            self.assertIn('id="card-svg"', r.read().decode("utf-8"))
+
+    def test_94h_the_card_code_of_the_server_holds_no_money_and_draws_at_size(self):
+        import inspect
+        source = inspect.getsource(self.S.share_card) + self.S.CARD_SCRIPT
+        for word in ("pnl", "risk_money", "balance", ".account", ".note",
+                     ".conclusions", ".idea", ".style", "money("):
+            self.assertNotIn(word, source, word)
+        self.assertIn("canvas.width = 1200;", self.S.CARD_SCRIPT)
+        self.assertIn("canvas.height = 675;", self.S.CARD_SCRIPT)
+        self.assertIn("drawImage(img, 0, 0, 1200, 675)", self.S.CARD_SCRIPT)
+        self.assertIn('"image/png"', self.S.CARD_SCRIPT)
 
     def test_94b_a_plan_is_shown_as_one_file_too(self):
         """The same preview and the same file for a plan: the button on its

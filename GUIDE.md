@@ -1457,6 +1457,46 @@ was written as, and the words you wrote. This is how the document is built
 rather than a switch: it carries only what it names, so a field added to a
 trade tomorrow stays home as well.
 
+**The Card is the other way out: a picture.** Next to Share on a closed trade
+there is **Card**, which draws the trade the way an exchange draws a position,
+as one picture to post or to send. It is the sign of the journal grown to a
+page: text over a rocket that goes up for a long and comes down for a short,
+in the colour of the result, and one big candle. It shows the pair with its coins,
+Long or Short, the R in big figures, the day of the entry and the project's
+address, and the candle holds the word Plainbook and a QR code of that address
+on GitHub. The figures and the candle are green above zero, red below it and
+grey at `0.00R`: the colour follows the figure printed, so a break-even that
+came out at +0.07R is green. When you wrote an entry price in the Prices fold, an **Entry** row
+shows it; with no price written there is no row, and nothing asks you for
+one. There is no money on it, no risk, no style, no timeframe and not the
+name of the account. Losses get a card like wins do; an open trade has none,
+and neither has a closed one whose R could not be worked out, so the button
+is not drawn there. **Copy image** puts the picture on the clipboard, and
+**Download** saves it as `plainbook-<pair>-<side>-<day>.png`, with no id of
+the journal in the name. Where the browser will not
+copy, the button says so and Download still works. It is the same in Plainbook Lite.
+
+**The background of the Card is yours to pick.** A row under the buttons shows
+the choices as small pictures: **Standard** (the rocket of the trade's side,
+what a card has until you choose), **Plain** (the ruled page, with no rocket),
+and every picture of your own. Press one and the card changes; the chosen one
+has a blue frame. **Add picture** takes a PNG, JPEG, GIF or WEBP of up to 8 MB
+(the file has to begin and end the way such a picture does, whatever its name
+says, so an SVG or a page called `.png` is refused; one that begins and ends
+right but does not open is kept, and the buttons then say *This picture does not
+open* and make no file) and shows the card on it at once; the small cross on a
+picture removes it. Add as many as you like: the row scrolls sideways and opens
+on the chosen one. A picture is shown whole against the right edge of the card,
+with the text on the left over a dark fade, and the
+code shrinks into a small candle in the corner so the picture keeps the room.
+**Your pictures are yours
+alone.** They are kept in the `journal/card-pictures` folder of your own data,
+never in the program or its repository, so every user has their own, a backup
+carries them, and Lite keeps them. A removed picture is moved to the `.trash`
+folder (it is not listed in the Trash tab, which restores records: to get one
+back, move the file back into `card-pictures`). A picture goes out with every
+card made on it, as part of the picture you post, so post only what you may.
+
 **A PDF, when that is what is wanted.** Open the downloaded file and print
 it, `Ctrl+P`, then save as PDF. The document has a print layout of its own:
 white ground, dark text, and in a selection every trade starting its own
@@ -1500,7 +1540,7 @@ open positions and the CSV (every column, the plan and the playbook included).
 Opening, editing, closing, updating, Breakeven and Duplicate of a trade, with
 the screenshots. Statistics. Accounts, with the money, the corrections, the
 rules of a prop firm, the pairs, the lists of styles, timeframes and execution formats, the clock and the Backup. Search, over
-the trades. Share, for a trade, the journal and Statistics. The Trash holds
+the trades. Share, for a trade, the journal and Statistics, and the Card of a closed trade. The Trash holds
 trades, accounts and corrections.
 
 **What Lite hides.** The Playbooks, Plans, Notes, Cards and Reports tabs, and

@@ -2,6 +2,31 @@
 
 What changed and why. Newest first.
 
+## Unreleased
+
+- **A page on another site can no longer slip a request past the journal's
+  check.** The journal already refused a form sent from another site, but it
+  left the connection open, and what such a page had packed into the body of
+  that form was then read as a request of its own, which could delete a trade.
+  A refused form now closes the connection, and so does a form with a body
+  that is not read.
+- **A trade can be shared as a picture.** **Card** on the page of a closed
+  trade, next to Share, draws it the way an exchange draws a position, on
+  ruled lines with one big candle in the colour of the result: the pair with
+  its coins, Long or Short, the R in big figures, the day of the entry, an
+  Entry row when you wrote the price, and in the candle a QR code to the
+  project. **Copy image**
+  and **Download** (a PNG) sit above it. There is no money on it and no
+  account name, losses get a card too, and an open trade has none. Share, the
+  one file, stays as it was.
+- **The Card has a background of your choice.** A card stands on a rocket going
+  up for a long and down for a short, in the colour of the result. A row on
+  the card page picks **Plain** (the ruled page) or a picture of your own,
+  added with **Add picture** (PNG, JPEG, GIF or WEBP up to 8 MB) and taken off
+  with its cross. Add as many as you like, the row scrolls. A picture is shown
+  whole, with the text on the left over a dark fade. Your pictures live in `journal/card-pictures` in your own data, never
+  in the program, and a backup carries them.
+
 ## v1.13.0, 02.11.2026
 
 - **A written card opens to be read.** The daily and the weekly card show

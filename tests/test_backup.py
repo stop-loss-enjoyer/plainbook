@@ -24,6 +24,7 @@ from datetime import datetime
 
 TESTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(TESTS))
+sys.path.insert(0, TESTS)
 
 from plainbook import backup, store
 from plainbook.model import Account, Trade
@@ -104,6 +105,28 @@ class BackupFile(unittest.TestCase):
         # the journal it replaced is in the trash, whole
         self.assertEqual(before, tree(os.path.join(self.b, ".trash", aside, "journal")))
         self.assertFalse(os.listdir(os.path.join(self.b, backup.STAGE)))
+
+    def test_the_pictures_of_a_card_go_with_a_backup_and_come_back(self):
+        from test_card_pictures import png
+        store.save_card_picture(self.a, "mine.png", png(4, 4))
+        store.save_card_picture(self.a, "other.png", png(5, 5))
+        self.assertEqual(store.card_pictures(self.b), [])
+        backup.restore(self.b, self.take(made(self.a)))
+        self.assertEqual(store.card_pictures(self.b), ["mine.png", "other.png"])
+        with open(store.card_picture_path(self.b, "mine.png"), "rb") as f:
+            self.assertEqual(f.read(), png(4, 4))
+        self.assertEqual(tree(os.path.join(self.a, "journal")),
+                         tree(os.path.join(self.b, "journal")))
+
+    def test_a_removed_picture_of_a_card_stays_out_of_a_backup(self):
+        from test_card_pictures import png
+        store.save_card_picture(self.a, "kept.png", png())
+        store.save_card_picture(self.a, "gone.png", png(3, 3))
+        store.trash_card_picture(self.a, "gone.png")
+        with zipfile.ZipFile(io.BytesIO(made(self.a))) as z:
+            names = z.namelist()
+        self.assertIn("journal/card-pictures/kept.png", names)
+        self.assertEqual([n for n in names if "gone" in n], [])
 
     def test_the_counts_are_written_and_read(self):
         manifest, found, problems = backup.staged(self.b, self.take(self.data))
