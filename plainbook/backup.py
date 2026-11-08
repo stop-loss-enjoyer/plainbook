@@ -23,6 +23,7 @@ import re
 import secrets
 import shutil
 import threading
+import unicodedata
 import time
 import zipfile
 from datetime import datetime, timedelta
@@ -150,7 +151,10 @@ def _make(root, out, now):
             # a name the restore would refuse (a colon, a backslash, a .git,
             # two names one in capitals, bytes that are no text) is left out
             # and named now, not found out on the day the backup is needed
-            if not _writable_name(name) or name.casefold() in seen:
+            # a Mac writes a name with its accents apart (NFD) and keeps the
+            # two forms as one file, like two names one in capitals
+            key = unicodedata.normalize("NFC", name).casefold()
+            if not _writable_name(name) or key in seen:
                 skipped.append(name)
                 continue
             try:
@@ -163,7 +167,7 @@ def _make(root, out, now):
             except OSError:
                 skipped.append(name)
                 continue
-            seen.add(name.casefold())
+            seen.add(key)
             files[name] = {"sha256": digest, "size": size}
         found, _ = counts(root)
         manifest = {"app": "plainbook", "format": FORMAT, "version": __version__,

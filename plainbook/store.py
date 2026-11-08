@@ -1467,41 +1467,55 @@ def card_picture_signature(raw):
 def _jpeg_ends(raw):
     """Whether a JPEG ends where a picture does: the walk of its markers
     reaches the end marker of the first image, and whatever follows that is no
-    matter, or the file simply closes with the marker (zeros after it allowed).
+    matter.
 
     Phones write all sorts of things after the end marker (a video, a Samsung
     block, a watermark, fill), so what a file closes with says little. A marker
     anywhere is not enough either: the EXIF thumbnail is a JPEG and ends in
-    one, so a photo cut at half would pass, and a browser shows a cut JPEG in
-    part instead of failing, so the page would not catch it either. The walk
-    steps over the thumbnail with the APP1 segment it sits in, and a photo cut
-    inside its scan or between its segments runs off the end and is refused.
-    The plain closing marker stays as a second way in so that nothing a
-    simpler rule kept is refused now."""
-    if raw.rstrip(b"\x00").endswith(b"\xff\xd9"):
-        return True
+    one, so a photo cut at half, or cut right after the thumbnail, would pass,
+    and a browser shows a cut JPEG in part instead of failing, so the page
+    would not catch it either. The walk steps over the thumbnail with the APP1
+    segment it sits in, and a photo cut anywhere runs off the end and is
+    refused. Only a file whose markers the walk cannot follow at all, and not
+    a file that stops short, may still pass by closing with the marker."""
+    walked = _jpeg_walk(raw)
+    if walked == "odd":
+        return raw.rstrip(b"\x00").endswith(b"\xff\xd9")
+    return walked == "end"
+
+
+def _jpeg_walk(raw):
+    """"end" when the markers lead to the end of the first image, "short" when
+    the data stops before it, "odd" when they make no sense to follow."""
     size = len(raw)
     pos = 2                                   # after the start marker
     while True:
-        if pos >= size or raw[pos] != 0xFF:
-            return False
+        if pos >= size:
+            return "short"
+        if raw[pos] != 0xFF:
+            # a stray byte between segments, which decoders step over
+            pos = raw.find(b"\xff", pos)
+            if pos == -1:
+                return "short"
         while pos < size and raw[pos] == 0xFF:        # fill before a marker
             pos += 1
         if pos >= size:
-            return False
+            return "short"
         marker = raw[pos]
         pos += 1
         if marker == 0xD9:
-            return True
+            return "end"
         if marker == 0x00:
-            return False
+            return "odd"
         if marker == 0x01 or 0xD0 <= marker <= 0xD7:  # no length follows
             continue
         if pos + 2 > size:
-            return False
+            return "short"
         length = int.from_bytes(raw[pos:pos + 2], "big")
-        if length < 2 or pos + length > size:
-            return False
+        if length < 2:
+            return "odd"
+        if pos + length > size:
+            return "short"
         pos += length
         if marker != 0xDA:
             continue
@@ -1511,7 +1525,7 @@ def _jpeg_ends(raw):
         while True:
             at = raw.find(b"\xff", pos)
             if at == -1 or at + 1 >= size:
-                return False
+                return "short"
             after = raw[at + 1]
             if after == 0x00 or 0xD0 <= after <= 0xD7:
                 pos = at + 2
@@ -1633,16 +1647,24 @@ def _clean_name(stem):
     """Letters of any alphabet, digits, . _ - and the combining marks that
     belong to letters (Hindi, Arabic with its vowel signs, Hebrew with its
     points) stay; a run of anything else becomes one hyphen. A regex \\w would
-    cut the marks, and a word would come out in pieces."""
+    cut the marks, and a word would come out in pieces. A mark with no letter
+    before it is dropped: the selector after an emoji would be a name nobody
+    can see."""
     out = []
-    cut = False
+    cut = letter = False
     for ch in stem:
-        if ch.isalnum() or ch in "._-" or unicodedata.category(ch).startswith("M"):
+        if ch.isalnum():
             out.append(ch)
-            cut = False
+            cut, letter = False, True
+        elif unicodedata.category(ch).startswith("M"):
+            if letter:
+                out.append(ch)
+        elif ch in "._-":
+            out.append(ch)
+            cut = letter = False
         elif not cut:
             out.append("-")
-            cut = True
+            cut, letter = True, False
     return "".join(out)
 
 
@@ -1671,13 +1693,15 @@ def save_card_picture(root, name, raw):
     # a Mac may send a name with its accents apart (NFD), which would be cut
     stem = unicodedata.normalize("NFC", stem)
     stem = _clean_name(stem).strip("-.")[:60] or "picture"
-    if stem.split(".")[0].lower() in WINDOWS_RESERVED:
-        stem += "-1"
+    head, dot, tail = stem.partition(".")
+    if head.lower() in WINDOWS_RESERVED:
+        # Windows reads the name up to its first dot: con.tar is con
+        stem = head + "-1" + dot + tail
     base = card_pictures_dir(root)
     os.makedirs(base, exist_ok=True)
     # a name that differs only in case is taken too: the backup keeps one of
     # two such names, and a Mac or a Windows disk makes them one file anyway
-    taken = {n.casefold() for n in os.listdir(base)}
+    taken = {unicodedata.normalize("NFC", n).casefold() for n in os.listdir(base)}
     n = 1
     while True:
         kept = f"{stem}{kind}" if n == 1 else f"{stem}-{n}{kind}"

@@ -212,6 +212,22 @@ class CardPictureStore(unittest.TestCase):
                 store.save_card_picture(self.root, "cut.jpg", raw)
         self.assertEqual(store.card_pictures(self.root), [])
 
+    def test_a_jpeg_cut_right_after_its_thumbnail_is_refused(self):
+        # the cut ends on the thumbnail's own end marker, inside the APP1
+        cut = _MAIN[:_MAIN.index(_THUMB) + len(_THUMB)]
+        self.assertTrue(cut.endswith(b"\xff\xd9"))
+        self.assertEqual(store.card_picture_kind(cut), "")
+        self.assertEqual(store.card_picture_kind(cut + b"\x00" * 100), "")
+
+    def test_a_jpeg_with_stray_bytes_between_segments_is_walked_on(self):
+        # decoders step over stray bytes before a marker; a phone trailer
+        # after such a file is still found to follow the end of the picture
+        at = _MAIN.index(b"\xff\xdb", _MAIN.index(_THUMB) + len(_THUMB))   # the main DQT
+        stray = _MAIN[:at] + b"\x00\x00" + _MAIN[at:]
+        self.assertEqual(store.card_picture_kind(stray), ".jpg")
+        self.assertEqual(store.card_picture_kind(stray + b"jxrs" + b"t" * 40), ".jpg")
+        self.assertEqual(store.card_picture_kind(stray[:-40]), "")
+
     def test_a_gif_is_walked_to_its_trailer(self):
         self.assertEqual(store.card_picture_kind(REAL_GIF), ".gif")
         self.assertEqual(store.card_picture_kind(REAL_GIF + b"\x00\x00"), ".gif")
@@ -280,6 +296,25 @@ class CardPictureStore(unittest.TestCase):
         self.assertEqual(store.save_card_picture(self.root, "a  (b)__c.png", png()),
                          "a-b-__c.png")
 
+    def test_two_forms_of_one_name_are_one_name(self):
+        # a Mac copies a name with its accent apart (NFD); the browser sends it
+        # whole (NFC): the two are one name on a Mac disk and in a backup
+        os.makedirs(store.card_pictures_dir(self.root), exist_ok=True)
+        with open(os.path.join(store.card_pictures_dir(self.root), "cafe\u0301.png"), "wb") as f:
+            f.write(png())
+        if len(os.listdir(store.card_pictures_dir(self.root))) != 1:
+            self.skipTest("this file system keeps no such name")
+        kept = store.save_card_picture(self.root, "caf\u00e9.png", png())
+        if "cafe\u0301.png" in os.listdir(store.card_pictures_dir(self.root)):
+            self.assertEqual(kept, "caf\u00e9-2.png")
+
+    def test_a_name_of_marks_alone_is_a_picture(self):
+        # the selector after an emoji is a mark with no letter: no name to see
+        self.assertEqual(store.save_card_picture(self.root, "\u2764\ufe0f.png", png()),
+                         "picture.png")
+        self.assertEqual(store.save_card_picture(self.root, "\u0301" * 80 + ".png", png()),
+                         "picture-2.png")
+
     def test_two_names_that_differ_only_in_case_are_one_name(self):
         self.assertEqual(store.save_card_picture(self.root, "IMG_0001.png", png()),
                          "IMG_0001.png")
@@ -291,10 +326,10 @@ class CardPictureStore(unittest.TestCase):
     def test_a_name_windows_keeps_for_itself_gets_a_suffix(self):
         for name, kept in (("con.png", "con-1.png"), ("NUL.png", "NUL-1.png"),
                            ("com1.png", "com1-1.png"), ("lpt9.jpg", "lpt9-1.png"),
-                           ("aux.tar.png", "aux.tar-1.png"), ("console.png", "console.png"),
+                           ("aux.tar.png", "aux-1.tar.png"), ("console.png", "console.png"),
                            ("COM\u00b9.png", "COM\u00b9-1.png"),
                            ("lpt\u00b3.png", "lpt\u00b3-1.png"),
-                           ("com\u00b2.tar.png", "com\u00b2.tar-1.png")):
+                           ("com\u00b2.tar.png", "com\u00b2-1.tar.png")):
             self.assertEqual(store.save_card_picture(self.root, name, png()), kept, name)
 
     def test_a_link_is_not_a_picture(self):
