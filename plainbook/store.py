@@ -68,6 +68,7 @@ _IMAGE = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)\s*$")
 # a day and a week share the cards folder, and the name of the file says which
 # one a file is: 2026-08-30.md against 2026-W36.md
 _WEEK_FILE = re.compile(r"^\d{4}-W\d{2}\.md\Z")
+_CARD_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md\Z")
 
 
 # --- small conversions -----------------------------------------------------
@@ -127,8 +128,9 @@ def _number_to_text(x):
 
 def _price_to_text(x):
     """A price as it was typed, to its last digit: 1.08452 and 0.00001234
-    keep what _number_to_text would round away."""
-    return f"{float(x):.10g}"
+    stay as they are, and so does a price of more than ten significant digits
+    (a coin quoted in many decimals, a thin tick on a big number)."""
+    return _number_to_text(float(x))
 
 
 def _reasons(lines):
@@ -136,7 +138,7 @@ def _reasons(lines):
     out = {}
     for line in lines:
         number, _, why = str(line).partition(":")
-        if number.strip().isdigit() and why.strip():
+        if number.strip().isdecimal() and why.strip():
             out[int(number)] = why.strip()
     return out
 
@@ -381,14 +383,18 @@ def _parse_idea(text):
 
 
 def _text_and_images(chunk):
-    """Split image lines from the text, keeping the order of the images."""
+    """Split image lines from the text, keeping the order of the images.
+    Only a picture of the record's own folder is an image here: a typed
+    `![x](http://...)` is the owner's text, and the save writes images apart
+    from the text, so one taken for an image would be gone on the next save."""
     lines, images = [], []
     for line in chunk.split("\n"):
         m = _IMAGE.match(line.strip())
-        if m:
-            # records written on Windows before 1.7 carry a backslash;
-            # read them as the same picture, and the next save writes them right
-            images.append(m.group("src").replace("\\", "/"))
+        # records written on Windows before 1.7 carry a backslash;
+        # read them as the same picture, and the next save writes them right
+        src = m.group("src").replace("\\", "/") if m else ""
+        if src.startswith(SHOTS + "/"):
+            images.append(src)
         else:
             lines.append(line)
     return "\n".join(lines).strip(), images
@@ -405,9 +411,16 @@ def account_to_text(a):
     # the rules are written only when set, so a broker account keeps the few
     # lines it always had
     for key, value in (("daily loss limit", a.daily_loss_limit),
+                       ("daily loss limit %", a.daily_loss_percent),
                        ("max loss", a.max_loss), ("profit target", a.profit_target)):
         if value is not None:
             head[key] = _number_to_text(value)
+    # both switches are on unless the file says no, so an account written
+    # before they existed reads as it always did
+    if not a.daily_counts_closed:
+        head["daily limit counts closed"] = "no"
+    if not a.daily_counts_open:
+        head["daily limit counts open risk"] = "no"
     if a.max_loss is not None:
         head["max loss mode"] = a.max_loss_mode
     if a.min_days is not None:
@@ -426,10 +439,12 @@ def text_to_account(text):
     head, body = mdfile.parse(text)
     known = {key for _, key in ACCOUNT_KEYS}
     limit = _number(head.get("daily loss limit"))
+    percent = _number(head.get("daily loss limit %"))
     days = _number(head.get("min trading days"))
     # an account written before the kind existed and carrying a daily loss
     # limit was a prop account; that limit was the only prop rule there was
-    kind = _text(head.get("kind")) or ("prop" if limit is not None else "broker")
+    kind = _text(head.get("kind")) or (
+        "prop" if limit is not None or percent is not None else "broker")
     return Account(
         id=_text(head.get("id")),
         name=_text(head.get("name")),
@@ -439,6 +454,9 @@ def text_to_account(text):
         currency=_text(head.get("currency")) or "USD",
         archived=_text(head.get("archived")).strip().lower() in ("yes", "true", "1"),
         daily_loss_limit=limit,
+        daily_loss_percent=percent,
+        daily_counts_closed=_switch(head.get("daily limit counts closed")),
+        daily_counts_open=_switch(head.get("daily limit counts open risk")),
         max_loss=_number(head.get("max loss")),
         max_loss_mode=_text(head.get("max loss mode")) or "static",
         profit_target=_number(head.get("profit target")),
@@ -449,6 +467,11 @@ def text_to_account(text):
         note=body.strip(),
         extra={k: v for k, v in head.items() if k not in known},
     )
+
+
+def _switch(v):
+    """A setting that is on unless the file says no."""
+    return _text(v).strip().lower() not in ("no", "false", "0", "off")
 
 
 def adjustment_to_text(c):
@@ -1212,7 +1235,7 @@ def playbook_versions(root, playbook_id):
     base = os.path.join(playbook_dir(root, playbook_id), VERSIONS)
     labels = [name[:-3] for name in (os.listdir(base) if os.path.isdir(base) else [])
               if name.endswith(".md")]
-    return sorted(labels, key=lambda s: [int(p) if p.isdigit() else p
+    return sorted(labels, key=lambda s: [int(p) if p.isdecimal() else p
                                          for p in re.split(r"(\d+)", s)])
 
 
@@ -1327,6 +1350,19 @@ def all_accounts(root, problems=None):
     return accounts
 
 
+def account_taken(root, account_id):
+    """Whether a file of that account is on the disk, readable or not: a
+    new account must not be written over one that does not read, since the
+    save would take the owner's rules with it. Names that differ only in
+    capitals or in the form of an accent count as one, as they do in a backup
+    and on the disks of Windows and macOS. The id is only compared with the
+    listing, never made into a path."""
+    base = os.path.join(root, JOURNAL, ACCOUNTS)
+    key = unicodedata.normalize("NFC", f"{account_id}.md").casefold()
+    return any(unicodedata.normalize("NFC", name).casefold() == key
+               for name in (os.listdir(base) if os.path.isdir(base) else []))
+
+
 def all_adjustments(root, problems=None):
     base = os.path.join(root, JOURNAL, ADJUSTMENTS)
     items = []
@@ -1350,12 +1386,44 @@ def save_card(root, k):
     return k
 
 
+def _shown(root, path):
+    return os.path.relpath(path, root).replace(os.sep, "/")
+
+
+def _card_of_file(problems, root, path):
+    """A daily card read under the day its file is named for. The file name
+    is the truth, as the folder is for a trade: a card copied by hand keeps
+    the date of its original in the header, and read under that date it would
+    shadow the original and be saved over it, with nothing in the trash. The
+    card is kept whole and takes the day of its file, the next save writes
+    the header right; a file not named for a day is named and left unread,
+    since a save of it would land on a file of another day."""
+    name = os.path.basename(path)
+    try:
+        if not _CARD_FILE.match(name):
+            raise ValueError("the file name is not a day (YYYY-MM-DD.md)")
+        day = datetime.strptime(name[:-3], "%Y-%m-%d")
+    except ValueError as e:
+        if problems is None:
+            raise
+        problems.append((_shown(root, path), str(e)))
+        return None
+    k = _load(problems, path, text_to_card, root)
+    if k is not None and k.day.date() != day.date():
+        if problems is not None:
+            problems.append((_shown(root, path),
+                             f"the date in the file is {k.day:%Y-%m-%d}, "
+                             f"its file name is {name[:-3]}"))
+        k.day = day
+    return k
+
+
 def load_card(root, day, problems=None):
     """The card of that day, or None if there is none yet."""
     path = card_path(root, day)
     if not os.path.isfile(path):
         return None
-    return _load(problems, path, text_to_card, root)
+    return _card_of_file(problems, root, path)
 
 
 def all_cards(root, problems=None):
@@ -1364,7 +1432,7 @@ def all_cards(root, problems=None):
     items = []
     for name in sorted(os.listdir(base), reverse=True) if os.path.isdir(base) else []:
         if name.endswith(".md") and not _WEEK_FILE.match(name):
-            k = _load(problems, os.path.join(base, name), text_to_card, root)
+            k = _card_of_file(problems, root, os.path.join(base, name))
             if k is not None:
                 items.append(k)
     return items
@@ -1391,12 +1459,34 @@ def save_week(root, k):
     return k
 
 
+def _week_of_file(problems, root, path):
+    """A weekly card read under the week its file is named for, for the
+    reason _card_of_file gives. A file name that is no week, 2026-W99, cannot
+    hold the card and is named."""
+    k = _load(problems, path, text_to_week, root)
+    key = os.path.basename(path)[:-3]
+    if k is None or k.week == key:
+        return k
+    header, k.week = k.week, key
+    try:
+        k.check()
+    except BROKEN as e:
+        if problems is None:
+            raise
+        problems.append((_shown(root, path), str(e)))
+        return None
+    if problems is not None:
+        problems.append((_shown(root, path),
+                         f"the week in the file is {header}, its file name is {key}"))
+    return k
+
+
 def load_week(root, key, problems=None):
     """The card of that week, or None if there is none yet."""
     path = week_path(root, key)
     if not os.path.isfile(path):
         return None
-    return _load(problems, path, text_to_week, root)
+    return _week_of_file(problems, root, path)
 
 
 def all_weeks(root, problems=None):
@@ -1405,7 +1495,7 @@ def all_weeks(root, problems=None):
     items = []
     for name in sorted(os.listdir(base), reverse=True) if os.path.isdir(base) else []:
         if _WEEK_FILE.match(name):
-            k = _load(problems, os.path.join(base, name), text_to_week, root)
+            k = _week_of_file(problems, root, os.path.join(base, name))
             if k is not None:
                 items.append(k)
     return items

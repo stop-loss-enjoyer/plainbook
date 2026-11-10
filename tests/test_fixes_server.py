@@ -120,8 +120,8 @@ class FixesCase(unittest.TestCase):
             form[name] = self.value(html, name)
         self.post("/account/odd/rules", form)
         a = store.all_accounts(self.root)["odd"]
-        self.assertEqual((a.daily_loss_limit, a.max_loss, a.profit_target),
-                         (5216.38, 10432.75, 8346.2))
+        self.assertEqual((a.daily_loss_percent, a.max_loss, a.profit_target),
+                         (5, 10432.75, 8346.2))
         self.post("/account/odd/rules", {"kind": "prop", "max": "1234567.89",
                                          "mode": "static"})
         self.assertEqual(self.value(self.get("/account/odd/rules")[1], "max"),

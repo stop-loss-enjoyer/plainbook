@@ -2,7 +2,7 @@
 
 This project is meant to be kept by a coding agent. Not tolerated by one, but
 built for it: no dependencies to resolve, no build step to wait for, a test
-suite that finishes in about twenty seconds, and every rule that matters written
+suite that finishes in about half a minute, and every rule that matters written
 down here instead of living in someone's head.
 
 Read this before you touch anything. It is short on purpose.
@@ -29,8 +29,10 @@ records.
   into a chat, not into an issue. Summary figures answer nearly every question;
   quote a trade only when the owner asked about that trade.
 - **Never commit records.** `python3 tools/check_public.py` refuses a push that
-  would leak them (the tree, `.trash`, `.drafts` and the commits being
-  pushed), and it runs as a pre-push hook and in CI. Do not work around it. If it fires, it is right and you are wrong.
+  would leak them (the tree, the record folders at any depth, a `.plainbook`
+  backup, and every file, name and message of the commits being pushed,
+  measured against the remote they go to), and it runs as a pre-push hook and
+  in CI. Do not work around it. If it fires, it is right and you are wrong.
 - **Never delete outright.** Removing a trade or a card means moving it to
   `.trash`. If you delete something yourself, do the same.
 - **Never rewrite history to fix a number.** A balance that disagrees with the
@@ -42,7 +44,7 @@ records.
 ## 2. Running it
 
 ```bash
-python3 -m unittest discover -s tests    # the whole suite, about twenty seconds
+python3 -m unittest discover -s tests    # the whole suite, about half a minute
 python3 tools/check_public.py            # nothing private in the tree
 python3 tools/check_journal.py [root]    # does every record read
 python3 -m plainbook.server              # http://localhost:8778
@@ -88,23 +90,24 @@ PLAINBOOK_ROOT=/tmp/pb-test PLAINBOOK_PORT=8899 python3 -m plainbook.server
 | `plainbook/backup.py` | the whole journal in one `.plainbook` file (a ZIP with a manifest of sizes and hashes) and back: making it, unpacking a file into `.restore/` and checking it, the swap that puts the journal aside into `.trash`, putting it back, the sweep of a restore left untaken |
 | `plainbook/server.py` | routes, pages, forms: everything HTTP; the edition gating goes only through `lite()`, `LITE_HIDDEN_TABS`, `LITE_HIDDEN_ROUTES` and `LITE_TRASH_KINDS` |
 | `plainbook/__main__.py` | `python3 -m plainbook`: the same server |
-| `tools/check_public.py` | the guard that keeps records out of the repository |
+| `tools/check_public.py` | the guard that keeps records out of the repository: the tree, and with `--range` what the commits of a push would publish; the six commits published before its rules are the one thing it does not read again (`PUBLISHED_BEFORE_THE_RULES`) |
 | `tools/check_journal.py` | loads every record the way the server does and names the ones that do not read |
-| `tools/demo_journal.py` | an invented journal for screenshots and for looking at a change |
+| `tools/demo_journal.py` | an invented journal for screenshots and for looking at a change; refuses a folder whose `journal/` holds records unless `--force` |
 | `tools/attach_playbook.py` | ties the trades a playbook was already traded by to it: its styles, from its `since` date |
 | `tools/import_csv.py` | old trades brought in from a CSV table (a Notion export, a spreadsheet), written as the interface writes them |
 | `tools/app_entry.py` | the entry of the downloaded file: what PyInstaller packs |
-| `tools/pypi_readme.py` | the README with its links made absolute on a tag, for the page of the package on pypi.org; the publish workflow runs it on its own checkout |
+| `tools/pypi_readme.py` | the README with its links made absolute on a tag, for the page of the package on pypi.org; takes only a tag like `v1.2.3`; the publish workflow runs it on its own checkout |
 | `tools/browser_check.mjs` | the scripted forms driven in a headless Chromium against a demo journal |
 | `tools/screenshots.py` | retakes the pictures of README.md in `docs/` on the demo journal; run it in the release commit, before the tag; `--edition=lite` takes the Plainbook Lite ones into `docs/lite/` |
 | `tests/` | the suite: `test_server.py` walks the routes on one shared journal, the others take the modules one by one; `formpost.py` reads a form of a page the way a browser sends it |
 | `docs/` | the screenshots of README.md, taken on the demo journal |
 | `desktop/` | the autostart of each system (the user unit for Linux, the LaunchAgent for macOS, the script that makes the startup shortcut and ties `.plainbook` files on Windows), the file type of a backup for Linux, the window toggle and the bar widget for Omarchy; see its README |
-| `.githooks/pre-push` | runs `check_public.py` before a push; turned on once with `git config core.hooksPath .githooks` |
+| `.githooks/pre-push` | runs `check_public.py` before a push, on the commits the remote it goes to does not hold yet; turned on once with `git config core.hooksPath .githooks` |
 | `.github/workflows/tests.yml` | the suite and the guard on every push, on Python 3.10 and 3.14, three systems |
+| `MANIFEST.in` | what the source download on PyPI carries beyond the package: the tests and `tools/`, which the tests import and run |
 | `pyproject.toml` | the package on PyPI, `plainbook-journal`: the `plainbook` command of a pipx install; nothing in it is needed to run from source |
-| `.github/workflows/release.yml` | builds one file per system from a published release, attests it, attaches it |
-| `.github/workflows/publish.yml` | puts the package of a published release on PyPI, by trusted publishing: no token anywhere |
+| `.github/workflows/release.yml` | builds and attests one file per system from a published release, in a matrix that can only read; one `upload` job attaches the files once all are built |
+| `.github/workflows/publish.yml` | puts the package of a published release on PyPI, by trusted publishing: no token anywhere. `build` only reads, `tests-green` checks that `tests.yml` succeeded for the tagged commit, and `publish` alone holds the id-token |
 
 The dependency direction is one way: `server → html → flags`, `server → stats,
 reports, share, balances, backup, store → model → mdfile`, with `reports` and `share`
@@ -130,7 +133,9 @@ data. Each one is followed by what it prevents.
    and count are worked out on every look from the trades it entered
    (`WeekFigures`), a figure the form offered and got back is not saved, and
    one the owner typed is saved and shown beside the journal's, never in its
-   place. *Prevents:* a stored number drifting away from the history that
+   place. A daily loss limit typed as a percent is kept as typed and its money
+   worked out on every load (`Journal.daily_limit`), from the base of the
+   account (`Journal.base`). *Prevents:* a stored number drifting away from the history that
    produced it, as a weekly card written while its swings ran once did.
 2. **A trade's `shots/` folder is rewritten whole** from what the form sent
    (`apply_shots`). Every form that edits a trade must therefore send back

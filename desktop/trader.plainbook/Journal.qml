@@ -3,7 +3,9 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Trading journal: a local server on :8778 (unit plainbook.service).
+// Trading journal: a local server on :8778 (unit plainbook.service). Another
+// port is set by hand in the curl line of `poll` below; a widget does not see
+// the PLAINBOOK_PORT of a terminal.
 // A click of any button opens or hides the window with the same script the
 // hotkey uses, so the two never drift apart.
 //

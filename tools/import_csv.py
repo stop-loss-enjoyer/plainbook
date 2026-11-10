@@ -33,6 +33,17 @@ by commas (Notion writes "name.png (https://...)", the address is dropped), and
 is copied into the trade's shots folder and shown under its idea; the names
 not found are counted and named in the summary.
 
+Dates: a day and month written with slashes are read in one order for the
+whole table. A value with a part above 12 settles it (13/01/2026 is day first,
+01/13/2026 month first); a table where every such date could be read both ways
+is refused until --date-order dmy or mdy says which, and a table that mixes the
+two orders is refused. Dates with dots or dashes are never in doubt.
+
+Numbers: the PnL is read as digits without separators (1234.50, -300). A PnL
+with a comma in it is refused with its row number, because 1,234 is a thousand
+to one spreadsheet and a decimal to another; when the comma of the table is the
+decimal point (3,5 or 1.234,50), --decimal-comma says so.
+
 The summary prints only figures: how many rows, how many written, per account
 the count and the sum of PnL, and the first and the last entry date. Nothing
 from the rows themselves is printed.
@@ -60,18 +71,56 @@ DIRECTION_WORDS = {"long": "long", "buy": "long", "l": "long",
                    "short": "short", "sell": "short", "s": "short"}
 DATE_FORMATS = ["%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M", "%Y-%m-%d",
                 "%B %d, %Y %I:%M %p", "%B %d, %Y",
-                "%d.%m.%Y %H:%M", "%d.%m.%Y", "%d/%m/%Y %H:%M", "%d/%m/%Y",
-                "%m/%d/%Y %I:%M %p", "%m/%d/%Y"]
-TIMED = {f for f in DATE_FORMATS if "%H" in f or "%I" in f}
+                "%d.%m.%Y %H:%M", "%d.%m.%Y"]
+# the two orders of a date with slashes: a table is read in one of them, because
+# trying day first and then month first on every row swapped the day and the
+# month of whatever row happened to fit both, without a word
+DMY_FORMATS = ["%d/%m/%Y %H:%M", "%d/%m/%Y %I:%M %p", "%d/%m/%Y"]
+MDY_FORMATS = ["%m/%d/%Y %H:%M", "%m/%d/%Y %I:%M %p", "%m/%d/%Y"]
+TIMED = {f for f in DATE_FORMATS + DMY_FORMATS + MDY_FORMATS
+         if "%H" in f or "%I" in f}
+SLASH_DATE = re.compile(r"(?<!\d)(\d{1,2})/(\d{1,2})/\d{4}(?!\d)")
 
 
 class RowError(Exception):
     pass
 
 
-def parse_date(text):
+def slash_order(values, forced=None):
+    """The order of the dates with slashes in a table: "dmy", "mdy", or None
+    when there are none to read. A part above 12 decides it; a table that
+    stays ambiguous, or mixes the two orders, is refused unless `forced`."""
+    day_first = month_first = ambiguous = False
+    for text in values:
+        for part in (text or "").split("→"):
+            for a, b in SLASH_DATE.findall(part):
+                a, b = int(a), int(b)
+                if a > 12:
+                    day_first = True
+                elif b > 12:
+                    month_first = True
+                elif a != b:
+                    ambiguous = True
+    if forced:
+        return forced
+    if day_first and month_first:
+        raise SystemExit("the dates with slashes are day first in some rows and "
+                         "month first in others; fix the table, or give "
+                         "--date-order to read them all one way")
+    if day_first or month_first:
+        return "dmy" if day_first else "mdy"
+    if ambiguous:
+        raise SystemExit("the dates with slashes could be day/month or "
+                         "month/day, and no row has a part above 12 to say; "
+                         "give --date-order dmy or --date-order mdy")
+    return None
+
+
+def parse_date(text, order=None):
     """A date from the table, and whether it carried an hour.
 
+    `order` is the settled order of the slash dates ("dmy" or "mdy"); with
+    none given a slash date is read only when it cannot mean two days.
     Notion writes a range as "start → end"; the start is taken, the end is
     read by the caller from the same cell when the exit column is this one."""
     text = (text or "").strip()
@@ -79,7 +128,13 @@ def parse_date(text):
         return None, False
     if "→" in text:
         text = text.split("→")[0].strip()
-    for fmt in DATE_FORMATS:
+    formats = DATE_FORMATS + (DMY_FORMATS if order in (None, "dmy") else []) \
+        + (MDY_FORMATS if order in (None, "mdy") else [])
+    found = SLASH_DATE.match(text)
+    if order is None and found and found.group(1) != found.group(2) \
+            and int(found.group(1)) <= 12 and int(found.group(2)) <= 12:
+        raise RowError(f"the date {text!r} could be day/month or month/day")
+    for fmt in formats:
         try:
             return datetime.strptime(text, fmt), fmt in TIMED
         except ValueError:
@@ -87,16 +142,21 @@ def parse_date(text):
     raise RowError(f"cannot read the date {text!r}")
 
 
-def parse_range_end(text):
+def parse_range_end(text, order=None):
     """The end of a Notion range "start → end", or None when there is none."""
     text = (text or "").strip()
     if "→" not in text:
         return None, False
-    return parse_date(text.split("→", 1)[1])
+    return parse_date(text.split("→", 1)[1], order)
 
 
-def parse_money(text):
-    """A number out of "1 234,50 $", "-$120", "+3.2" and the like."""
+def parse_money(text, decimal_comma=None):
+    """A number out of "1 234,50 $", "-$120", "+3.2" and the like.
+
+    `decimal_comma` says what a comma is. None guesses from the shape, which
+    is for a risk in percent; for a PnL a comma is refused (False), because
+    "1,234" is a thousand to one table and a decimal to another, or is the
+    decimal point (True), the group separator then being a point or a space."""
     text = (text or "").strip()
     if not text:
         return None
@@ -106,14 +166,26 @@ def parse_money(text):
     if bracket:
         text = "-" + bracket.group(1)
     clean = re.sub(r"[^\d,.\-+]", "", text)
-    if "," in clean and "." in clean:
+    if decimal_comma is False and "," in clean:
+        raise RowError(f"the number {text!r} has a comma in it; write the digits "
+                       f"without separators, or give --decimal-comma when the "
+                       f"comma is the decimal point")
+    if decimal_comma and "," in clean:
+        if clean.count(",") > 1:
+            raise RowError(f"cannot read the number {text!r}")
+        clean = clean.replace(".", "").replace(",", ".")
+    elif decimal_comma:
+        pass                                          # 3.5: a point alone is a point
+    elif "," in clean and "." in clean:
         # the separator that comes last is the decimal, the other one groups
         if clean.rfind(",") > clean.rfind("."):
             clean = clean.replace(".", "").replace(",", ".")
         else:
             clean = clean.replace(",", "")
     elif "," in clean:
-        if re.fullmatch(r"[-+]?\d{1,3}(,\d{3})+", clean):
+        # a group of thousands starts with a digit that is not 0: "0,250" is a
+        # quarter, not two hundred and fifty
+        if re.fullmatch(r"[-+]?[1-9]\d{0,2}(,\d{3})+", clean):
             clean = clean.replace(",", "")            # thousands: 12,345,678
         elif clean.count(",") == 1:
             clean = clean.replace(",", ".")           # a decimal comma: 3,5
@@ -165,6 +237,12 @@ def read_rows(args):
                                  f"the columns are: {', '.join(header)}")
         rows = list(reader)
 
+    # one order for every date of the table, settled before the first row is
+    # built, so that a row cannot be read differently from its neighbours
+    dates = [row.get(column) for column in {args.entry, args.exit} if column
+             for row in rows]
+    args.date_order = slash_order(dates, getattr(args, "date_order", None))
+
     accounts = {}
     for pair in (args.accounts or "").split(","):
         if "=" in pair:
@@ -193,18 +271,22 @@ def build(row, args, accounts, n=None):
         account = args.account
     if not account:
         raise RowError("no account")
-    opened, opened_time = parse_date(row.get(args.entry))
+    order = getattr(args, "date_order", None)
+    opened, opened_time = parse_date(row.get(args.entry), order)
     if opened is None:
         raise RowError("no entry date")
     closed, closed_time = None, False
     if args.exit:
         if args.exit == args.entry:
-            closed, closed_time = parse_range_end(row.get(args.entry))
+            closed, closed_time = parse_range_end(row.get(args.entry), order)
         else:
-            closed, closed_time = parse_date(row.get(args.exit))
+            closed, closed_time = parse_date(row.get(args.exit), order)
     result = (word(RESULT_WORDS, row.get(args.result), "result")
               if args.result and (row.get(args.result) or "").strip() else None)
-    pnl = parse_money(row.get(args.pnl)) if args.pnl else None
+    # a comma in a PnL is refused unless the table is said to use it as the
+    # decimal point: the risk in percent keeps the lenient reading
+    pnl = (parse_money(row.get(args.pnl), bool(getattr(args, "decimal_comma", False)))
+           if args.pnl else None)
     if result is not None and pnl is None:
         pnl = 0.0 if result == "BE" else None
     if result is not None and closed is None:
@@ -242,6 +324,13 @@ def already_there(existing, t):
     if t.notion_id:
         return t.notion_id in existing["ids"]
     return (t.account, t.opened.date(), t.pair, t.pnl) in existing["keys"]
+
+
+def remember(existing, t):
+    """Counts a trade as being in the journal, for the rows that follow it."""
+    if t.notion_id:
+        existing["ids"].add(t.notion_id)
+    existing["keys"].add((t.account, t.opened.date(), t.pair, t.pnl))
 
 
 def write(root, t, pictures):
@@ -286,6 +375,12 @@ def main(argv=None):
     p.add_argument("--pictures-dir", help="where the screenshot files are")
     p.add_argument("--risk-default", type=float, default=1.0,
                    help="the risk of a row without one (default 1)")
+    p.add_argument("--date-order", choices=("dmy", "mdy"),
+                   help="how the dates with slashes read, day first (dmy) or month "
+                        "first (mdy); needed only when the table does not settle it")
+    p.add_argument("--decimal-comma", action="store_true",
+                   help="the comma of the PnL column is the decimal point (3,5); "
+                        "without it a PnL with a comma is refused")
     p.add_argument("--dry-run", action="store_true", help="read and report, write nothing")
     args = p.parse_args(argv)
     for must in ("pair", "direction", "style", "entry"):
@@ -315,6 +410,8 @@ def main(argv=None):
             continue
         if not args.dry_run:
             write(root, t, pictures)
+        # a row repeated inside the table is the same trade once more
+        remember(existing, t)
         written += 1
         pictures_in += len(pictures)
         missing.extend(lost)

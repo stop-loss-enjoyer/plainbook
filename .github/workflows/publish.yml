@@ -7,6 +7,13 @@ name: publish to PyPI
 # PyPI never takes the same version twice, so a release published again
 # changes nothing there. setuptools and build are tools of this workflow only;
 # the source runs without them.
+#
+# Three jobs, so that no tool that runs code of the package holds the identity
+# the upload needs: `build` runs the suite and the build tools and can only
+# read; `tests-green` refuses to go on unless tests.yml (all six of its runs)
+# succeeded for the commit of the tag; `publish` holds the id-token and does
+# nothing but hand the finished files to PyPI. PyPI trusts this file by its
+# name and the environment `pypi`, not by the names of the jobs.
 
 on:
   release:
@@ -21,18 +28,22 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
       contents: read
-      id-token: write
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
+      # the commit the tag stands on, which the next job asks tests.yml about
+      - name: the commit of the tag
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -47,4 +58,47 @@ jobs:
       - run: python -m build
       - name: the package is the version of the tag
         run: test -f "dist/plainbook_journal-${TAG#v}.tar.gz"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # PyPI never takes a version twice, so the tests of every system must have
+  # passed before the upload and not after it (1.12.0 went out with a test
+  # that failed on Windows and macOS only). A run still going, or one that
+  # failed, stops here; run this workflow again by hand once tests.yml is green.
+  tests-green:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SHA: ${{ needs.build.outputs.sha }}
+    steps:
+      - name: tests.yml succeeded for the commit of the tag
+        run: |
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$SHA&event=push&per_page=100" \
+            --jq '[.workflow_runs[].conclusion] | join(" ")')
+          echo "tests.yml runs for $SHA: ${runs:-none}"
+          case " $runs " in
+            *" failure "*) echo "tests.yml failed for this commit"; exit 1 ;;
+            *" success "*) ;;
+            *) echo "tests.yml has no finished green run for this commit yet"; exit 1 ;;
+          esac
+
+  publish:
+    needs: [build, tests-green]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

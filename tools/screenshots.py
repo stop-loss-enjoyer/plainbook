@@ -16,12 +16,13 @@ pictures off the tag, and the version on them is the one people download.
 
     python3 tools/screenshots.py --edition=lite     # writes docs/lite/*.png
 
-The same journal with `edition: lite` in its settings, shot at the pages Lite
-shows (the front page, a trade form, Statistics, Accounts with the switch).
+The same journal with `edition: lite` in its settings, shot at the pages the
+README shows of Lite (the front page, Accounts with the switch).
 It writes only docs/lite/ and leaves the pictures of the full journal alone.
 """
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -32,7 +33,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plainbook import reports, store
 
-PORT = 8897
 BROWSERS = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable",
             "brave", "brave-browser")
 
@@ -83,19 +83,37 @@ def pages(root):
 
 def lite_pages(root):
     """The pages that show what Lite is: the front page without the plan and
-    card buttons, a form without the playbook, Statistics without the playbook
-    tables, and the switch on Accounts."""
-    trades = store.all_trades(root)
-    closed = sorted((t for t in trades if not t.is_open and t.conclusions),
-                    key=lambda t: t.closed, reverse=True)
-    trade = closed[0] if closed else trades[0]
+    card buttons, and the switch on Accounts."""
     return [
         ("journal.png", "/", 1000),
-        ("new-trade.png", f"/edit/{trade.id}", 1000),
-        ("statistics.png", "/stats", 1000),
         # an address with an anchor comes out blank in a headless shot
         ("accounts.png", "/accounts", 1000),
     ]
+
+
+def free_port():
+    """A port nothing listens on now, so that a server already running on a
+    fixed one cannot answer for the demo journal."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def wait_for(base, server, seconds=20):
+    """Returns when the child answers at `base`; fails when it exits first (a
+    port it could not bind, a journal it could not read) or does not answer in
+    time, so that no picture is taken of whatever else is there."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if server.poll() is not None:
+            raise SystemExit(f"the server exited with code {server.returncode} "
+                             f"before it answered at {base}")
+        try:
+            urllib.request.urlopen(base + "/", timeout=2).close()
+            return
+        except OSError:
+            time.sleep(0.1)
+    raise SystemExit(f"the server did not answer at {base} in {seconds} seconds")
 
 
 def main():
@@ -119,17 +137,13 @@ def main():
     if lite:
         # the same key the switch on Accounts writes
         store.save_edition(root, "lite")
-    env = dict(os.environ, PLAINBOOK_ROOT=root, PLAINBOOK_PORT=str(PORT), PLAINBOOK_OPEN="0")
+    port = free_port()
+    env = dict(os.environ, PLAINBOOK_ROOT=root, PLAINBOOK_PORT=str(port), PLAINBOOK_OPEN="0")
     server = subprocess.Popen([sys.executable, "-m", "plainbook.server"], cwd=here, env=env,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    base = f"http://127.0.0.1:{PORT}"
+    base = f"http://127.0.0.1:{port}"
     try:
-        for _ in range(50):
-            try:
-                urllib.request.urlopen(base + "/").close()
-                break
-            except OSError:
-                time.sleep(0.1)
+        wait_for(base, server)
         # the report of the month before the last closed trade, so that the
         # shelf and the report page have something built to show
         last = max(t.closed for t in store.all_trades(root) if t.closed)

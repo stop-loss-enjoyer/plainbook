@@ -877,7 +877,7 @@ def sign(currency):
 
 
 def money(x, signed=False):
-    if x is None:
+    if x is None or not math.isfinite(x):
         return "-"
     x = round(x)    # so -0.4 prints 0, not -0
     text = f"{x:+,.0f}" if signed else f"{x:,.0f}"
@@ -1464,10 +1464,10 @@ def equity_svg(series, width=980, height=260, cid="equity", sign="$",
         parts.append(f'<circle cx="{ex:.1f}" cy="{ey:.1f}" r="3" fill="{colour}"/>')
         delta = pts[-1][1] - bases[k][-1]
         parts.append(f'<text x="{ex+8:.1f}" y="{ey+3:.1f}" fill="{INK2}" '
-                     f'font-size="10" font-family="{MONO}">{money(pts[-1][1])}</text>')
+                     f'font-size="10" font-family="{esc(MONO)}">{money(pts[-1][1])}</text>')
         parts.append(f'<text x="{ex+8:.1f}" y="{ey+15:.1f}" '
                      f'fill="{GOOD if delta > 0 else BAD if delta < 0 else INK2}" '
-                     f'font-size="10" font-family="{MONO}">'
+                     f'font-size="10" font-family="{esc(MONO)}">'
                      f'{money(delta, signed=True)}</text>')
         data.append({"name": name, "colour": colour, "sign": sign,
                      "base_word": base_word,
@@ -1585,7 +1585,7 @@ def tape_svg(bars, marks, width=980, height=230, stop=1.0, bar_max=18.0,
         parts.append(f'<line x1="{left}" y1="{y:.1f}" x2="{right}" y2="{y:.1f}" '
                      f'stroke="{GRID}" stroke-width="1"/>')
         parts.append(f'<text x="{left - 6}" y="{y + 3:.1f}" fill="{DIM}" '
-                     f'font-size="10" font-family="{MONO}" text-anchor="end">'
+                     f'font-size="10" font-family="{esc(MONO)}" text-anchor="end">'
                      f'{r_label(v, step)}</text>')
         v += step
     # where a week or a month begins: a line before the bar, a word under it
@@ -1977,7 +1977,10 @@ def result_svg(r, others, edge, marks=(), width=560):
     hi = max(3.5, math.ceil(max(rs) * 2) / 2 + 0.2)
     pad = 22
     X = lambda v: pad + (v - lo) / (hi - lo) * (width - 2 * pad)
-    colour = GOOD if r > 0 else BAD if r < 0 else WARN
+    # the figure is printed to two places, so a result that prints 0.00 is no win or loss
+    flat = abs(r) < 0.005
+    shown = "0.00" if flat else f"{r:+.2f}"
+    colour = WARN if flat else GOOD if r > 0 else BAD
     out = [f'<svg class="result" viewBox="0 0 {width} 98" width="100%" role="img" '
            f'aria-label="the result against the risk">',
            f'<rect x="{X(-1):.1f}" y="24" width="{X(0) - X(-1):.1f}" height="42" '
@@ -2013,7 +2016,7 @@ def result_svg(r, others, edge, marks=(), width=560):
                f'<text x="{X(r):.1f}" y="15" '
                f'fill="{colour}" font-size="13" '
                f'font-weight="600" font-family="{esc(MONO)}" '
-               f'text-anchor="{anchor}">{r:+.2f} R</text>')
+               f'text-anchor="{anchor}">{shown} R</text>')
     out.append("</svg>")
     return "".join(out)
 

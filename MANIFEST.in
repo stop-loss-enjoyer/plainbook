@@ -1,0 +1,10 @@
+# What the suite in tests/ reads besides the package: setuptools takes only
+# tests/test*.py by itself, which leaves out tests/formpost.py, and takes no
+# tools/ at all, so a suite run from the unpacked sdist failed to import half of
+# its files. tools/ is shipped whole because the tests import and run it.
+include tests/*.py
+recursive-include tools *.py *.mjs
+global-exclude __pycache__ *.py[cod]
+# the tests of the guard run the pre-push hook and read .gitignore
+include .gitignore
+recursive-include .githooks *

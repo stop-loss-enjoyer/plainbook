@@ -7,15 +7,19 @@
 # The window is found by the CLASS of the web app only: the class is built from
 # the HOST (brave-localhost__-Default), which is why the address here is
 # localhost and not 127.0.0.1, which keeps this window apart from other local
-# web apps.
+# web apps. A web app on a name that ends in .localhost (plaindesk.localhost)
+# has a class too that holds "localhost__", but after a dot and not after the
+# dash that the browser puts before the host, so "-localhost__" is what is
+# looked for here.
 #
 # Do NOT look it up by TITLE, even though that seems easier: "Plainbook" is
 # also the title of a file manager window opened on the project folder, and of a
 # terminal sitting in that directory. The toggle would quietly raise those.
-URL='http://localhost:8778'
+# the port of the server, the same variable the server reads
+URL="http://localhost:${PLAINBOOK_PORT:-8778}"
 
 addr=$(hyprctl clients -j | jq -r '
-  .[] | select(.class | test("localhost__")) | .address' | head -n1)
+  .[] | select(.class | test("-localhost__")) | .address' | head -n1)
 
 if [[ -z $addr ]]; then
   exec omarchy-launch-webapp "$URL"

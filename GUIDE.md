@@ -13,6 +13,10 @@ with Omarchy there is also a button in the top bar and a hotkey.
 
 ## The daily round
 
+The buttons named here stand in the header of the front page. The Plans tab
+has its own **+ Plan**, and the Cards tab its own **+ DRC** and **+ WRC**; the
+other pages carry none of them.
+
 1. **Before the market**, a plan if the week or the day needs one: the
    **+ Plan** button.
 2. **Opened a position?** Write it down at once, with the **+ Trade** button,
@@ -30,7 +34,7 @@ than it was.
 
 ## A new trade
 
-**+ Trade** in the header. The fields:
+**+ Trade** in the header of the front page. The fields:
 
 - **account**: archived accounts are not offered.
 - **pair**: the list under the field carries the same flags the journal does,
@@ -51,8 +55,12 @@ than it was.
   the entry date typed below. A trade written in days after it was taken is
   measured against the balance of its own day, so the trades closed since
   do not change its R. A
-  sum is saved as the percent it makes, to two decimals, since the percent
-  is what R is measured by, and the trade page shows both. The field starts at the risk
+  sum is saved as the percent that gives back the same sum to the cent, since
+  the percent is what R is measured by: 25 $ of 100 000 is 0.025 %, and the
+  trade page shows both. Type digits without separators of thousands, `1250.50`
+  or `1250,50`, never `1,250.50` or `1.250,50`; a lone comma is read as the
+  decimal point, and a comma beside a point is refused with a line that says
+  so. The field starts at the risk
   of your last trade on that account and follows the account until you type
   a figure yourself; a duplicate's risk starts at the last trade of its own
   account and takes money the same way, against its own balance.
@@ -153,7 +161,8 @@ laid out in [PLAYBOOK.md](PLAYBOOK.md).
   counted above the checklist of a new trade: risk per trade, trades per
   week and per month, loss per week in R, positions open at once. The
   longest hold and the least RR are shown on the page and left for the
-  review. *Other* takes a name of your own and is shown as written.
+  review. *Other* takes a name of your own and is shown as written; the name of a
+  limit takes no colon.
 - **notes**: anything else. A line starting with `## ` begins a section of
   its own on the page: the markets, the math, what is still being decided;
   text with no heading lands under *Notes*.
@@ -300,9 +309,9 @@ the trader's own words, a line per trade.
 
 ## Trading plans
 
-**+ Plan** in the header, or the **Plans** tab. A plan is written before the
-market opens and holds the one thing a trade cannot, what was supposed to
-happen.
+**+ Plan** in the header of the front page or on the **Plans** tab. A plan is
+written before the market opens and holds the one thing a trade cannot, what
+was supposed to happen.
 
 - **title, pair, narrative**: a name of your own, the instrument, and what you
   expect: bullish, bearish, neutral or no trade. A decision not to trade is a
@@ -544,7 +553,8 @@ closes it.
 
 ## The daily card
 
-**+ DRC** opens today's card; if there already is one for that day, it opens
+**+ DRC** (the header of the front page, and of the Cards tab) opens today's
+card; if there already is one for that day, it opens
 that one. The **Cards** tab shows them on a calendar of the quarter.
 
 **A written card opens to be read**: the date, the grades and the PnL at the
@@ -594,8 +604,8 @@ keeps its way back to that report in both.
 
 ## The weekly card
 
-**+ WRC** opens the card of the week that is running; if there already is one,
-it opens that one. On the **Cards** tab it ends the row of its week, and both
+**+ WRC** (the same two headers) opens the card of the week that is running;
+if there already is one, it opens that one. On the **Cards** tab it ends the row of its week, and both
 kinds are stored side by side in `journal/cards`. A written weekly card opens
 to be read, with **Edit** at the top right, the same way as the daily one.
 
@@ -660,6 +670,11 @@ overview, a low one keeps the figures and leaves the text to the tip.
   daily and weekly cards of the quarter shown, and **?** beside it says what
   the squares mean. A week belongs to the quarter of its Thursday, the way
   it belongs to a year, so its row is in one quarter only.
+- **The name of the file is the date of a card.** A card copied by hand keeps
+  the date of its original in its header; it is read under the day or the
+  week in its file name and named at the top of the page, and saving it writes
+  the header right, so it never stands in the place of the original. A file
+  not named for a day or a week is named and left alone.
 - A card whose date was typed with a wrong year, `1026`, cannot stand on any
   calendar; it is named beside the counts, **dated outside the calendar**,
   with a link to put the date right.
@@ -697,10 +712,10 @@ trades has nothing to count and shows the number written on it.
   moved the stop of that trade to the entry: the trade can no longer lose what
   it was sized for, so its risk is freed. The money column shows a green
   **BE** chip in place of the sum, and the title of the block counts the
-  trades held that way. The daily loss limit of the account stops counting
-  them: with three trades at breakeven and two fresh ones, its row on the
-  Accounts tab counts the risk of the two, in money, and says how many stand
-  at breakeven. Pressed by mistake, **Risk back** on the page of the trade
+  trades held that way. The daily loss limit of the account, when it counts
+  the risk of open trades, stops counting them: with three trades at
+  breakeven and two fresh ones, its row on the Accounts tab counts the risk of
+  the two, in money, and says how many stand at breakeven. Pressed by mistake, **Risk back** on the page of the trade
   undoes it. The R of the trade is still measured against the risk it was
   opened with, whatever happened to the stop later.
 - **Summary tiles**: the current period, the size of the selection, the
@@ -1104,16 +1119,23 @@ The **Accounts** tab.
 - **The rules of a prop firm** differ from firm to firm, and between the
   challenge, the verification and the funded account of one firm, so the
   journal carries none of its own: copy them from your firm's page. A sum is
-  money or a percent of the start balance, `5%` of 100 000 being 5 000, and a
-  rule the firm does not have is left empty.
-  - **daily loss limit**: the most one day of the firm may lose, counting the
-    trades closed that day, the fees charged on it and what the open trades
-    still put at risk at their stops, that risk set against the day's closed
-    result, so a profit already closed today makes room for it;
+  money or a percent of the start balance, and of the deposits made up to the
+  first trade when the account was funded by one: `5%` of 100 000 being
+  5 000. A daily loss limit typed as a percent stays a percent and is worked
+  out again on every look; the max loss and the target are turned into money
+  when saved. A rule the firm does not have is left empty.
+  - **daily loss limit**: the most one day of the firm may lose. Two boxes
+    under it say what it counts: the closed result of the day, with the fees
+    charged on it; the risk of open trades, what they still put at risk at
+    their stops; or both, which is how an account starts. With both, that
+    risk is set against the day's closed result, so a profit already closed
+    today makes room for it. Untick what your firm does not count;
   - **max loss** and how it is measured: *static* from the start balance, a
     floor that never moves; *trailing* under the highest balance the account
     has closed at; *trailing to start* the same until the floor reaches the
-    start balance, where it stays;
+    start balance, where it stays. For an account opened at 0 and funded by a
+    deposit, the start is the start balance plus the deposits up to the first
+    trade; money moved in or out afterwards does not move the floor;
   - **profit target**, what the account has to make, money moved in and out
     aside, and **min trading days**, the days a trade was entered on;
   - **the firm's day**: the hour it begins and on whose clock, since many firms
@@ -1122,12 +1144,15 @@ The **Accounts** tab.
 
   Under the rules, the row of the account says where it stands against each,
   a line a rule: what the firm's day has already cost, fees included, with
-  what the open trades still put at risk and the limit; the floor of the max
+  what the open trades still put at risk and the limit, each as far as the
+  two boxes count it; the floor of the max
   loss and how far the balance stands above it, now and at the stops of the
   open trades; the target and how much of it is made; the trading days
   against the ones required; and when every rule is met, that the target is
   made. The lines turn amber at four fifths of a limit and red when one is
-  reached.
+  reached. When the daily limit is reached only because of the risk still open
+  at the stops, its line says **reached at the stops**, and "every rule met" is
+  not shown until that risk is gone.
 - **The journal's clock** is the clock the times of your trades are written
   in. Empty is this computer's, which is right when you write the times you
   see on your own watch; a trader who copies them from a terminal running on
@@ -1237,7 +1262,8 @@ The page warns when:
   yellow box at the top of every page names them, as it does for any such
   file.
 - some files of the journal were left out when it was made: a file that
-  could not be opened at that moment (a save in another window), a link
+  could not be opened or read to the end at that moment (a save in another
+  window), which is named and does not hold up the rest, a link
   to a folder somewhere else, which a backup does not follow, or a file put
   in by hand under a name a backup cannot carry to every system (a colon or
   a backslash in it, or a twin that differs only in capitals). The page
@@ -1245,7 +1271,8 @@ The page warns when:
 
 A file that is not a whole backup, that was cut off on the way or that is
 not a Plainbook file at all, or that holds two files whose names differ
-only in capitals (which Windows and macOS cannot keep apart), gets the page
+only in capitals or in the form of an accent (which Windows and macOS
+cannot keep apart), gets the page
 *This file cannot be restored* with the reason. Nothing in the journal has changed then.
 
 **By a double click.** A `.plainbook` file opens by a double click, once
@@ -1637,7 +1664,9 @@ drive is worth having too.
 - **A yellow box at the top of every page says a record could not be read.**
   A file was edited by hand and something in it does not parse: a date written
   the wrong way round, a letter in a number, a header without its closing
-  line. The box names the file and the reason; everything else keeps working
+  line. A closed trade with no `exit:` is named too, with its file: add the
+  line, since until then its result is in the balance and in no figure that
+  goes by a date. The box names the file and the reason; everything else keeps working
   and the figures simply leave that record out until it is fixed. A
   `settings.md`, `vocabulary.md` or `pairs.md` that does not parse is named the
   same way, and the journal uses its defaults until the file is fixed by hand;
@@ -1646,7 +1675,8 @@ drive is worth having too.
   folder that holds `journal/` given as an argument, or for `PLAINBOOK_ROOT`
   when none is given.
 - **A save says Not saved.** A field held something the journal cannot
-  read, a letter in a number or a minus in the risk; the page says which.
+  read, a letter in a number, a comma and a point together in an amount or a
+  minus in the risk; the page says which.
   **Back to the form** returns with what you typed; a screenshot pasted into
   the form has to be pasted again. A form on the Accounts tab (an account,
   money in and out, a pair or a list) says it on top of that tab instead, and

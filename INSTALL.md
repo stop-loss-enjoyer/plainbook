@@ -68,7 +68,12 @@ steps.
    them down, [PLAYBOOK.md](PLAYBOOK.md) takes the form apart.
 
 The default port is 8778; if it is taken, set another one through `PLAINBOOK_PORT` (and
-use it everywhere below).
+use it everywhere below). Two files of `desktop/` carry the port themselves:
+`plainbook-toggle` reads `PLAINBOOK_PORT` and falls back to 8778 (a hotkey does
+not see the variables of a terminal, so change the 8778 in its `URL` line
+instead), and `trader.plainbook/Journal.qml` holds the address in the `curl` line
+of its `poll` process; edit that one by hand. The addresses typed
+in the lines below are the default port too.
 
 ## Linux
 
@@ -76,6 +81,7 @@ Autostart is a user systemd unit. The sample is `desktop/plainbook.service`
 (`WorkingDirectory=%h/plainbook` and `Environment=PLAINBOOK_ROOT=%h/plainbook-data`
 so correct both to the real paths).
 
+    mkdir -p ~/.config/systemd/user
     cp desktop/plainbook.service ~/.config/systemd/user/
     systemctl --user enable --now plainbook
     systemctl --user status plainbook   # check
@@ -91,7 +97,9 @@ On top of the unit, if they want it:
   `<browser>-localhost__-Default`, which is why the address in the script is
   `localhost` and not `127.0.0.1`. With another browser or another way of
   launching, check the real class (`hyprctl clients -j | jq -r '.[].class'`
-  with the journal open) and fix the `test("localhost__")` line.
+  with the journal open) and fix the `test("-localhost__")` line. The dash in front is the one the browser
+  puts before the host, and it keeps out a web app on a name such as
+  `plaindesk.localhost`, whose class holds `localhost__` after a dot.
   Look the window up by its class, never by its title: "Plainbook" is also
   the title of a file manager window opened on the project folder and of a
   terminal sitting in that directory, and a toggle that went by the title
@@ -163,6 +171,7 @@ By hand: `python3 -m plainbook.server` from the project folder.
 Autostart is a LaunchAgent. The sample is `desktop/plainbook.plist`; put the
 real paths in (`which python3`, the project folder, the records folder), then
 
+    mkdir -p ~/Library/LaunchAgents
     cp desktop/plainbook.plist ~/Library/LaunchAgents/
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/plainbook.plist
 
@@ -239,9 +248,14 @@ job belongs to `tools/import_csv.py`: they export the old journal as CSV, you
 map its columns to the fields of a trade, the tool writes the trades the way
 the interface would, and the balance is then reconciled with the broker on
 the Accounts tab. Run `python3 tools/import_csv.py --help` for the columns it
-takes. One thing differs from step 6 above: for an import, the start balance
-of an account is the balance it had before the first old trade, and the
-difference to today is written as a correction afterwards.
+takes and the two switches that settle what a table leaves open: `--date-order
+dmy|mdy` for dates written with slashes (the tool decides alone when a date
+in the column has a part above 12, and refuses a column that stays
+ambiguous), and `--decimal-comma` for a PnL written as 3,5 (without it a PnL
+with a comma is refused, with the row named). One thing differs from step 6
+above: for an import, the start balance of an account is the balance it had
+before the first old trade, and the difference to today is written as a
+correction afterwards.
 
 You need the header line of their table and nothing more. Leave the rows
 unread and do not ask for them; the tool prints only counts and sums, and

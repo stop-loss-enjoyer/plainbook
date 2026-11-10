@@ -13,3 +13,9 @@ dist/
 journal/*/*
 journal/*.md
 !journal/*/.gitkeep
+# nor further down, where a copy of a journal would otherwise go unseen
+*/**/journal/
+# a backup of a journal holds every record; the folder of the bar widget in
+# desktop/ only shares the ending
+*.plainbook
+!*.plainbook/

@@ -2,6 +2,99 @@
 
 What changed and why. Newest first.
 
+## Unreleased
+
+- **The daily loss limit counts what your firm counts.** Two boxes in the
+  Rules of an account choose whether the limit counts the closed result of
+  the day, the risk of open trades, or both; an account set up before keeps
+  both and reads as it did. A day whose limit is reached only by the open
+  risk now says **reached at the stops**, and that line never stands beside
+  "every rule met".
+- **A daily loss limit can be a percent that stays a percent.** Typed as
+  `5%`, it is kept as typed and worked out again on every look, so it follows
+  the base of the account when that moves.
+- **A prop account funded by a deposit is measured from that deposit.** An
+  account opened at 0 and funded afterwards has its floor, the cap of
+  *trailing to start* and its percents taken from the start balance plus the
+  deposits dated up to its first trade. Money moved later changes none of
+  them.
+- **A day that lost exactly the limit reads as reached.** Sums are taken to
+  the cent before they are held against the daily limit and the floor, where
+  a hair of rounding used to keep the day just short of it.
+- **A risk typed in money is kept to the cent.** 25 $ on 100 000 is now
+  0.025%, where it used to become 0.03% and so 30 $, and R was off by a
+  sixth. Every page prints the percent as it is kept; records written before
+  keep their two decimals.
+- **Amounts typed with both a comma and a point are refused**, as in 1,234.56
+  or 1.234,56, with a line that says to type the digits without separators of
+  thousands. A lone comma is still the decimal point, and a risk in money
+  follows the same rule. An amount above 10^15 is refused too, since two such
+  deposits could make a balance infinite.
+- **These pages no longer fail.** A closed trade with no exit date opens
+  without its time line, and is named at the top of every page with its file,
+  so the missing `exit:` can be added. Statistics opens when no win has a
+  measured R, and its payoff tile says why there is nothing to weigh. A
+  report file that is not UTF-8, or one dated in the year 0001, no longer
+  takes down Reports: the first opens with its unreadable characters replaced
+  and is named on the page, and the original is kept beside it as `.md.bak`
+  when the report is rebuilt. A playbook whose version label holds a
+  superscript digit opens.
+- **A refused copy on a second account no longer leaves the trade half
+  saved.** Every copy is checked before anything is written, so the trade is
+  not saved twice when you send the form again.
+- **A card or a week copied by hand no longer writes over the original.** A
+  file in Cards is read under the day or the week in its file name, and named
+  at the top of the page when its header says another; saving it writes the
+  header right. A file not named for a day or a week is named and left alone.
+- **A new account cannot be made over a file that does not read.** The
+  unreadable file, with its rules, is left as it was.
+- **A backup survives a file that cannot be read halfway.** The file is named
+  as left out and everything else is saved and restores. A backup holding two
+  names that differ only in the form of an accent is refused at restore, as
+  one differing in capitals already was.
+- **Text and digits you type are kept as typed.** A line like
+  `![](http://...)` typed into an idea, analysis, exit or note stays in the
+  text, a price of more than ten significant digits keeps its last digit, and
+  a playbook rule whose few words end with `*` keeps them. The name of a
+  playbook limit takes no colon, and the form says why.
+- **A form sent with no token is answered as saved.** It was saved and then
+  answered "Not saved".
+- **Smaller fixes on the pages.** The risk hint follows the **hour not
+  known** box. Delete and Reopen ask first for an id with an apostrophe in
+  it. The year switch of Cards no longer fills with links after a mistyped
+  year. Remove takes off a pair written in lower case by hand. Chart labels
+  use the monospace font again. A shared file says what its EV is worked out
+  over, the trades with a measured R, and prints 0.00 for a result that
+  rounds to nothing, where it printed -0.00; the chart of one trade colours
+  such a result neutral.
+- **Hidden pages and downloads are shut tighter.** The pages Lite hides stay
+  hidden at an address written with an encoded slash, and another site can no
+  longer start a download of the CSV or of a shared file, as it could not for
+  the backup.
+- **The importer no longer swaps day and month.** One order is settled for
+  the whole column, by a date with a part above 12 or by `--date-order
+  dmy|mdy`, and a column that stays ambiguous is refused. A PnL with a comma
+  is refused unless `--decimal-comma` says the comma is the decimal point, so
+  "0,250" is a quarter and not 250, and a row repeated inside one table is
+  written once.
+- **The tools are safer to run.** `tools/demo_journal.py` refuses a folder
+  whose `journal/` already holds records unless `--force`.
+  `tools/check_journal.py` reads every frozen version of a playbook and names
+  a trade whose account is not among the accounts. `tools/pypi_readme.py`
+  takes only a tag like `v1.2.3` and prints its usage otherwise.
+- **The guard before a push reads what is being pushed.** `check_public.py`
+  looks through the commits of a push and their messages, finds records in a
+  folder named `journal` at any depth, and refuses a `.plainbook` backup and
+  any file it cannot read as text. The pre-push hook no longer lets a commit
+  that only a private remote holds count as published.
+- **The window toggle on Omarchy** follows `PLAINBOOK_PORT` and no longer
+  catches other apps on a `.localhost` name. INSTALL.md names the two files
+  to edit for another port and makes the autostart folders before copying
+  into them.
+- **The source download on PyPI carries `tools/`** and the test helper, so
+  its tests run from it. A release waits for the tests on every system before
+  it goes to PyPI.
+
 ## v1.14.0, 08.11.2026
 
 - **A page on another site can no longer slip a request past the journal's

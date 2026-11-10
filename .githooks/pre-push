@@ -2,19 +2,29 @@
 # Nothing private leaves this repository. The check is cheap; a leak is not.
 # Turn it on once with:  git config core.hooksPath .githooks
 #
-# Git feeds one line per ref being pushed: <local ref> <local sha> <remote ref>
-# <remote sha>. Besides the tree, the commits that would be published are
-# looked through, so a record added and removed again is still refused.
+# Git names the remote as $1 and feeds one line per ref being pushed:
+# <local ref> <local sha> <remote ref> <remote sha>. Besides the tree, the
+# commits that would be published are looked through, so a record added and
+# removed again is still refused. A commit counts as published only when this
+# remote holds it: one that only a private backup remote has is still new to a
+# public one. A push to a bare URL knows no remote-tracking refs, so the whole
+# history is looked through.
+remote="$1"
 zero=0000000000000000000000000000000000000000
+python=python3
+command -v python3 >/dev/null 2>&1 || python=python
 failed=0
-python3 tools/check_public.py || failed=1
+# stdin carries the ref lines: nothing run in the loop may read them
+"$python" tools/check_public.py </dev/null || failed=1
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_sha" ] && continue
   [ "$local_sha" = "$zero" ] && continue          # a delete publishes nothing
-  if [ "$remote_sha" = "$zero" ] || ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
-    python3 tools/check_public.py --range "$local_sha" --not --remotes || failed=1
+  if [ "$remote_sha" != "$zero" ] && git cat-file -e "${remote_sha}^{commit}" </dev/null 2>/dev/null; then
+    "$python" tools/check_public.py --range "${remote_sha}..${local_sha}" </dev/null || failed=1
+  elif [ -n "$remote" ]; then
+    "$python" tools/check_public.py --range "$local_sha" --not --remotes="$remote" </dev/null || failed=1
   else
-    python3 tools/check_public.py --range "${remote_sha}..${local_sha}" || failed=1
+    "$python" tools/check_public.py --range "$local_sha" </dev/null || failed=1
   fi
 done
 [ "$failed" = 0 ] || {

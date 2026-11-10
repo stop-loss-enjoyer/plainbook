@@ -22,6 +22,7 @@ import os
 import re
 import secrets
 import shutil
+import tempfile
 import threading
 import unicodedata
 import time
@@ -157,13 +158,21 @@ def _make(root, out, now):
             if not _writable_name(name) or key in seen:
                 skipped.append(name)
                 continue
+            # the file is read whole into a spool before the member is
+            # opened: a member the zip has begun is committed even when the
+            # read fails halfway, and a member the manifest does not list
+            # makes the whole backup unrestorable
             try:
                 stamp = _stamp(os.stat(path).st_mtime)
-                info = zipfile.ZipInfo(name, stamp)
-                info.compress_type = (zipfile.ZIP_STORED if name.lower().endswith(STORED)
-                                      else zipfile.ZIP_DEFLATED)
-                with open(path, "rb") as f, z.open(info, "w", force_zip64=True) as target:
-                    digest, size = _hash_copy(f, target)
+                with open(path, "rb") as f, \
+                        tempfile.SpooledTemporaryFile(max_size=8 * _CHUNK) as spool:
+                    digest, size = _hash_copy(f, spool)
+                    spool.seek(0)
+                    info = zipfile.ZipInfo(name, stamp)
+                    info.compress_type = (zipfile.ZIP_STORED if name.lower().endswith(STORED)
+                                          else zipfile.ZIP_DEFLATED)
+                    with z.open(info, "w", force_zip64=True) as target:
+                        shutil.copyfileobj(spool, target, _CHUNK)
             except OSError:
                 skipped.append(name)
                 continue
@@ -312,9 +321,11 @@ def _unpack(root, token, source):
             raise BackupError("this backup is incomplete or was changed after it was made")
         # Windows and macOS see A.md and a.md as one file: the second would
         # write over the first, and each would still pass its own check
-        if len({n.casefold() for n in members}) != len(members):
+        # an accent written apart (NFD) is the same name on a Mac as one
+        # written whole, which is how _make compares them
+        if len({unicodedata.normalize("NFC", n).casefold() for n in members}) != len(members):
             raise BackupError("this backup holds two files whose names differ only "
-                              "in capitals, which this computer cannot keep apart")
+                              "in capitals or accents, which this computer cannot keep apart")
         for name, info in members.items():
             entry = files[name]
             if (not _safe_name(name) or not isinstance(entry, dict)

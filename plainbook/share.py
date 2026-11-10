@@ -167,7 +167,10 @@ def size_text(n):
 # --- the pieces of a document ----------------------------------------------
 
 def r_or_dash(x):
-    return "-" if x is None else f"{x:+.2f}"
+    if x is None:
+        return "-"
+    # a figure that rounds to zero has no sign, as on the card of a trade
+    return "0.00" if abs(x) < 0.005 else f"{x:+.2f}"
 
 
 def r_class(x):
@@ -233,7 +236,9 @@ def summary_tiles(s):
             + doc_tile("trades", str(s.trades),
                    f"{s.wins} won · {s.losses} lost · {s.be} break-even")
             + doc_tile("winrate", wr, "wins against wins and losses")
-            + doc_tile("EV", r_or_dash(s.average_r), "per closed trade, R",
+            + doc_tile("EV", r_or_dash(s.average_r),
+                   f"over {s.measured} trade{'' if s.measured == 1 else 's'} "
+                   f"with a measured R",
                    r_class(s.average_r))
             + doc_tile("Σ R", r_or_dash(s.sum_r), "the selection in risk units",
                    r_class(s.sum_r))
@@ -593,19 +598,24 @@ def doc_slice_card(j, heading, rows):
     prints here has no place in a document."""
     if not rows:
         return ""
-    body = ""
+    body, partial = "", False
     for value, s in rows:
+        partial = partial or s.measured != s.trades
         shown = pair(value) if heading == "By pair" else esc(value)
         wr = f"{s.wr:.1f}%" if s.decided else "-"
         body += (f'<tr><td>{shown}</td><td class="num">{s.trades}</td>'
                  f'<td class="num">{wr}</td>'
                  f'<td class="num {r_class(s.sum_r)}">{r_or_dash(s.sum_r)}</td>'
                  f'<td class="num">{r_or_dash(s.average_r)}</td></tr>')
+    # EV is worked out over the trades whose R could be measured (invariant 4),
+    # so a card with a row that holds others says so under the table
+    note = ('<p class="muted">EV is worked out over the trades with a measured R, '
+            'which is not every closed trade here.</p>' if partial else "")
     return (f'<div class="card"><h2>{esc(heading)}</h2>'
             f'<table><thead><tr><th></th><th class="num">trades</th>'
             f'<th class="num">WR</th><th class="num">Σ R</th>'
             f'<th class="num">EV</th></tr></thead><tbody>{body}</tbody>'
-            f'</table></div>')
+            f'</table>{note}</div>')
 
 
 def slices(j, trades):

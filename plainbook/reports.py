@@ -10,6 +10,7 @@ and the place the owner's "Conclusions" live; that section is NEVER overwritten.
 """
 import os
 import re
+import shutil
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timedelta
 
@@ -56,7 +57,10 @@ def kind_of(period):
 def previous_period(period):
     """'2026-08' -> '2026-07', '2026-Q1' -> '2025-Q4'. The one to compare with."""
     start, _, _ = parse_period(period)
-    return period_of(start - timedelta(days=1), kind_of(period))
+    try:
+        return period_of(start - timedelta(days=1), kind_of(period))
+    except OverflowError:                 # the first period a date can hold
+        raise ValueError(f"there is no period before {period!r}")
 
 
 def next_period(period):
@@ -574,6 +578,7 @@ def build(root, journal, period, conclusions=None, problems=None):
             "updated": datetime.now().strftime("%Y-%m-%d %H:%M")}
     file = path(root, period)
     os.makedirs(os.path.dirname(file), exist_ok=True)
+    _keep_undecodable(file)
     tmp = file + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(mdfile.dump(head, to_markdown(r, journal, text)))
@@ -581,9 +586,24 @@ def build(root, journal, period, conclusions=None, problems=None):
     return file
 
 
+def _keep_undecodable(file):
+    """The conclusions of a file that is not UTF-8 were read with their bad
+    bytes replaced, and the rebuild writes that text back: the original is
+    copied beside it first, once, so nothing the owner typed is lost."""
+    if not os.path.isfile(file) or os.path.exists(file + ".bak"):
+        return
+    with open(file, "rb") as f:
+        raw = f.read()
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        shutil.copy2(file, file + ".bak")
+
+
 def is_period(period):
     try:
         parse_period(period)
+        previous_period(period)           # every report is set beside the one before
     except ValueError:
         return False
     return True
@@ -600,15 +620,26 @@ def existing(root):
     return sorted(names, reverse=True)
 
 
-def read(root, period):
+def read(root, period, problems=None):
     """The header and the body of a report file, or (None, None) when there is
     none. A header edited by hand into something mdfile cannot read gives an
-    empty header and the whole text as the body, so the page still opens."""
+    empty header and the whole text as the body, so the page still opens. A
+    file that is not UTF-8 (a text pasted from a program that saved it in
+    another code page) is read with its unreadable bytes replaced, so the
+    shelf still draws, and named in `problems` when the caller keeps a list."""
     file = path(root, period)
     if not os.path.exists(file):
         return None, None
-    with open(file, encoding="utf-8") as f:
-        text = f.read()
+    with open(file, "rb") as f:
+        raw = f.read()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("utf-8", errors="replace")
+        if problems is not None:
+            problems.append((f"{store.JOURNAL}/{store.REPORTS}/{period}.md",
+                             "the file is not UTF-8, shown with its unreadable "
+                             "characters replaced"))
     try:
         return mdfile.parse(text)
     except ValueError:
@@ -631,6 +662,7 @@ def periods(journal, kind, now=None):
         first, last = last, first
     out, p = [], first
     while p <= last and len(out) < 600:
-        out.append(p)
+        if is_period(p):                  # a trade closed in year 1 has no report to compare
+            out.append(p)
         p = next_period(p)
     return out

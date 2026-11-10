@@ -23,6 +23,7 @@ called break-even still paid its commission, and that small R is real.
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import NamedTuple
 
 from . import store
 
@@ -84,6 +85,12 @@ class Journal:
                 b += ledger.before(t)
             risk_money = b * (t.risk or 0.0) / 100.0
             r = None
+            if not t.is_open and t.closed is None:
+                # its PnL is in the balance and in no figure measured by a
+                # date; old files must still load, so it is named, not refused
+                self.problems.append((
+                    f"{store.JOURNAL}/{store.TRADES}/{t.id}/{store.TRADE_FILE}",
+                    "closed with no exit date: add `exit:`"))
             if not t.is_open:
                 if risk_money <= 0:
                     # R against a balance of nothing or less means nothing
@@ -220,13 +227,39 @@ class Journal:
             (lambda m: m.astimezone().replace(tzinfo=None))
         return back(start), back(end), found
 
+    def base(self, account_id):
+        """What the rules of a prop firm are measured from: the start balance
+        and the deposits dated on or before the first trade of the account,
+        or every deposit while it has none. An account opened at 0 and funded
+        by a deposit is measured from that deposit; money moved in or out
+        once trading began moves nothing."""
+        first = next((t.opened for t in self.trades
+                      if t.account == account_id and t.opened), None)
+        return self._start(account_id) + sum(
+            c.amount for c in self.adjustments
+            if c.account == account_id and c.kind == "deposit" and c.day
+            and (first is None or c.day.date() <= first.date()))
+
+    def daily_limit(self, account_id):
+        """The daily loss limit in money: as typed, or its percent of the base,
+        worked out on every load; None with no limit or nothing to take a
+        percent of yet."""
+        a = self.accounts[account_id]
+        if a.daily_loss_percent is None:
+            return a.daily_loss_limit
+        base = self.base(account_id)
+        return _cents(base * a.daily_loss_percent / 100.0) if base > 0 else None
+
     def prop(self, account_id, now=None):
         """Where a prop account stands against the rules of its firm, worked
-        out afresh from the journal: nothing of it is stored."""
+        out afresh from the journal: nothing of it is stored. Every sum is
+        taken to the cent, as the firm counts it: summed as floats, a day
+        that lost exactly the limit came out a hair short of it."""
         a = self.accounts[account_id]
         now = now or self.now()
         start, end, found = self.firm_day(a, now)
-        p = PropState(account=a, day_from=start, day_until=end, zone_found=found)
+        p = PropState(account=a, day_from=start, day_until=end, zone_found=found,
+                      daily_limit=self.daily_limit(account_id))
         # A date alone belongs to the firm's day that holds the middle of it
         # (start + 12h): for a day that starts at 17:00 that is the day it ends
         # on, so a loss dated the 7th is not "today" again after the new day
@@ -245,9 +278,10 @@ class Journal:
                           else c.day.date() == anchor)
                 if inside:
                     p.today += c.amount
-        p.at_risk = self.open_risk(account_id)
-        p.balance = self.balance(account_id)
-        p.made = self.result(account_id)
+        p.today = _cents(p.today)
+        p.at_risk = _cents(self.open_risk(account_id))
+        p.balance = _cents(self.balance(account_id))
+        p.made = _cents(self.result(account_id))
         # Trading days are the firm's days, not the calendar's: an entry
         # at 18:00 and one at 10:00 the next morning share a day that starts
         # at 17:00. An entry with no hour can only go by its date.
@@ -267,12 +301,13 @@ class Journal:
                 if e[2] == account_id:
                     running += e[3]
                     high = max(high, running)
-            floor = a.start_balance - a.max_loss
+            base = self.base(account_id)
+            floor = base - a.max_loss
             if a.max_loss_mode == "trailing":
                 floor = high - a.max_loss
             elif a.max_loss_mode == "trailing to start":
-                floor = min(high - a.max_loss, a.start_balance)
-            p.floor, p.high = floor, high
+                floor = min(high - a.max_loss, base)
+            p.floor, p.high = _cents(floor), _cents(high)
         return p
 
     def open_risk(self, account_id):
@@ -344,32 +379,52 @@ class PropState:
     days: int = 0                   # days with an entry
     floor: float = None             # the balance the account may not close under
     high: float = None              # the highest closed balance, for a trailing floor
+    daily_limit: float = None       # the daily loss limit in money, a percent worked out
+
+    @property
+    def daily(self):
+        """How much of the daily loss limit the firm's day has used, under the
+        two switches of the account. The line on Accounts, its colour,
+        `breached` and `passed` all read this, so one page cannot call the day
+        reached and every rule met at once.
+
+        With both switches on, the worst the day can still end on is what
+        closed today less what the open stops can take, so a profit closed
+        today makes room. `at_stops`: reached only with the open risk, the
+        closed result alone short of the limit."""
+        a = self.account
+        closed = self.today if a.daily_counts_closed else 0.0
+        risk = self.at_risk if a.daily_counts_open else 0.0
+        used = _cents(max(0.0, risk - closed))
+        lost = _cents(max(0.0, -closed))
+        limit = self.daily_limit
+        reached = limit is not None and used >= limit
+        return DailyUse(used, limit, reached, reached and lost < limit)
 
     @property
     def daily_used(self):
-        # the worst the day can still end on is what closed today less what
-        # the open stops can take, so a profit closed today makes room
-        return max(0.0, self.at_risk - self.today)
+        return self.daily.used
 
     @property
     def daily_left(self):
-        limit = self.account.daily_loss_limit
-        return None if limit is None else limit - self.daily_used
+        d = self.daily
+        return None if d.limit is None else _cents(d.limit - d.used)
 
     @property
     def floor_left(self):
         """How far the balance stands above the floor, and at the stops of
         the open trades."""
-        return None if self.floor is None else self.balance - self.floor
+        return None if self.floor is None else _cents(self.balance - self.floor)
 
     @property
     def floor_left_at_stops(self):
-        return None if self.floor is None else self.balance - self.at_risk - self.floor
+        return (None if self.floor is None
+                else _cents(self.balance - self.at_risk - self.floor))
 
     @property
     def target_left(self):
         target = self.account.profit_target
-        return None if target is None else max(0.0, target - self.made)
+        return None if target is None else max(0.0, _cents(target - self.made))
 
     @property
     def days_left(self):
@@ -378,19 +433,34 @@ class PropState:
 
     @property
     def breached(self):
-        """A rule broken: the day past its limit, or the balance on the floor."""
-        limit = self.account.daily_loss_limit
-        return ((limit is not None and max(0.0, -self.today) >= limit)
+        """A rule broken: the day past its limit by what is counted and
+        closed, or the balance on the floor. A limit reached only at the
+        stops of the open trades is not broken yet."""
+        d = self.daily
+        return ((d.reached and not d.at_stops)
                 or (self.floor is not None and self.balance <= self.floor))
 
     @property
     def passed(self):
-        """The target made, the days traded, no rule broken; None when the
-        firm sets no target."""
+        """The target made, the days traded, no rule broken and the day not
+        at its limit even at the stops; None when the firm sets no target."""
         if self.account.profit_target is None:
             return None
-        return (not self.breached and self.target_left == 0
-                and (self.days_left or 0) == 0)
+        return (not self.breached and not self.daily.reached
+                and self.target_left == 0 and (self.days_left or 0) == 0)
+
+
+class DailyUse(NamedTuple):
+    """The day against its loss limit; `limit` is None when there is none."""
+    used: float
+    limit: float
+    reached: bool
+    at_stops: bool
+
+
+def _cents(x):
+    """Money to the cent, as a firm counts it; -0.0 comes out as 0.0."""
+    return round(x, 2) + 0.0
 
 
 def _wall(moment, days, zone):

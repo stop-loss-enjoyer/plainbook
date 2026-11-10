@@ -30,7 +30,7 @@ HEADER = ["Name", "Account", "Pair", "Direction", "Style", "Date", "Result",
           "PnL", "Risk", "TF", "Idea", "Files", "Notion id", "Lessons"]
 ROWS = [
     ["Trade 1", "Bybit", "EUR/USD", "Long", "swing", "August 3, 2026 9:15 AM → August 4, 2026 6:00 PM",
-     "Win", "$1,250.50", "1%", "H4", "sweep of the high", "one.png (https://x/one.png)", "n1", "held it to the target"],
+     "Win", "$1250.50", "1%", "H4", "sweep of the high", "one.png (https://x/one.png)", "n1", "held it to the target"],
     ["Trade 2", "Bybit", "GBPUSD", "sell", "EMT", "2026-08-05 10:00", "Loss", "-300", "", "H1",
      "", "", "n2", ""],
     ["Trade 3", "FTMO 100k", "XAUUSD", "short", "EMT prop", "06.08.2026", "Break even", "", "0.5",

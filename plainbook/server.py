@@ -83,6 +83,13 @@ def js(x):
     return json.dumps(x).replace("<", "\\u003c")
 
 
+def confirm_ask(text):
+    """The confirm() call of a form's onsubmit. A record id may hold an
+    apostrophe, which ended the quoted text early and left the button dead;
+    JSON quotes it for the script and esc() for the attribute."""
+    return f"return confirm({esc(js(text))})"
+
+
 def amount(j, x, account=None, signed=False):
     """A sum of money with its currency: the account's own, or the one every
     account shares when the figure spans accounts. When they share none the
@@ -192,6 +199,13 @@ def lite():
 
 def lite_route(path):
     return lite() and path.startswith(LITE_HIDDEN_ROUTES)
+
+
+def routed_path(parts, path):
+    """The address the routes see, built from the pieces they are matched on:
+    a `%2F` that unquotes into a slash, or an empty piece between two, led to
+    the same page as the plain address and past the prefixes of Lite."""
+    return "/" + "/".join(parts) + ("/" if parts and path.endswith("/") else "")
 
 
 # What the journal answers after a form: the word travels in the address of the
@@ -493,7 +507,7 @@ def trade_cells(j, t):
     r = j.r(t.id)
     return [(esc(t.account), ""),
             (H.pair(t.pair), ""), (esc(t.direction), ""), (esc(t.style), ""),
-            (esc(t.entry_tf), ""), (f"{t.risk:g}%", "num"),
+            (esc(t.entry_tf), ""), (risk_text(t.risk), "num"),
             (esc(t.result or "open"), result_class(t)),
             (H.money(t.pnl, signed=True), f"num {result_class(t)}"),
             ("-" if r is None else f"{r:+.2f}", "num")]
@@ -669,13 +683,14 @@ def daily_limit_state(j, account, now=None):
     """How a prop account stands against the rules of its firm: (tile class,
     lines). A broker account has no rules and gets nothing.
 
-    A firm closes the account for a day that loses more than the limit, and
-    the loss it counts is the day's closed result, fees included, together
-    with whatever is still at risk in the market: the open risk is set
-    against that result, so a profit closed today makes room for it. The day is the firm's, from its hour on
-    its clock. Under it the floor of the most the account may lose, with the
+    A firm closes the account for a day that loses more than the limit. What
+    the day has used is `PropState.daily`, under the two switches of the
+    account: the closed result, fees included, the risk still in the market,
+    or both, the open risk then set against that result, so a profit closed
+    today makes room for it. The day is the firm's, from its hour on its
+    clock. Under it the floor of the most the account may lose, with the
     open risk taken off as well, the target, and the trading days. A tile
-    turns amber at four fifths of a limit and red once one is broken."""
+    turns amber at four fifths of a limit and red once one is reached."""
     if not account.has_rules:
         return "", ""
     p = j.prop(account.id, now)
@@ -686,18 +701,27 @@ def daily_limit_state(j, account, now=None):
         return 2 if used >= limit else 1 if used >= 0.8 * limit else 0
 
     worst = 0
-    limit = account.daily_loss_limit
-    if limit:
-        words = f"today {amount(j, p.today, a, signed=True)}"
-        if p.at_risk:
-            words += f", {amount(j, p.at_risk, a)} at risk in open trades"
-        secured = len(j.at_breakeven(a))
-        if secured:
-            words += f", {secured} at breakeven"
-        words += f" · limit {amount(j, limit, a)}"
-        step = level(p.daily_used, limit)
+    d = p.daily
+    if d.limit:
+        parts = []
+        if account.daily_counts_closed:
+            parts.append(f"today {amount(j, p.today, a, signed=True)}")
+        if account.daily_counts_open:
+            if p.at_risk:
+                parts.append(f"{amount(j, p.at_risk, a)} at risk in open trades")
+            elif not account.daily_counts_closed:
+                parts.append("nothing at risk in open trades")
+            secured = len(j.at_breakeven(a))
+            if secured:
+                parts.append(f"{secured} at breakeven")
+        words = (", ".join(parts) or "nothing counted") + f" · limit {amount(j, d.limit, a)}"
+        if account.daily_loss_percent is not None:
+            words += f" ({as_stored(account.daily_loss_percent)}%)"
+        step = level(d.used, d.limit)
         worst = max(worst, step)
-        if step == 2:
+        if d.at_stops:
+            words = "daily loss limit reached at the stops: " + words
+        elif d.reached:
             words = "daily loss limit reached: " + words
         lines.append(words)
     if p.floor is not None:
@@ -761,7 +785,7 @@ def open_positions(j):
         cells = [(f"{t.opened:%d.%m.%Y %H:%M}" if t.opened_time
                   else f"{t.opened:%d.%m.%Y}", ""), (esc(t.account), ""),
                  (H.pair(t.pair), ""), (esc(t.direction), ""), (esc(t.style), ""),
-                 (f"{t.risk:g}%", "num"),
+                 (risk_text(t.risk), "num"),
                  (breakeven_chip(t) if secured
                   else amount(j, j.computed[t.id].risk_money, t.account), "num")]
         rows += ("<tr>" + "".join(link_cell(f"/trade/{U(t.id)}", inner, cls)
@@ -1069,7 +1093,7 @@ def trade_page(trade_id, q):
               ("pair", H.pair(t.pair)), ("direction", t.direction),
               ("style", t.style),
               ("entry TF", t.entry_tf), ("execution", ", ".join(t.execution) or "-"),
-              ("risk", f"{t.risk:g}% = {amount(j, computed.risk_money, t.account)}"),
+              ("risk", f"{risk_text(t.risk)} = {amount(j, computed.risk_money, t.account)}"),
               ("balance at entry", amount(j, computed.balance_at_entry, t.account)),
               ("entry", f"{t.opened:%d.%m.%Y %H:%M}" if t.opened_time
                else f"{t.opened:%d.%m.%Y}"),
@@ -1156,6 +1180,10 @@ def trade_page(trade_id, q):
     # the selection of the front page rides on every button, so that a form
     # answered from here lands back on the list the trade was opened from
     keep = way_keep(q)
+    ask_delete = confirm_ask(f"Delete trade {t.id}? The folder moves to .trash."
+                             + kept_for_full(t.id))
+    ask_reopen = confirm_ask(f"Reopen trade {t.id}? The result and the PnL are "
+                             f"cleared, and the trade is open again.")
     updates, scripts = updates_card(t, keep)
     buttons = (f'<a class="btn" href="/share/trade/{U(t.id)}{keep}" '
                f'title="the trade as one file, to show another trader">Share</a>'
@@ -1164,17 +1192,13 @@ def trade_page(trade_id, q):
                   f'side and the R">Card</a>' if share.card_ready(j, t) else "")
                + f'<a class="btn" href="/edit/{U(t.id)}{keep}">Edit</a>'
                f'<form method="post" action="/trade/{U(t.id)}/delete{keep}" '
-               f'style="display:inline" onsubmit="return confirm('
-               f'\'Delete trade {esc(t.id)}? The folder moves to .trash.'
-               f'{esc(kept_for_full(t.id))}\')">'
+               f'style="display:inline" onsubmit="{ask_delete}">'
                f'<button class="btn danger">Delete</button></form>')
     if not t.is_open:
         # the way back from a close made by mistake, as Risk back is from
         # Breakeven: without it the trade had to be deleted and written again
         buttons = (f'<form method="post" action="/trade/{U(t.id)}/reopen{keep}" '
-                   f'style="display:inline" onsubmit="return confirm('
-                   f'\'Reopen trade {esc(t.id)}? The result and the PnL are '
-                   f'cleared, and the trade is open again.\')">'
+                   f'style="display:inline" onsubmit="{ask_reopen}">'
                    f'<button class="btn" title="a close made by mistake: the '
                    f'trade is open again">Reopen</button></form>' + buttons)
     if t.is_open:
@@ -1256,35 +1280,37 @@ def passport(j, t, now=None):
                      + f'<p class="caption">The shaded band is the risk the trade was '
                        f'sized for, the ticks the other closed trades of the account.</p>')
     # the time line: exact where both ends carry an hour, by the day otherwise
-    end = t.closed if not t.is_open else now
-    timed = t.opened_time and (t.closed_time if not t.is_open else True)
-    start = t.opened
-    total = (end - start).total_seconds()
-    if not timed:
-        start = datetime(t.opened.year, t.opened.month, t.opened.day)
-        end = datetime(end.year, end.month, end.day) + timedelta(days=1)
+    # a closed trade with no exit date has no time to draw (an old file loads)
+    if t.is_open or t.closed:
+        end = t.closed if not t.is_open else now
+        timed = t.opened_time and (t.closed_time if not t.is_open else True)
+        start = t.opened
         total = (end - start).total_seconds()
-    total = max(total, 60.0)
-    at = lambda moment: min(1.0, max(0.0, (moment - start).total_seconds() / total))
-    when = lambda moment, hour: f"{moment:%d.%m %H:%M}" if hour else f"{moment:%d.%m}"
-    marks = [(0.0, "entry", when(t.opened, t.opened_time), H.INK)]
-    spans = []
-    if t.breakeven is not None:
-        spans.append((0.0, at(t.breakeven), H.BAD))
-        spans.append((at(t.breakeven), 1.0, H.WARN))
-        marks.append((at(t.breakeven), "stop to entry", when(t.breakeven, True), H.WARN))
-    else:
-        spans.append((0.0, 1.0, H.BAD))
-    marks.append((1.0, "now" if t.is_open else "exit",
-                  when(end if t.is_open else t.closed, t.is_open or t.closed_time), colour))
-    hours = total / 3600
-    n = max(1, round(hours / 24))
-    words = (f"{held_words(hours)} in the market" if timed
-             else f"{n} day{'' if n == 1 else 's'} in the market, the hours not written")
-    if t.breakeven is not None and timed:
-        words += f", {held_words((t.breakeven - t.opened).total_seconds() / 3600)} of it at risk"
-    parts.append(f'<h3>{"In the market" if not t.is_open else "In the market so far"} '
-                 f'<span class="muted">{esc(words)}</span></h3>' + H.hold_svg(marks, spans))
+        if not timed:
+            start = datetime(t.opened.year, t.opened.month, t.opened.day)
+            end = datetime(end.year, end.month, end.day) + timedelta(days=1)
+            total = (end - start).total_seconds()
+        total = max(total, 60.0)
+        at = lambda moment: min(1.0, max(0.0, (moment - start).total_seconds() / total))
+        when = lambda moment, hour: f"{moment:%d.%m %H:%M}" if hour else f"{moment:%d.%m}"
+        marks = [(0.0, "entry", when(t.opened, t.opened_time), H.INK)]
+        spans = []
+        if t.breakeven is not None:
+            spans.append((0.0, at(t.breakeven), H.BAD))
+            spans.append((at(t.breakeven), 1.0, H.WARN))
+            marks.append((at(t.breakeven), "stop to entry", when(t.breakeven, True), H.WARN))
+        else:
+            spans.append((0.0, 1.0, H.BAD))
+        marks.append((1.0, "now" if t.is_open else "exit",
+                      when(end if t.is_open else t.closed, t.is_open or t.closed_time), colour))
+        hours = total / 3600
+        n = max(1, round(hours / 24))
+        words = (f"{held_words(hours)} in the market" if timed
+                 else f"{n} day{'' if n == 1 else 's'} in the market, the hours not written")
+        if t.breakeven is not None and timed:
+            words += f", {held_words((t.breakeven - t.opened).total_seconds() / 3600)} of it at risk"
+        parts.append(f'<h3>{"In the market" if not t.is_open else "In the market so far"} '
+                     f'<span class="muted">{esc(words)}</span></h3>' + H.hold_svg(marks, spans))
     # the curve of the account, drawn the way the Statistics tab draws it:
     # the scale of the balance, the dates, the wash against the start, the
     # tip under the pointer; the entry and the exit of this trade marked on it
@@ -1748,10 +1774,14 @@ def payoff_tile(j, trades, s, rest, money=None):
     """How many R a win brings for every R a loss costs. A ratio carries no
     sign: whether it is enough is what the winrate needed beside it says."""
     if s.payoff is None:
-        if s.wins and s.losses:
-            # a win closed under zero after commission is a real record, and
-            # a ratio of it would carry the wrong sign
+        # a win closed under zero after commission is a real record, and a
+        # ratio of it would carry the wrong sign; a win or a loss whose R
+        # could not be measured has no average to name
+        if s.average_win is not None and s.average_win <= 0:
             return tile("payoff", "-", f"a win came back at {s.average_win:+.2f} R "
+                        f"on average", "muted")
+        if s.average_loss is not None and s.average_loss >= 0:
+            return tile("payoff", "-", f"a loss came back at {s.average_loss:+.2f} R "
                         f"on average", "muted")
         return tile("payoff", "-", "no win and loss to weigh", "muted")
     won = (f'<span class="win">{s.average_win:+.2f} R</span> won against '
@@ -3384,7 +3414,11 @@ function balance_of(account){
   const h = histories[account];
   if (!h) return NaN;
   const entry = (document.querySelector('[name=entry]') || {}).value || '';
-  const day = entry.slice(0, 10), timed = entry !== '' && !entry.endsWith('T00:00');
+  // the server goes by the box when the form has one, so 00:00 with the box
+  // left alone is an hour that is known
+  const unknown = document.querySelector('[name=entry_unknown]');
+  const day = entry.slice(0, 10), timed = entry !== '' &&
+    (unknown ? !unknown.checked : !entry.endsWith('T00:00'));
   let b = h.start;
   for (const [moment, adjustment, hour, amount] of h.events) {
     const on = moment.slice(0, 10);
@@ -3410,9 +3444,24 @@ function risk_percent(input, account){
   const p = risk_parts(input.value);
   if (!p) return NaN;
   if (!p.money) return p.number;
-  return balances[account] > 0 ? round_percent(p.number / balances[account] * 100) : NaN;
+  return balances[account] > 0 ? money_percent(p.number, balances[account]) : NaN;
 }
-function round_percent(x){ return Math.round((x + Number.EPSILON) * 100) / 100; }
+// mirrors money_to_percent: the fewest decimals, two at least, that bring the
+// money back to the cent, the half rounded up on the decimal digits
+function half_up(x, places){
+  const f = 10 ** places;
+  return Math.round(Number((x * f).toPrecision(15))) / f;
+}
+function money_percent(money, balance){
+  const cents = half_up(money, 2), exact = money / balance * 100;
+  let p = exact;
+  for (let places = 2; places <= 10; places++) {
+    p = half_up(exact, places);
+    if (half_up(balance * p / 100, 2) === cents) break;
+  }
+  return p;
+}
+function round_percent(x){ return half_up(x, 10); }
 function money_text(x, account){
   const digits = String(Math.round(x)).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ');
   return (digits + ' ' + (signs[account] || '')).trim();
@@ -3436,6 +3485,8 @@ function show_risks(){
 document.querySelector('[name=risk]').addEventListener('input', show_risks);
 document.querySelector('[name=account]').addEventListener('change', show_risks);
 document.querySelector('[name=entry]').addEventListener('input', show_risks);
+const unknown_box = document.querySelector('[name=entry_unknown]');
+if (unknown_box) unknown_box.addEventListener('change', show_risks);
 document.querySelectorAll('[name^=dup_risk_]').forEach(input =>
   input.addEventListener('input', show_risks));
 show_risks();
@@ -3647,7 +3698,7 @@ def close_form(t, token, keep="", back=""):
 {'<input type="hidden" name="back" value="/">' if back == "/" else ""}
 <div class="card"><h2>Close trade {esc(t.id)}</h2>
 {outcome_fields(t)}
-<p class="caption">Risk was {t.risk:g}% = {amount(journal(), journal().computed[t.id].risk_money, t.account)}.
+<p class="caption">Risk was {risk_text(t.risk)} = {amount(journal(), journal().computed[t.id].risk_money, t.account)}.
 R is calculated automatically.</p></div>
 {"" if lite() else exit_checklist(t)}
 <div class="card"><h2>Exit moment</h2>
@@ -3822,7 +3873,11 @@ def place_shots(text, images, folder, moved):
 
 
 def drop_draft(token):
-    shutil.rmtree(draft_dir(token), ignore_errors=True)
+    # a form saved without its token (a script that never ran, a hand-made
+    # post) has no draft to sweep, and the record is already on the disk:
+    # raising here answered "Not saved" over a saved record
+    if _TOKEN.match(token or ""):
+        shutil.rmtree(draft_dir(token), ignore_errors=True)
 
 
 DRAFT_LIFETIME = 24 * 3600
@@ -4005,6 +4060,10 @@ def blocks_from_form(data):
     return blocks
 
 
+# the largest amount a form takes: two of them add up to a balance that
+# overflows to infinity and takes three pages with it
+FIGURE_LIMIT = 1e15
+
 # what a number is typed with besides its digits: the spaces a broker puts
 # between thousands (MT5 copies "1 234.56" with a narrow one), the minus of a
 # copied figure and the currency signs of the accounts
@@ -4014,17 +4073,25 @@ _GROUPING = str.maketrans("", "", " \u00a0\u202f\u2009'$€£¥₽")
 def figure(text, what="the number"):
     """A number typed into a form, or RecordError saying which field.
 
-    A comma alone is the decimal point, as in 12,5; beside a point it groups
-    thousands, as in 1,234.56. nan and inf read as numbers to Python and
-    would turn every sum of the journal into one of them."""
+    A comma alone is the decimal point, as in 12,5. A comma beside a point,
+    1,234.56 or 1.234,56, is refused: the owner writes digits without
+    separators, and guessing which of the two is the decimal point turned a
+    figure of another locale into a wrong one without a word. nan and inf
+    read as numbers to Python and would turn every sum of the journal into
+    one of them, and a figure above FIGURE_LIMIT would make a balance one."""
     raw = str(text).strip().translate(_GROUPING).replace("\u2212", "-")
-    raw = raw.replace(",", "") if "." in raw else raw.replace(",", ".")
+    if "," in raw and "." in raw:
+        raise RecordError(f"{what}: {text!r} has a comma and a point; type the "
+                          f"digits without separators of thousands, as 1234.56")
+    raw = raw.replace(",", ".")
     try:
         x = float(raw)
     except ValueError:
         x = None
     if x is None or not math.isfinite(x) or not re.search(r"\d", raw):
         raise RecordError(f"{what}: {text!r} is not a number")
+    if abs(x) > FIGURE_LIMIT:
+        raise RecordError(f"{what}: {text!r} is too large to be an amount")
     return x
 
 
@@ -4033,6 +4100,12 @@ def as_stored(x):
     it. `:g` keeps six digits, and a form saved back untouched would write
     the rounded figure over the owner's: 12345.67 came back as 12345.7."""
     return store._number_to_text(x)
+
+
+def risk_text(x):
+    """A risk percent as the trade holds it, to its last decimal: rounded for
+    the page, 0.02537 % of 100 000 would print beside a sum it is not."""
+    return f"{as_stored(x)}%"
 
 
 _RISK = re.compile(r"^([^\d.]*)(\d+(?:\.\d+)?|\.\d+)([^\d.]*)$")
@@ -4044,7 +4117,11 @@ def parse_risk(text, balance):
     it is turned into the percent of `balance`, since the percent is what
     a trade records and what R is measured by."""
     # \s covers U+00A0, U+202F and U+2009 too, as the JS hint does
-    raw = re.sub(r'\s+', '', text.strip()).replace(',', '.')
+    raw = re.sub(r'\s+', '', text.strip())
+    if "," in raw and "." in raw:
+        raise RecordError(f"the risk {text!r} has a comma and a point; type the "
+                          f"digits without separators of thousands, as 1234.56")
+    raw = raw.replace(',', '.')
     m = _RISK.match(raw)
     if not m:
         raise RecordError(f"the risk {text!r} is not a number")
@@ -4061,12 +4138,28 @@ def parse_risk(text, balance):
     return money_to_percent(number, balance)
 
 
+RISK_PLACES = range(2, 11)
+
+
 def money_to_percent(money, balance):
-    """The percent a sum makes of a balance, to two decimals, the half
-    rounded up: the built-in round goes to the even digit and works on the
-    binary float, so 100.5 of 10 000 would come out as 1.0, not 1.01."""
-    percent = Decimal(str(money)) / Decimal(str(balance)) * 100
-    return float(percent.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    """The percent a sum makes of a balance, in the fewest decimals, two at
+    least, that bring the sum back to the cent, the half rounded up.
+
+    Two decimals made 25 $ of 100 000 into 0.03 %, that is 30 $, and R came
+    out 17 % off. A fixed count is either too short for a big account or
+    noise in the file of a small one: four decimals hold the cent only up to
+    a balance of 10 000. The search stops at ten, enough for any balance
+    under ten billion. The built-in round goes to the even digit and works
+    on the binary float, so the quantizing is decimal."""
+    money, balance = Decimal(str(money)), Decimal(str(balance))
+    cents = money.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    exact = money / balance * 100
+    for places in RISK_PLACES:
+        percent = exact.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+        back = (balance * percent / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if back == cents:
+            break
+    return float(percent)
 
 
 def risk_base(j, t, was=""):
@@ -4078,10 +4171,11 @@ def risk_base(j, t, was=""):
     return j.balance_at(t.account, t.opened, t.opened_time, t.id)
 
 
-def build_trade(data, token, account="", risk=None, j=None):
-    """Writes one trade from the new trade form.
+def draft_trade(data, token, account="", risk=None, j=None):
+    """One trade read from the new trade form and checked, nothing written.
+    Returns the trade and the screenshot zones to write with it.
 
-    The duplicate is written through here as well, with an account and a risk
+    The duplicate is read through here as well, with an account and a risk
     of its own; everything else it reads from the same form."""
     entry = datetime.strptime(one(data, "entry"), "%Y-%m-%dT%H:%M")
     pair = one(data, "pair").upper() or PAIR_NOT_SET
@@ -4100,11 +4194,33 @@ def build_trade(data, token, account="", risk=None, j=None):
         zones[f"idea-{len(t.idea)+1}"] = [p for p in paths if os.path.exists(p)]
         t.idea.append(block)
     t.check()
+    return t, zones
+
+
+def write_trade(t, zones):
     names = apply_shots(store.trade_dir(ROOT, t.id), zones)
     for i, block in enumerate(t.idea, 1):
         block.images = names.get(f"idea-{i}", [])
     store.save_trade(ROOT, t)
     return t
+
+
+def build_trade(data, token, account="", risk=None, j=None):
+    """Writes one trade from the new trade form."""
+    return write_trade(*draft_trade(data, token, account, risk, j))
+
+
+def vet_twins(data, t, twins, j):
+    """The risk of every copy worked out and the copy checked, before the
+    trade itself is written: a copy refused after the trade was saved left
+    the owner looking at "Not saved" over a trade that was, and a second
+    try wrote it twice. Returns the risk of each account."""
+    risks = {a: dup_risk(data, a, t, j) for a in twins}
+    for a, risk in risks.items():
+        probe = copy.copy(t)
+        probe.account, probe.risk = a, risk
+        probe.check()
+    return risks
 
 
 def create_trade(data):
@@ -4118,9 +4234,11 @@ def create_trade(data):
     # copy written first does not move the balance the next one is sized on
     j = journal(True)
     twins = ticked_accounts(data, one(data, "account"))
-    t = build_trade(data, token, j=j)
+    t, zones = draft_trade(data, token, j=j)
+    risks = vet_twins(data, t, twins, j)
+    write_trade(t, zones)
     for a in twins:
-        build_trade(data, token, account=a, risk=dup_risk(data, a, t, j), j=j)
+        build_trade(data, token, account=a, risk=risks[a], j=j)
     drop_draft(token)
     drop_cache()
     return t
@@ -4195,6 +4313,8 @@ def edit_trade(t, data, j=None):
     # checked before anything on the disk moves: a folder renamed for a record
     # that is then refused would be a folder whose file names another id
     t.check()
+    # a copy refused must be refused before the trade is written
+    risks = vet_twins(data, t, twins, j or journal())
     # the folder is named after the day and the pair, so it follows them
     if not store.id_fits(t):
         old_id = t.id
@@ -4244,8 +4364,7 @@ def edit_trade(t, data, j=None):
                                       folder, moved))
     t.updates = place_shots(t.updates, names.get("update", []), folder, moved)
     store.save_trade(ROOT, t)
-    copies = [copy_trade(t, a, dup_risk(data, a, t, j))
-              for a in twins if t.is_open]
+    copies = [copy_trade(t, a, risks[a]) for a in twins if t.is_open]
     drop_draft(token)
     drop_cache()
     return copies
@@ -4388,6 +4507,9 @@ def with_shots(text, base):
 
 def plan_title(plan_id):
     """The name of a plan for a link. A plan deleted later leaves its id."""
+    # the id comes out of a trade's header, and a path is built from it
+    if not store.safe_dir_name(plan_id):
+        return plan_id
     try:
         return store.load_plan(ROOT, plan_id).label
     except (OSError, ValueError):
@@ -4643,13 +4765,13 @@ def plan_page(plan_id):
                      f'<div class="actions"><button class="btn danger">'
                      f'Void</button></div></form></div>')
         void_button = f'<a class="btn danger" href="#void">Void</a>'
+    ask_delete = confirm_ask(f"Delete plan {k.id}? The folder moves to .trash.")
     buttons = (f'<a class="btn" href="/share/plan/{U(k.id)}" '
                f'title="the plan as one file, to show another trader">Share</a>'
                f'<a class="btn" href="/plan/{U(k.id)}/edit">Edit</a>'
                f'{void_button}'
                f'<form method="post" action="/plan/{U(k.id)}/delete" '
-               f'style="display:inline" onsubmit="return confirm('
-               f'\'Delete plan {esc(k.id)}? The folder moves to .trash.\')">'
+               f'style="display:inline" onsubmit="{ask_delete}">'
                f'<button class="btn danger">Delete</button></form>')
     top = ("is-void" if k.voided else
            "is-open" if k.covers(journal().now()) else "")
@@ -5078,14 +5200,14 @@ def note_page(note_id):
         facts.append(str(note_pairs(examples)))
     facts_line = " · ".join(facts + [examples_line(j, examples)])
     pin = ("unpin", "Unpin") if n.pinned else ("pin", "Pin")
+    ask_delete = confirm_ask(f"Delete note {n.id}? The folder moves to .trash.")
     dated = ("still-true", "Still true") if n.outdated else ("outdated", "Mark outdated")
     buttons = (f'<a class="btn" href="/note/{U(n.id)}/edit">Edit</a>'
                + "".join(f'<form method="post" action="/note/{U(n.id)}/{route}" '
                          f'style="display:inline"><button class="btn">{word}</button></form>'
                          for route, word in (pin, dated))
                + f'<form method="post" action="/note/{U(n.id)}/delete" '
-               f'style="display:inline" onsubmit="return confirm('
-               f'\'Delete note {esc(n.id)}? The folder moves to .trash.\')">'
+               f'style="display:inline" onsubmit="{ask_delete}">'
                f'<button class="btn danger">Delete</button></form>')
     body = (f'<div class="card"><h2>{esc(n.title)}</h2>'
             f'<p class="caption">{facts_line}</p>{old}{lead}{contents}{text}</div>'
@@ -5636,10 +5758,10 @@ def playbook_page(playbook_id):
                     f'<p class="caption">The rules as they were before each '
                     f'revision. A trade opened under one of them is shown these, '
                     f'not the current ones.</p></div>')
+    ask_delete = confirm_ask(f"Delete playbook {p.id}? The folder moves to .trash.")
     buttons = (f'<a class="btn" href="/playbook/{U(p.id)}/edit">Edit</a>'
                f'<form method="post" action="/playbook/{U(p.id)}/delete" '
-               f'style="display:inline" onsubmit="return confirm('
-               f'\'Delete playbook {esc(p.id)}? The folder moves to .trash.\')">'
+               f'style="display:inline" onsubmit="{ask_delete}">'
                f'<button class="btn danger">Delete</button></form>')
     return page(playbook_label(p),
                 head + setups_card(j, p, trades) + rule_costs_card(j, p, trades)
@@ -5684,6 +5806,9 @@ def rule_pairs(data, name):
     for short, detail in zip(shorts, details):
         short = short.replace("**", "")     # the file marks the few words in bold
         short = " ".join(re.sub(r"^\s*[-*]?\s*(\[[ xX]?\])?\s*", "", short).split())
+        # the file wraps the words in ** and a star left at an end of them
+        # would join the pair and be read as part of the markup on the next load
+        short = short.strip("*").strip()
         detail = " ".join(detail.split())
         if not short and detail:
             short, detail = detail, ""
@@ -5976,6 +6101,11 @@ def playbook_from_form(data, p):
         what = (names[i] if kind == "other" and i < len(names) else kind).strip()
         value = (values[i] if i < len(values) else "").strip()
         if what and what != "other" and value:
+            # the file reads a limit as name: value, so a colon in a name moves
+            # its tail into the value on the next load
+            if ":" in what:
+                raise RecordError(f"limit {what!r}: a name takes no colon, "
+                                  f"the colon stands between the name and the value")
             p.limits.append((what, value))
     p.sections = []
     notes = one(data, "notes").replace("\r", "").strip()
@@ -6613,8 +6743,11 @@ def cards_page(q=None):
     # a card dated where no quarter of the calendar reaches, a year typed
     # wrong, is still named, or it could not be found again
     lost = [k for k in cards if not 1900 <= k.day.year <= 8999]
+    # the same window for the week cards and the entries, or one mistyped
+    # year of a trade draws a link for every year between it and today
     held = [k.day.date() for k in cards if k not in lost]
     held += [k.monday.date() for k in weeks] + list(entered)
+    held = [d for d in held if 1900 <= d.year <= 8999]
     later = max([today] + held)
 
     # the years the journal holds a card or an entry in, then the four
@@ -7663,11 +7796,11 @@ def report_link(period):
 def report_page(period):
     if not reports.is_period(period):
         return None
-    head, body = reports.read(ROOT, period)
+    problems = []
+    head, body = reports.read(ROOT, period, problems)
     if body is None:
         return None
     j = journal()
-    problems = []
     r = reports.compose(ROOT, j, period, problems)
     ready = set(reports.existing(ROOT))
     text = reports.conclusions_of(body)
@@ -7731,10 +7864,10 @@ def shelf_cells(j, r):
             f'<td class="num{"" if r.cards else " muted"}">{cards}</td>')
 
 
-def report_cell(period, ready, lead):
+def report_cell(period, ready, lead, problems=None):
     """Whether the report stands: the way to it, or the button that makes it."""
     if period in ready:
-        head, body = reports.read(ROOT, period)
+        head, body = reports.read(ROOT, period, problems)
         written = bool(reports.conclusions_of(body))
         built = (head or {}).get("updated", "")
         built = built[:10] if isinstance(built, str) else ""
@@ -7804,13 +7937,13 @@ def reports_page():
             start, end, _ = reports.parse_period(q)
             span = (f"{reports.MONTH_NAMES[start.month - 1][:3]} to "
                     f"{reports.MONTH_NAMES[end.month - 2][:3]}")
-            cell = (report_cell(q, ready, q == due)
+            cell = (report_cell(q, ready, q == due, problems)
                     if composed[q].trades or q in ready else "<td></td>")
             rows += (f'<tr class="quarter"><td>{name_cell(q)}'
                      f'<span class="muted" style="margin-left:8px">{span}</span></td>'
                      f'{shelf_cells(j, composed[q])}{cell}</tr>')
             for m in sorted(months_of.get(q, ()), reverse=True):
-                cell = (report_cell(m, ready, m == due)
+                cell = (report_cell(m, ready, m == due, problems)
                         if composed[m].trades or m in ready else "<td></td>")
                 rows += (f'<tr class="sub"><td>{name_cell(m)}</td>'
                          f'{shelf_cells(j, composed[m])}{cell}</tr>')
@@ -7840,7 +7973,7 @@ def reports_page():
                  f'<p class="caption">A square a day, by the exit: green made R, red lost '
                  f'it, amber came out at zero, and the brighter the square the more. '
                  f'Point at a day for its trades, its R and its money.</p></div>')
-    return page("Reports", body, "reports", problems=problems)
+    return page("Reports", body, "reports", problems=sorted(set(problems)))
 
 
 # --- accounts and pairs ----------------------------------------------------
@@ -8249,6 +8382,11 @@ def create_account(data):
         raise RecordError("account id: that name is reserved on Windows")
     if account_id in journal(True).accounts:
         raise RecordError(f"account {account_id} already exists")
+    # a file that does not read is not among the accounts, and a save would
+    # write over it
+    if store.account_taken(ROOT, account_id):
+        raise RecordError(f"account {account_id} already has a file that does "
+                          f"not read; see the problem on the page")
     kind = one(data, "kind") or "broker"
     currency = account_currency(one(data, "currency", "USD"))
     store.save_account(ROOT, Account(
@@ -8266,23 +8404,51 @@ ZONES = ["Europe/Prague", "Europe/London", "Europe/Moscow", "America/New_York",
          "America/Chicago", "Asia/Dubai", "Asia/Tokyo", "Australia/Sydney", "UTC"]
 
 
-def rule_money(text, start, what):
-    """A rule typed as money, or as a percent of the start balance: `5%` of
-    a 100 000 account is 5 000. Empty is no rule."""
+def rule_money(text, base, what):
+    """A rule typed as money, or as a percent of the base the rules are
+    measured from (`Journal.base`): `5%` of a 100 000 account is 5 000.
+    Empty is no rule."""
     text = (text or "").strip()
     if not text:
         return None
     if text.endswith("%"):
-        return round(figure(text[:-1], what) * start / 100.0, 2)
+        if base <= 0:
+            raise RecordError(f"{what}: a percent needs a balance to be taken "
+                              f"of; add the deposit first, or type the sum")
+        return round(figure(text[:-1], what) * base / 100.0, 2)
     return figure(text, what)
+
+
+def daily_rule(text):
+    """The daily loss limit as typed: (money, percent), one of them None. A
+    percent is kept as a percent, and its money is worked out on every load
+    from the base, which a deposit before the first trade still moves."""
+    text = (text or "").strip()
+    if not text:
+        return None, None
+    if text.endswith("%"):
+        return None, figure(text[:-1], "daily loss limit")
+    return figure(text, "daily loss limit"), None
+
+
+# what the daily loss limit leaves out, said after it in the line of rules
+DAILY_COUNTS = {(True, False): "closed result only", (False, True): "open risk only",
+                (False, False): "counts nothing"}
 
 
 def rules_summary(j, account):
     """A prop account's rules in one line, for the table of accounts."""
     a = account.id
     bits = []
-    if account.daily_loss_limit:
-        bits.append(f"daily {amount(j, account.daily_loss_limit, a)}")
+    limit = j.daily_limit(a)
+    if account.daily_loss_limit or account.daily_loss_percent:
+        bit = f"daily {amount(j, limit, a)}"
+        if account.daily_loss_percent is not None:
+            bit = f"daily {as_stored(account.daily_loss_percent)}%" + (
+                f" = {amount(j, limit, a)}" if limit else "")
+        left_out = DAILY_COUNTS.get((account.daily_counts_closed,
+                                     account.daily_counts_open))
+        bits.append(bit + (f" ({left_out})" if left_out else ""))
     if account.max_loss:
         bits.append(f"max loss {amount(j, account.max_loss, a)} {account.max_loss_mode}")
     if account.profit_target:
@@ -8311,16 +8477,25 @@ def rules_page(account_id):
     if account is None:
         return None
     a = account_id
-    start = account.start_balance
+    base = j.base(a)
 
-    def money_field(name, label, value, hint):
+    def money_field(name, label, value, hint, percent=None):
         shown = as_stored(value)
-        share = (f' <span class="caption">{100.0 * value / start:.2f}% of the start</span>'
-                 if value is not None and start else "")
+        share = (f' <span class="caption">{100.0 * value / base:.2f}% of the start</span>'
+                 if value is not None and base > 0 else "")
+        if percent is not None:
+            shown = f"{as_stored(percent)}%"
+            share = (f' <span class="caption">{amount(j, base * percent / 100.0, a)}</span>'
+                     if base > 0 else "")
         return (f'<div class="field"><label>{label}</label><input type="text" '
                 f'name="{name}" value="{shown}" placeholder="{hint}" '
                 f'inputmode="decimal" style="width:150px">{share}</div>')
 
+    def counts(name, on, words):
+        return (f'<label class="caption opt"><input type="checkbox" name="{name}" '
+                f'value="1"{" checked" if on else ""}> {words}</label>')
+    start_words = ("the start balance" if base == account.start_balance else
+                   "the start balance and the deposits up to the first trade")
     zones = "".join(f'<option value="{z}">' for z in ZONES)
     body = f"""<form method="post" action="/account/{U(a)}/rules">
 <div class="card"><h2>{esc(account.name or a)}: the account and its rules</h2>
@@ -8337,20 +8512,27 @@ def rules_page(account_id):
 account is held against the rules of its firm below. Every firm writes its own,
 and a challenge, a verification and a funded account of one firm often differ:
 copy them from the firm's page for this account. A sum is money, or a percent of
-the start balance ({amount(j, start, a)}): <code>5%</code> is
-{amount(j, start * 0.05, a)}. Leave a field empty for a rule the firm does not
+{start_words} ({amount(j, base, a)}): <code>5%</code> is
+{amount(j, base * 0.05, a)}. Leave a field empty for a rule the firm does not
 have.</p></div>
 
 <div class="card"><h2>Loss limits</h2>
 <div class="fields">
-{money_field("daily", "daily loss limit", account.daily_loss_limit, "5% or 5000")}
+{money_field("daily", "daily loss limit", account.daily_loss_limit, "5% or 5000",
+             account.daily_loss_percent)}
 {money_field("max", "max loss", account.max_loss, "10% or 10000")}
 <div class="field"><label>max loss is measured</label>{select("mode", list(MAX_LOSS_MODES), account.max_loss_mode)}</div>
 </div>
-<p class="caption"><b>Daily loss limit</b>: the most one day of the firm may lose,
-the trades closed that day and the fees charged on it, with what the open trades
-still put at risk at their stops set against that result: a profit closed today
-makes room for the open risk. <b>Max loss</b>: the most the account may lose at all.
+<p class="caption" style="margin:8px 0 0">the daily loss limit counts:
+<input type="hidden" name="daily_counts" value="1">
+{counts("daily_closed", account.daily_counts_closed, "the closed result of the day")}
+{counts("daily_open", account.daily_counts_open, "the risk of open trades")}</p>
+<p class="caption"><b>Daily loss limit</b>: the most one day of the firm may lose.
+Ticked as both, it counts the trades closed that day and the fees charged on it,
+with what the open trades still put at risk at their stops set against that
+result: a profit closed today makes room for the open risk. Untick what your firm
+does not count. A percent stays a percent and its money is worked out on every
+look. <b>Max loss</b>: the most the account may lose at all.
 <i>static</i> puts the floor at the start balance less the max loss, and it never
 moves; <i>trailing</i> puts it under the highest balance the account has closed
 at, so it follows every new high; <i>trailing to start</i> follows the highs
@@ -8389,17 +8571,27 @@ def save_rules(account_id, data):
     account = j.accounts.get(account_id)
     if account is None:
         raise RecordError("no such account")
-    start = account.start_balance
+    base = j.base(account_id)
     # checked before anything is assigned: a refused form changes nothing
     currency = account_currency(one(data, "currency") or account.currency)
+    daily = daily_rule(one(data, "daily"))
+    # the boxes send nothing when unticked, so the marker says the form drew
+    # them (invariant 14); a form without it leaves both as they are
+    counts = (account.daily_counts_closed, account.daily_counts_open)
+    if "daily_counts" in data:
+        counts = (bool(one(data, "daily_closed")), bool(one(data, "daily_open")))
+        if daily != (None, None) and not any(counts):
+            raise RecordError("the daily loss limit counts the closed result, the "
+                              "open risk or both: tick at least one")
     account.name = one(data, "name").strip() or account_id
     account.currency = currency
     account.kind = one(data, "kind") or "broker"
     account.firm = one(data, "firm")
-    account.daily_loss_limit = rule_money(one(data, "daily"), start, "daily loss limit")
-    account.max_loss = rule_money(one(data, "max"), start, "max loss")
+    account.daily_loss_limit, account.daily_loss_percent = daily
+    account.daily_counts_closed, account.daily_counts_open = counts
+    account.max_loss = rule_money(one(data, "max"), base, "max loss")
     account.max_loss_mode = one(data, "mode") or "static"
-    account.profit_target = rule_money(one(data, "target"), start, "profit target")
+    account.profit_target = rule_money(one(data, "target"), base, "profit target")
     days = one(data, "days")
     account.min_days = int(figure(days, "min trading days")) if days else None
     account.day_start = one(data, "day_start") or "00:00"
@@ -8735,7 +8927,8 @@ def add_catalogue_pairs(data):
 
 def remove_pair(data):
     pair = one(data, "pair").upper()
-    store.save_pairs(ROOT, [p for p in store.all_pairs(ROOT) if p != pair])
+    # a pair written by hand in the file may be in lower case
+    store.save_pairs(ROOT, [p for p in store.all_pairs(ROOT) if p.strip().upper() != pair])
     return f"Pair {pair} removed from the suggestion list."
 
 
@@ -9390,8 +9583,10 @@ def U(s):
     return urllib.parse.quote(str(s), safe="")
 
 
-# the way back after a form: a path of this journal, no host, no control chars
-_BACK = re.compile(r'/(?![/\\])[^\s\\\x00-\x1f\x7f]*')
+# the way back after a form: a path of this journal, no host, printable ASCII
+# only (a Location header with other bytes cannot be sent: the redirect died
+# half way and the connection answered twice)
+_BACK = re.compile(r'/(?![/\\])[\x21-\x5b\x5d-\x7e]*')
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -9463,8 +9658,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # the word goes into the query, before an anchor
             where, mark, anchor = where.partition("#")
             where += ("&" if "?" in where else "?") + "said=" + U(said) + mark + anchor
-        if any(ord(c) < 0x20 or ord(c) == 0x7f for c in where):
-            where = "/"                        # no header splitting
+        if any(ord(c) < 0x20 or ord(c) >= 0x7f for c in where):
+            where = "/"                        # no header splitting, no bytes a header cannot carry
         self._started = True
         self.send_response(303)
         self.send_header("Location", where)
@@ -9495,6 +9690,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         with open(path, "rb") as f:
             self._send(f.read(), 200, kind, headers)
 
+    def _other_site(self):
+        """Whether a page of another site started this request: the browser
+        says so in Sec-Fetch-Site, and a typed address or a bookmark says none."""
+        return self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none")
+
     def _share(self, parts, q):
         """The document of a record: the preview to look at, or the file
         itself when Download asks for it."""
@@ -9524,6 +9724,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         name, text = made
         if (q.get("file") or [""])[0] != "1":
             return self._send(text)
+        if self._other_site():
+            return self._send("foreign origin", 403, "text/plain; charset=utf-8")
         return self._send(text, 200, "text/html; charset=utf-8",
                           [("Content-Disposition",
                             f'attachment; filename="{name}"')])
@@ -9698,7 +9900,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/turned-off" and not lite():
             # a tab left on the short page after Lite was switched off
             return self._go("/", SAID.text)
-        if path == "/turned-off" or lite_route(path):
+        if path == "/turned-off" or lite_route(routed_path(parts, path)):
             return self._send(turned_off_page())
         if path == "/":
             return self._send(home_page(q))
@@ -9715,7 +9917,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._file(shown) if shown else self._gone("no such picture")
         if path == "/backup" + backup.SUFFIX:
             # a page of another site may not start a download of the journal
-            if self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
+            if self._other_site():
                 return self._send("foreign origin", 403, "text/plain; charset=utf-8")
             return self._send_backup()
         if len(parts) == 2 and parts[0] == "restore":
@@ -9723,6 +9925,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(shown) if shown else self._gone(
                 "no such restore", "accounts", "/accounts")
         if path == "/export.csv":
+            # the records as a file: no more for another site than the backup
+            if self._other_site():
+                return self._send("foreign origin", 403, "text/plain; charset=utf-8")
             j = journal()
             stamp = datetime.now().strftime("%Y-%m-%d")
             # a period cut is by the exit, as on the Statistics tab it was
@@ -9881,9 +10086,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # a stale tab may still post a hidden form: the save is the owner's
         # data and a pasted screenshot is not asked for twice, so it goes
         # through and only the page that follows is the short one
-        LITE_OFF.hit = lite_route(path)
         q = urllib.parse.parse_qs(parsed.query)
         parts = [c for c in path.split("/") if c]
+        LITE_OFF.hit = lite_route(routed_path(parts, path))
         if path == "/backup/upload":
             # a backup is the size of the journal, so it goes to the disk as
             # it arrives instead of into memory under the limit of a form
@@ -10081,7 +10286,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # the one on the trade stays on the trade
                 back = "/" if one(data, "back") == "/" else f"/trade/{U(t.id)}{keep}"
                 return self._go(back, "Risk put back" if undo
-                                else f"Stop at breakeven, {t.risk:g}% freed")
+                                else f"Stop at breakeven, {risk_text(t.risk)} freed")
             if len(parts) == 3 and parts[0] == "trade" and parts[2] == "reopen":
                 t = next((x for x in journal(True).trades if x.id == parts[1]), None)
                 if t is None:

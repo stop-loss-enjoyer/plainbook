@@ -118,12 +118,12 @@ class ServerCase(unittest.TestCase):
 
     def test_01c_a_risk_typed_as_money_is_kept_as_a_percent(self):
         """150$ on a 10 000 account is 1.5%, and it is the percent the trade
-        records, since that is what R is measured by. Two decimals, the
-        half rounded up."""
+        records, since that is what R is measured by. The fewest decimals
+        that bring the money back to the cent."""
         for text, percent in [("150$", 1.5), ("$150", 1.5), ("150 usd", 1.5),
                               ("1,5", 1.5), ("1.5%", 1.5), ("0.5", 0.5),
-                              ("133$", 1.33), ("33.333$", 0.33),
-                              ("100.5$", 1.01), ("124.5$", 1.25)]:
+                              ("133$", 1.33), ("33.333$", 0.3333),
+                              ("100.5$", 1.005), ("124.5$", 1.245)]:
             self.assertEqual(self.S.parse_risk(text, 10000), percent, text)
         with self.assertRaises(self.S.RecordError):
             self.S.parse_risk("1.5.5", 10000)
@@ -157,9 +157,13 @@ class ServerCase(unittest.TestCase):
 
     def test_01d_numbers_are_read_the_way_a_broker_prints_them(self):
         for text, x in [("1 234,56", 1234.56), ("1\u202f234.56", 1234.56),
-                        ("1,234.56", 1234.56), ("\u2212250", -250.0),
+                        ("\u2212250", -250.0),
                         ("-12,5", -12.5), ("+300", 300.0), ("$150", 150.0)]:
             self.assertEqual(self.S.figure(text), x, text)
+        # a comma beside a point is not guessed at: the owner types digits
+        for text in ("1,234.56", "1.234,56"):
+            with self.assertRaises(self.S.RecordError, msg=text):
+                self.S.figure(text, "PnL")
         for text in ("nan", "inf", "-inf", "", "abc", "1.2.3"):
             with self.assertRaises(self.S.RecordError, msg=text):
                 self.S.figure(text, "PnL")
@@ -2339,8 +2343,9 @@ class ServerCase(unittest.TestCase):
             # has only with tzdata; the rules read the same without one
             "zone": "Europe/Prague" if store.zone("Europe/Prague") else ""})
         a = store.all_accounts(self.root)["prop-5k"]
-        self.assertEqual((a.daily_loss_limit, a.max_loss, a.profit_target, a.min_days),
-                         (250, 500, 400, 3))
+        # the daily limit keeps the percent typed, its money worked out on load
+        self.assertEqual((a.daily_loss_percent, a.max_loss, a.profit_target, a.min_days),
+                         (5, 500, 400, 3))
         self.assertEqual(a.max_loss_mode, "trailing")
         self.assertNotIn("floor 4 500 $", self.get("/")[1])
         _, html = self.get("/accounts")

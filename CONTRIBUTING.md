@@ -74,7 +74,7 @@ A fork is welcome for any of them.
     plainbook/__main__.py     python3 -m plainbook
     tools/check_public.py     the guard that keeps records out of the repository
     tools/check_journal.py    does every record in a journal read
-    tools/demo_journal.py     an invented journal for screenshots and for looking at a change
+    tools/demo_journal.py     an invented journal for screenshots and for looking at a change; it refuses a folder that already holds records unless `--force`
     tools/attach_playbook.py  ties the trades a playbook was already traded by to it
     tools/import_csv.py       old trades brought in from a CSV table
     tools/app_entry.py        the entry of the downloaded file

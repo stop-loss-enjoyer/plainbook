@@ -1,9 +1,9 @@
 # Plainbook
 
-**A plain-text trading journal that lives on your machine.** Free, local,
-private, and built to be kept by a coding agent. Your trades are markdown
-files and screenshots in a folder you own; there is no account, no cloud and
-no subscription. The whole source is in this repository, and it runs on
+**A free trading journal that lives on your machine.** Local, private,
+offline, and built to be kept by a coding agent. Your trades are plain
+markdown files and screenshots in a folder you own; there is no account, no
+cloud and no subscription. The whole source is in this repository, and it runs on
 Windows, macOS and Linux, for forex, futures, stocks and crypto alike.
 
 [![tests](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml/badge.svg)](https://github.com/stop-loss-enjoyer/plainbook/actions/workflows/tests.yml)
@@ -193,9 +193,10 @@ where every trade of the day gets its mark next to its result, the result
 offered by the journal. The PnL of the day is filled in from the trades you
 closed and stays yours to change. The weekly card does the same for a
 trading week, with the progress on the focus and the key lesson of the week.
-**+ DRC** and **+ WRC** in the header open them, and the **Cards** tab lays
-them out as a calendar of a quarter on one screen: every day with its card,
-the days you traded without one, and the weekly card at the end of its row.
+**+ DRC** and **+ WRC** in the header of the front page open them, and the
+**Cards** tab lays them out as a calendar of a quarter on one screen: every
+day with its card, the days you traded without one, and the weekly card at the
+end of its row.
 A written card opens to be read, and **Edit** turns it back into the form.
 
 ## Statistics
@@ -257,7 +258,9 @@ rules of its firm, and the journal keeps it against them:
 
 - the **daily loss limit**, counted on the firm's own day and clock
   (midnight in Prague, five in the afternoon in New York, or whatever the
-  firm uses), with the fees of the day and the risk still open at the stops;
+  firm uses), as money or as a percent, counting what the firm counts: the
+  closed result of the day with its fees, the risk still open at the stops,
+  or both;
 - the **max loss**, static from the start balance, trailing under the
   highest balance, or trailing until the floor reaches the start;
 - the **profit target** and the **minimum trading days**.
@@ -265,8 +268,9 @@ rules of its firm, and the journal keeps it against them:
 Every firm writes its own rules, and a challenge, a verification and a
 funded account often differ, so the journal ships with none of them: you
 copy yours from the firm's page, as money or as a percent of the start
-balance. The row of the account then says how much of the day is spent, how
-far the balance stands above the floor now and at the stops of the open
+balance (and of the deposits made before the first trade, for an account
+funded by a deposit). The row of the account then says how much of the day is
+spent, how far the balance stands above the floor now and at the stops of the open
 trades, how much of the target is made and how many trading days are done,
 in amber near a limit and in red once one is reached.
 
@@ -567,12 +571,12 @@ arrangement is the same one that makes the journal private and durable: plain
 files, no dependencies, a small surface. There is no package manager, no
 lockfile and no build step, so an agent that can run `python3` can run the
 whole project. The tests, more than five hundred of them with no fixtures
-and no network, finish in about twenty seconds. [AGENTS.md](AGENTS.md) holds
+and no network, finish in about half a minute. [AGENTS.md](AGENTS.md) holds
 the map of the code, the invariants that must not be broken, recipes for the
 usual tasks, and the traps that have already bitten this project, each with the reason it
 exists. A guard, `tools/check_public.py`, refuses a push that would carry
 trade records or anything else it recognises as yours; it runs as a pre-push
-hook and in CI. The whole program is about 17 000 lines of Python, so it fits
+hook and in CI. The whole program is about 20 000 lines of Python, so it fits
 in a context window and an agent reasons about the real thing.
 
 `CLAUDE.md` points at the same guide, so Claude Code picks it up unprompted;
@@ -607,7 +611,10 @@ it is for your own machine and should never be put behind a public address.
 
 **Does it connect to my broker or to MetaTrader?** No, on purpose. Trades are
 typed in, because writing the idea down is the part that makes a journal
-worth keeping. Screenshots come from wherever you take them.
+worth keeping. Screenshots come from wherever you take them. For the other
+end of a trade, sizing it inside MetaTrader 5, there is
+[Plainlines](https://github.com/stop-loss-enjoyer/plainlines), a free trade
+panel by the same author; the two are separate and exchange no data.
 
 **Is it for forex only?** No. A pair is free text, so stocks, futures,
 indices, metals and crypto tickers all work, and the styles, timeframes and
@@ -629,8 +636,10 @@ keys intact; everything else is ordinary markdown. A file that stops reading
 is named at the top of every page with the reason, and everything else keeps
 working without it.
 
-**How do I back it up?** Copy the `journal/` folder, or keep it under git and
-push it to a private repository of your own.
+**How do I back it up?** **Backup** on the Accounts tab downloads the whole
+journal as one `.plainbook` file, and **Restore** takes it back. Copying the
+`journal/` folder works too, and so does keeping it under git in a private
+repository of your own.
 
 **Why plain files and no database?** Because text files outlive the program
 that wrote them, and a database would stand between you and your records.

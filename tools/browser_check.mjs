@@ -3,32 +3,69 @@
 // Chromium and Node 22 or newer, nothing else. Run it against a FRESH demo
 // journal, never against the owner's:
 //
-//   python3 tools/demo_journal.py /tmp/pb-demo
+//   python3 tools/demo_journal.py /tmp/pb-demo        # an empty folder: it refuses one with records
 //   PLAINBOOK_ROOT=/tmp/pb-demo PLAINBOOK_PORT=8899 python3 -m plainbook.server &
 //   node tools/browser_check.mjs http://127.0.0.1:8899
 //
-// A second argument names the browser profile folder, a third a folder to keep
-// the PNG of the card in (it is deleted otherwise).
+// A second argument names the browser profile folder (kept; without it a
+// temporary one is made and removed when the run ends), a third a folder to
+// keep the PNG of the card in (it is deleted otherwise). The browser takes a
+// debugging port of its own choosing, so a second run does not meet the first.
 //
 // Every line printed "ok:" is a step that behaved; the run stops at the first
 // that did not, and any error the page logged is printed at the end. The one
 // 400 it logs on purpose is the playbook form refusing rules changed under a
 // held version.
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { crc32, deflateSync } from "node:zlib";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const PORT = 9333;
 const B = process.argv[2] || "http://127.0.0.1:8899";
-const PROFILE = process.argv[3] || "/tmp/plainbook-browser-check-profile";
-const chrome = spawn("chromium", ["--headless=new", `--remote-debugging-port=${PORT}`,
+// a profile that was not asked for is ours to remove, and it must not be one
+// shared name in /tmp that a run left behind with its cookies and caches
+const OWN_PROFILE = !process.argv[3];
+const PROFILE = process.argv[3] || mkdtempSync(join(tmpdir(), "plainbook-browser-check-"));
+// a kept profile still names the port of the last run until the browser rewrites it
+rmSync(join(PROFILE, "DevToolsActivePort"), { force: true });
+// port 0 lets the browser pick a free one and write the number into the profile;
+// its own process group, so that the helper processes of the browser stop with it
+const chrome = spawn("chromium", ["--headless=new", "--remote-debugging-port=0",
   "--no-first-run", "--no-default-browser-check", "--disable-gpu",
   `--user-data-dir=${PROFILE}`,
-  "about:blank"], { stdio: "ignore" });
-process.on("exit", () => chrome.kill());
+  "about:blank"], { stdio: "ignore", detached: true });
+function stopChrome() {
+  try { process.kill(-chrome.pid, "SIGTERM"); } catch { /* already gone */ }
+}
+function dropProfile() {
+  if (!OWN_PROFILE) return;
+  try { rmSync(PROFILE, { recursive: true, force: true }); } catch { /* retried by the caller */ }
+}
+process.on("exit", () => { stopChrome(); dropProfile(); });
+process.on("SIGINT", () => process.exit(130));
+process.on("SIGTERM", () => process.exit(143));
+// the profile can be removed only once the browser has let go of it
+async function finish(code) {
+  stopChrome();
+  if (chrome.exitCode === null) await Promise.race([once(chrome, "exit"), sleep(5000)]);
+  for (let i = 0; i < 20 && OWN_PROFILE && existsSync(PROFILE); i++) {
+    dropProfile();
+    await sleep(250);
+  }
+  process.exit(code);
+}
+
+async function debugPort() {
+  for (let i = 0; i < 50; i++) {
+    try { return Number(readFileSync(join(PROFILE, "DevToolsActivePort"), "utf8").split("\n")[0]); }
+    catch { await sleep(200); }
+  }
+  throw new Error("chromium did not come up");
+}
+const PORT = await debugPort();
 
 async function json(path) {
   for (let i = 0; i < 50; i++) {
@@ -72,10 +109,15 @@ function send(method, params = {}) {
 await send("Page.enable"); await send("Runtime.enable"); await send("Log.enable");
 
 async function loaded() {
-  await new Promise(res => {
+  // a page that never finishes loading must end the run, not hang it
+  await new Promise((res, rej) => {
+    const gave = setTimeout(() => {
+      clearInterval(t);
+      rej(new Error("the page did not finish loading in 20 seconds"));
+    }, 20000);
     const t = setInterval(() => {
       const i = events.findIndex(m => m.method === "Page.loadEventFired");
-      if (i >= 0) { events.splice(i, 1); clearInterval(t); res(); }
+      if (i >= 0) { events.splice(i, 1); clearInterval(t); clearTimeout(gave); res(); }
     }, 30);
   });
   await sleep(120);
@@ -885,5 +927,4 @@ try { await run(api); }
 catch (e) { failed = true; console.log("FAILED:", e.message); }
 if (errors.length) { failed = true; console.log("console/page errors:"); for (const e of errors) console.log("  " + e); }
 else console.log("no page errors");
-chrome.kill();
-process.exit(failed ? 1 : 0);
+await finish(failed ? 1 : 0);

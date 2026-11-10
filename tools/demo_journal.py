@@ -6,6 +6,10 @@ change without opening anybody's records.
 
     python3 tools/demo_journal.py /tmp/pb-demo
     python3 tools/demo_journal.py /tmp/pb-demo --months=8   # a longer run, for pictures
+    python3 tools/demo_journal.py /tmp/pb-demo --force      # over a folder that has records
+
+A folder whose journal/ already holds a record is refused, so that a real
+journal given by mistake is not written over; --force overrides.
     PLAINBOOK_ROOT=/tmp/pb-demo PLAINBOOK_PORT=8899 python3 -m plainbook.server
 
 Every number here is made up, and made up the same way every time: the seed is
@@ -506,14 +510,29 @@ def add_prices(root):
         store.save_trade(root, t)
 
 
+def holds_records(root):
+    """Whether journal/ under `root` has any file besides the .gitkeep that
+    keeps an empty layout in the repository."""
+    for _, _, files in os.walk(os.path.join(root, store.JOURNAL)):
+        if any(name != ".gitkeep" for name in files):
+            return True
+    return False
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Write an invented journal.")
     ap.add_argument("root", nargs="?", default="/tmp/pb-demo",
                     help="the folder to write (default /tmp/pb-demo)")
     ap.add_argument("--months", type=int, default=0,
                     help="a longer run, for pictures")
+    ap.add_argument("--force", action="store_true",
+                    help="write even where journal/ already holds records")
     opts = ap.parse_args()
     root, months = opts.root, opts.months
+    if holds_records(root) and not opts.force:
+        sys.exit(f"{root} already has records under journal/; the demo would "
+                 f"mix its trades into them. Give an empty folder, or --force "
+                 f"if that is what you want.")
     os.makedirs(root, exist_ok=True)
     build(root, months=months)
     add_prices(root)

@@ -536,6 +536,9 @@ ACCOUNT_KEYS = [
     ("currency", "currency"),
     ("archived", "archived"),
     ("daily_loss_limit", "daily loss limit"),
+    ("daily_loss_percent", "daily loss limit %"),
+    ("daily_counts_closed", "daily limit counts closed"),
+    ("daily_counts_open", "daily limit counts open risk"),
     ("max_loss", "max loss"),
     ("max_loss_mode", "max loss mode"),
     ("profit_target", "profit target"),
@@ -569,6 +572,9 @@ class Account:
     currency: str = "USD"
     archived: bool = False        # archived ones stay in statistics, not in forms
     daily_loss_limit: float = None  # a prop rule: how much a day may lose
+    daily_loss_percent: float = None  # the same typed as a percent of the base
+    daily_counts_closed: bool = True  # the limit counts the closed result of the day
+    daily_counts_open: bool = True    # and the risk of the open trades
     max_loss: float = None        # a prop rule: how much the account may lose at all
     max_loss_mode: str = "static"
     profit_target: float = None   # what the account has to make to pass
@@ -586,8 +592,9 @@ class Account:
     @property
     def has_rules(self):
         """Any rule of a firm set: a limit, a floor, a target or the days."""
-        return any(x is not None for x in (self.daily_loss_limit, self.max_loss,
-                                           self.profit_target, self.min_days))
+        return any(x is not None for x in (self.daily_loss_limit, self.daily_loss_percent,
+                                           self.max_loss, self.profit_target,
+                                           self.min_days))
 
     def check(self):
         if not self.id:
@@ -595,10 +602,14 @@ class Account:
         if self.kind not in ACCOUNT_KINDS:
             raise RecordError(f"{self.id}: bad kind {self.kind!r}")
         for name, value in (("daily loss limit", self.daily_loss_limit),
+                            ("daily loss limit", self.daily_loss_percent),
                             ("max loss", self.max_loss),
                             ("profit target", self.profit_target)):
             if value is not None and value <= 0:
                 raise RecordError(f"{self.id}: the {name} must be above zero")
+        if self.daily_loss_limit is not None and self.daily_loss_percent is not None:
+            raise RecordError(f"{self.id}: the daily loss limit is money or a "
+                              f"percent, not both")
         if self.min_days is not None and self.min_days <= 0:
             raise RecordError(f"{self.id}: the trading days must be above zero")
         if self.max_loss_mode not in MAX_LOSS_MODES:
