@@ -2,7 +2,7 @@
 
 What changed and why. Newest first.
 
-## Unreleased
+## v1.15.0, 10.11.2026
 
 - **The daily loss limit counts what your firm counts.** Two boxes in the
   Rules of an account choose whether the limit counts the closed result of
