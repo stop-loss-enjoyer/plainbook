@@ -535,7 +535,10 @@ class DesktopFiles(unittest.TestCase):
         finally:
             shutil.rmtree(stubs)
 
-    @unittest.skipUnless(shutil.which("bash"), "no bash on this machine")
+    # the toggle is a file of a Linux desktop; the bash of a Windows runner
+    # cannot open a path written the Windows way
+    @unittest.skipUnless(shutil.which("bash") and os.name != "nt",
+                         "no bash to read a Linux path on this machine")
     def test_the_toggle_is_valid_shell(self):
         done = subprocess.run(["bash", "-n", self.TOGGLE], capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)

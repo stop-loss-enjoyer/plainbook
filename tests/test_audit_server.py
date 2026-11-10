@@ -380,7 +380,7 @@ eval(src.replace(/show_risks\(\);\s*$/, '') + '; console.log(balance_of("a"))');
             self.skipTest("node is not installed")
         out = subprocess.run(["node", "-e", self.SCRIPT, "unknown" if unknown else "",
                               entry], input=self.S.RISK_HINT_SCRIPT, text=True,
-                             capture_output=True, timeout=30)
+                             encoding="utf-8", capture_output=True, timeout=30)
         self.assertEqual(out.returncode, 0, out.stderr)
         return float(out.stdout.strip())
 
